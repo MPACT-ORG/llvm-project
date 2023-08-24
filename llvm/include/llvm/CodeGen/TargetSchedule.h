@@ -20,6 +20,8 @@
 #include "llvm/Config/llvm-config.h"
 #include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/MC/MCSchedule.h"
+#include "llvm/MC/MDLInfo.h"
+#include <string>
 
 namespace llvm {
 
@@ -36,12 +38,15 @@ class TargetSchedModel {
   const TargetInstrInfo *TII = nullptr;
 
   SmallVector<unsigned, 16> ResourceFactors;
+  SmallVector<unsigned, 16> ResourcePoolFactors;
 
   // Multiply to normalize microops to resource units.
   unsigned MicroOpFactor = 0;
+  unsigned MdlMicroOpFactor = 0;
 
   // Resource units per cycle. Latency normalization factor.
   unsigned ResourceLCM = 0;
+  unsigned MdlResourceLCM = 0;
 
   unsigned computeInstrLatency(const MCSchedClassDesc &SCDesc) const;
 
@@ -85,17 +90,32 @@ public:
     return nullptr;
   }
 
+  /// Return true if this target uses MDL for modeling instruction behaviors.
+  mdl::CpuInfo *getCpuInfo() const;
+  bool hasMdlModel() const;
+  bool hasInstrMdlModel() const;
+  bool hasInstrMdlModel(const MachineInstr *MI) const;
+  bool hasInstrMdlModel(const MCInst *MI) const;
+
   /// Return true if this machine model includes an instruction-level
   /// scheduling model or cycle-to-cycle itinerary data.
   bool hasInstrSchedModelOrItineraries() const {
     return hasInstrSchedModel() || hasInstrItineraries();
+  }
+
+  bool hasAnySchedModel() const {
+    return hasInstrSchedModel() || hasInstrItineraries() || hasInstrMdlModel();
   }
   bool enableIntervals() const;
   /// Identify the processor corresponding to the current subtarget.
   unsigned getProcessorID() const { return SchedModel.getProcessorID(); }
 
   /// Maximum number of micro-ops that may be scheduled per cycle.
-  unsigned getIssueWidth() const { return SchedModel.IssueWidth; }
+  unsigned getIssueWidth() const {
+    if (hasMdlModel())
+      return STI->getCpuInfo()->getMaxIssue();
+    return SchedModel.IssueWidth;
+  }
 
   /// Return true if new group must begin.
   bool mustBeginGroup(const MachineInstr *MI,
@@ -110,6 +130,8 @@ public:
 
   /// Get the number of kinds of resources for this target.
   unsigned getNumProcResourceKinds() const {
+    if (hasMdlModel())
+      return STI->getCpuInfo()->getMaxFuncUnitId() + 1;
     return SchedModel.getNumProcResourceKinds();
   }
 
@@ -119,9 +141,11 @@ public:
   }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-  const char *getResourceName(unsigned PIdx) const {
+  std::string getResourceName(unsigned PIdx) const {
     if (!PIdx)
       return "MOps";
+    if (hasMdlModel())
+      return STI->getCpuInfo()->getResourceName(PIdx);
     return SchedModel.getProcResource(PIdx)->Name;
   }
 #endif
@@ -140,28 +164,44 @@ public:
 
   /// Multiply the number of units consumed for a resource by this factor
   /// to normalize it relative to other resources.
+  /// The MDL passes in a pool size (or 1), rather than a resource id.
   unsigned getResourceFactor(unsigned ResIdx) const {
     return ResourceFactors[ResIdx];
+  }
+  // For MDL-based models, we have factors based on pool size.
+  unsigned getResourcePoolFactor(unsigned Size) const {
+    return ResourcePoolFactors[Size];
   }
 
   /// Multiply number of micro-ops by this factor to normalize it
   /// relative to other resources.
   unsigned getMicroOpFactor() const {
+    if (hasMdlModel())
+      return MdlMicroOpFactor;
     return MicroOpFactor;
   }
 
   /// Multiply cycle count by this factor to normalize it relative to
   /// other resources. This is the number of resource units per cycle.
   unsigned getLatencyFactor() const {
+    if (hasMdlModel())
+      return MdlResourceLCM;
     return ResourceLCM;
   }
 
   /// Number of micro-ops that may be buffered for OOO execution.
-  unsigned getMicroOpBufferSize() const { return SchedModel.MicroOpBufferSize; }
+  unsigned getMicroOpBufferSize() const {
+    if (hasMdlModel())
+      return STI->getCpuInfo()->getReorderBufferSize();
+    return SchedModel.MicroOpBufferSize;
+  }
 
   /// Number of resource units that may be buffered for OOO execution.
   /// \return The buffer size in resource units or -1 for unlimited.
+  // Note: This function currently isn't used.
   int getResourceBufferSize(unsigned PIdx) const {
+    if (hasMdlModel())      // TODO-MDL
+      return 1;
     return SchedModel.getProcResource(PIdx)->BufferSize;
   }
 

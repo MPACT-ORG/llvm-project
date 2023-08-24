@@ -1,0 +1,19 @@
+//----------------------------------------------------------------------------
+// Test error checking on operand references.
+//----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { E1, E2 };
+
+register_class GPR { s[0..31] };
+
+instruction ADDrr(GPR d) { subunit(xyz); }
+
+subunit xyz() {{
+    use(1, GPR:$d);                 // Missing phase name
+}}
+
+// CHECK: test_opnd_9.mdl:15:9 Invalid phase: missing phase name
+// CHECK: Errors found, aborting

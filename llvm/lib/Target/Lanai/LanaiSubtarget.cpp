@@ -13,12 +13,23 @@
 #include "LanaiSubtarget.h"
 
 #include "Lanai.h"
+#include "llvm/Config/config.h"
 
 #define DEBUG_TYPE "lanai-subtarget"
 
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "LanaiGenSubtargetInfo.inc"
+
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "LanaiGenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "LanaiGenMdlTarget.inc"
+#define LanaiCpuTable &Lanai::CpuTable
+#else
+#define LanaiCpuTable nullptr
+#endif
 
 using namespace llvm;
 
@@ -41,6 +52,13 @@ LanaiSubtarget::LanaiSubtarget(const Triple &TargetTriple, StringRef Cpu,
                                const TargetOptions & /*Options*/,
                                CodeModel::Model /*CodeModel*/,
                                CodeGenOptLevel /*OptLevel*/)
-    : LanaiGenSubtargetInfo(TargetTriple, Cpu, /*TuneCPU*/ Cpu, FeatureString),
+    : LanaiGenSubtargetInfo(TargetTriple, Cpu, /*TuneCPU*/ Cpu, FeatureString,
+                            LanaiCpuTable),
       FrameLowering(initializeSubtargetDependencies(Cpu, FeatureString)),
-      TLInfo(TM, *this) {}
+      TLInfo(TM, *this) {
+
+  // Register the Target-library-specific predicate table in the cpu table.
+#if ENABLE_MDL_USE
+  Lanai::CpuTable.SetInstrPredicates(&Lanai::InstrPredicates);
+#endif
+}

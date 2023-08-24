@@ -1,0 +1,169 @@
+//----------------------------------------------------------------------------
+// Check that functional unit buffering information is working properly.
+//----------------------------------------------------------------------------
+// RUN: llvm-mdl --dump_instr %s 2>& 1 | FileCheck %s
+family x;
+
+phases x { E1, E2, E3, E4, E5 };
+
+cpu x1 {
+   func_unit A              U1();             // No buffering info
+   func_unit AR<0>          U2();             // Single unit, reserved
+   func_unit AB<1>          U3();             // Single unit, buffered
+   func_unit AU<2>          U4();             // Single unit, buffered
+
+   func_unit B<0>           U5();             // Reserved
+   func_unit C<1>           U6();             // Buffered
+   func_unit D<2>           U7();             // Unbuffered
+
+   func_unit B<0>:C<1>:D<2> U8();
+}
+
+func_group GR: A, B;                           // Group with no buffer info
+func_group GRR<0>: A, B;                       // Reserved group
+func_group GRB<1>: A, B;                       // Buffered group
+func_group GRU<42>: A, B;                      // Unbuffered group
+
+subunit s1() {{ def(E4, $d); fus(A, 1); }}     // no buffering info
+subunit s2() {{ def(E4, $d); fus(AR, 1); }}    // Single unit, reserved
+subunit s3() {{ def(E4, $d); fus(AB, 1); }}    // Single unit, buffered
+subunit s4() {{ def(E4, $d); fus(AU, 1); }}    // Single unit, unbuffered
+
+subunit s5() {{ def(E5, $d); fus(B, 1); }}     // Two units, both reserved
+subunit s6() {{ def(E5, $d); fus(C, 2); }}     // Two units, both buffered
+subunit s7() {{ def(E5, $d); fus(D, 2); }}     // Two units, both unbuffered
+
+subunit s8() {{ def(E5, $d); fus(GR, 2); }}    // Group with no buffer info
+subunit s9() {{ def(E5, $d); fus(GRR, 2); }}   // A reserved group
+subunit s10() {{ def(E5, $d); fus(GRB, 2); }}  // A buffered group
+subunit s11() {{ def(E5, $d); fus(GRU, 2); }}  // An unbuffered group
+
+subunit s12() {{ def(E2, $d); fus(A & B & C & D & GRU, 1); }}
+
+instruction xx1(GPR d) { subunit(s1); }
+instruction xx2(GPR d) { subunit(s2); }
+instruction xx3(GPR d) { subunit(s3); }
+instruction xx4(GPR d) { subunit(s4); }
+instruction xx5(GPR d) { subunit(s5); }
+instruction xx6(GPR d) { subunit(s6); }
+instruction xx7(GPR d) { subunit(s7); }
+instruction xx8(GPR d) { subunit(s8); }
+instruction xx9(GPR d) { subunit(s9); }
+instruction x10(GPR d) { subunit(s10); }
+instruction x11(GPR d) { subunit(s11); }
+instruction x12(GPR d) { subunit(s12); }
+
+register_class GPR { r[0..31] };
+
+// CHECK: Instruction: x10(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s10); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E5, GPR:$d[0])
+// CHECK:       FU references:
+// CHECK:       --->  fus(GRB<E1:1> Mops=2 Buffersize=1 )
+
+// CHECK: Instruction: x11(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s11); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E5, GPR:$d[0])
+// CHECK:       FU references:
+// CHECK:       --->  fus(GRU<E1:1> Mops=2 Buffersize=42 )
+
+// CHECK: Instruction: x12(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s12); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E2, GPR:$d[0])
+// CHECK:       FU references:
+// CHECK:       --->  fus(A<E1:1> Mops=1 )
+// CHECK:       --->  fus(B<E1:1> Buffersize=0 )
+// CHECK:       --->  fus(C<E1:1> Buffersize=1 )
+// CHECK:       --->  fus(D<E1:1> Buffersize=2 )
+// CHECK:       --->  fus(GRU<E1:1> Buffersize=42 )
+
+// CHECK: Instruction: xx1(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s1); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E4, GPR:$d[0])
+// CHECK:       FU references:
+// CHECK:       --->  fus(A<E1:1> Mops=1 )
+
+// CHECK: Instruction: xx2(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s2); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E4, GPR:$d[0])
+// CHECK:       FU references:
+// CHECK:       --->  fus(AR<E1:1> Mops=1 Buffersize=0 )
+
+// CHECK: Instruction: xx3(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s3); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E4, GPR:$d[0])
+// CHECK:       FU references:
+// CHECK:       --->  fus(AB<E1:1> Mops=1 Buffersize=1 )
+
+// CHECK: Instruction: xx4(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s4); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E4, GPR:$d[0])
+// CHECK:       FU references:
+// CHECK:       --->  fus(AU<E1:1> Mops=1 Buffersize=2 )
+
+// CHECK: Instruction: xx5(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s5); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E5, GPR:$d[0])
+// CHECK:       FU references:
+// CHECK:       --->  fus(B<E1:1> Mops=1 Buffersize=0 )
+
+// CHECK: Instruction: xx6(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s6); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E5, GPR:$d[0])
+// CHECK:       FU references:
+// CHECK:       --->  fus(C<E1:1> Mops=2 Buffersize=1 )
+
+// CHECK: Instruction: xx7(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s7); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E5, GPR:$d[0])
+// CHECK:       FU references:
+// CHECK:       --->  fus(D<E1:1> Mops=2 Buffersize=2 )
+
+// CHECK: Instruction: xx8(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s8); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E5, GPR:$d[0])
+// CHECK:       FU references:
+// CHECK:       --->  fus(GR<E1:1> Mops=2 )
+
+// CHECK: Instruction: xx9(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s9); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E5, GPR:$d[0])
+// CHECK:       FU references:
+// CHECK:       --->  fus(GRR<E1:1> Mops=2 Buffersize=0 )
+

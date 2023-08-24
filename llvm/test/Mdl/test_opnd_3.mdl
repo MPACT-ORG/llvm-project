@@ -1,0 +1,113 @@
+//----------------------------------------------------------------------------
+// Instruction operands scraped from td files have input and output flags
+// that specify whether the operand is read or written. If operand names are
+// shared across instructions and are sometimes inputs, and sometime outputs,
+// there's no way for latency rules to differentiate between them by name.
+// So we want to use the I/O designator to determine which reference rules
+// they should match.
+//----------------------------------------------------------------------------
+// RUN: llvm-mdl --dump_instr %s --output_dir /tmp/ 2>&1 | FileCheck %s
+
+family test;
+
+phases test { E[1..10] };
+register r[0..31];
+register_class REGS { r[0..31] }
+
+cpu test { func_unit alu my_alu(); }
+func_unit alu() { subunit xyz(); }
+subunit xyz() { latency xyz(); }
+
+latency xyz() {
+  def(E1, $dest); use(E1, $dest);     // both def and use for dest!
+  use(E1, $src1); def(E1, $src1);     // both def and use for src1!
+  use(E1, $src2);                     // no def for src2
+
+  def(E1, $d); use(E1, $s1); use(E1, $s2);
+  use(E2, $r12); def(E1, $r12);
+}
+
+// Everything should work normally for this.
+// We should get:
+//      use(E1, $src1)
+//      use(E1, $src2);
+//      def(E1, $dest);
+instruction a(REGS dest(O), REGS src1(I), REGS src2(I)) {
+  subunit (xyz);
+}
+
+// Here src1 is an input, dest is an output, and src2 is also an output.
+// Note that in the latency rule, we do not have a "def" for src2, so we
+// should get a -usage warning for src2 (with --check_usage and --warnings).
+// We should get:
+//      use(E1, $dest)
+//      def(E1, $src1);
+// ... and nothing for src2.
+instruction b(REGS src1(O), REGS dest(I), REGS src2(O)) {
+  subunit (xyz);
+}
+
+// No I/O specifiers, no special handling.
+// We should get:
+//      use(E1, $s1)
+//      use(E1, $s2);
+//      def(E1, $dst);
+instruction c(REGS d, REGS s1, REGS s2) {
+  subunit (xyz);
+}
+
+instruction y(r12(O), REGS d, r12(I)) { subunit(xyz); }
+// instruction x(REGX a, REGS d) { subunit(xyz); }
+
+// CHECK:  Instruction info
+// CHECK: ---------------------------------------------------------
+// CHECK: Instruction: a(REGS dest, REGS src1, REGS src2)
+// CHECK: 		flat(REGS dest, REGS src1, REGS src2)
+// CHECK: 		{ subunit(xyz); }
+// CHECK:     Subunit: test.my_alu
+// CHECK:       Operand references:
+// CHECK-DAG:       ===>  use.p(E1, REGS:$src1[1])
+// CHECK-DAG:       ===>  use.p(E1, REGS:$src2[2])
+// CHECK-DAG:       ===>  def.p(E1, REGS:$dest[0])
+// CHECK:       Resources:
+// CHECK:             use.p(E1,my_alu{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: b(REGS src1, REGS dest, REGS src2)
+// CHECK: 		flat(REGS src1, REGS dest, REGS src2)
+// CHECK: 		{ subunit(xyz); }
+// CHECK:     Subunit: test.my_alu
+// CHECK:       Operand references:
+// CHECK-DAG:       ===>  use.p(E1, REGS:$dest[1])
+// CHECK-DAG:       ===>  def.p(E1, REGS:$src1[0])
+// CHECK:       Resources:
+// CHECK:             use.p(E1,my_alu{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: c(REGS d, REGS s1, REGS s2)
+// CHECK: 		flat(REGS d, REGS s1, REGS s2)
+// CHECK: 		{ subunit(xyz); }
+// CHECK:     Subunit: test.my_alu
+// CHECK:       Operand references:
+// CHECK-DAG:       ===>  use.p(E1, REGS:$s1[1])
+// CHECK-DAG:       ===>  use.p(E1, REGS:$s2[2])
+// CHECK-DAG:       ===>  def.p(E1, REGS:$d[0])
+// CHECK:       Resources:
+// CHECK:             use.p(E1,my_alu{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: y(r12 , REGS d, r12 )
+// CHECK: 		flat(r12 , REGS d, r12 )
+// CHECK: 		{ subunit(xyz); }
+// CHECK:     Subunit: test.my_alu
+// CHECK:       Operand references:
+// CHECK-DAG:       ===>  def.p(E1, r12:$d[0])
+// CHECK-DAG:       ===>  def.p(E1, r12:$r12[0])
+// CHECK-DAG:       ===>  use.p(E2, REGS:$r12[1])
+// CHECK:       Resources:
+// CHECK:             use.p(E1,my_alu{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:

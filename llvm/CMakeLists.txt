@@ -540,6 +540,12 @@ set(LLVM_ENABLE_DEBUGLOC_COVERAGE_TRACKING "DISABLED" CACHE STRING
   "Enhance Debugify's line number coverage tracking; enabling this is ABI-breaking. Can be DISABLED, or COVERAGE.")
 set_property(CACHE LLVM_ENABLE_DEBUGLOC_COVERAGE_TRACKING PROPERTY STRINGS DISABLED COVERAGE)
 
+option(LLVM_ENABLE_MDL "Enable use of MDL infrastructure" OFF)
+if (LLVM_ENABLE_MDL)
+  set(ENABLE_MDL_USE 1)
+endif()
+include(BuildMdl)
+
 set(WINDOWS_PREFER_FORWARD_SLASH_DEFAULT OFF)
 if (MINGW)
   # Cygwin doesn't identify itself as Windows, and thus gets path::Style::posix
@@ -1259,6 +1265,10 @@ add_subdirectory(include)
 add_subdirectory(lib)
 
 if( LLVM_INCLUDE_UTILS )
+  if (LLVM_ENABLE_MDL)
+    add_subdirectory(utils/TdScan)
+    add_subdirectory(utils/MdlCompiler)
+  endif()
   add_subdirectory(utils/FileCheck)
   add_subdirectory(utils/PerfectShuffle)
   add_subdirectory(utils/count)

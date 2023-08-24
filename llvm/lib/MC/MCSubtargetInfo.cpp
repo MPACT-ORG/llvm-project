@@ -11,15 +11,34 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/MC/MCSchedule.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/SubtargetFeature.h"
 #include <algorithm>
 #include <cassert>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <optional>
 
 using namespace llvm;
+
+// Determine whether and how we should use the MDL database.
+static cl::opt<bool> EnableSchedMdl("schedmdl", cl::Hidden, cl::init(true),
+                                   cl::desc("Use MDL for scheduling"));
+static bool UseMdl = true;
+
+const mdl::CpuTableDef *MCSubtargetInfo::getCpuTable() const
+   { return CpuTable; }
+mdl::CpuInfo *MCSubtargetInfo::getCpuInfo() const
+   { return CpuModel; }
+bool MCSubtargetInfo::hasMdlModel() const
+   { return CpuModel && UseMdl; }
+bool MCSubtargetInfo::hasInstrMdlModel() const
+   { return CpuModel && UseMdl && CpuModel->hasSubunits(); }
+bool MCSubtargetInfo::hasInstrMdlModel(int Opcode) const
+   { return hasInstrMdlModel() && CpuModel->getSubunit(Opcode); }
 
 /// Find KV in array using binary search.
 template <typename T>
@@ -215,6 +234,11 @@ void MCSubtargetInfo::InitMCProcessorInfo(StringRef CPU, StringRef TuneCPU,
     CPUSchedModel = &getSchedModelForCPU(TuneCPU);
   else
     CPUSchedModel = &MCSchedModel::Default;
+
+  // Initialize the MDL, if there is one.
+  UseMdl = EnableSchedMdl;
+  if (UseMdl && !TuneCPU.empty() && CpuTable != nullptr)
+    CpuModel = CpuTable->getCpu(TuneCPU.str());
 }
 
 void MCSubtargetInfo::setDefaultFeatures(StringRef CPU, StringRef TuneCPU,
@@ -223,18 +247,16 @@ void MCSubtargetInfo::setDefaultFeatures(StringRef CPU, StringRef TuneCPU,
   FeatureString = std::string(FS);
 }
 
-MCSubtargetInfo::MCSubtargetInfo(const Triple &TT, StringRef C, StringRef TC,
-                                 StringRef FS, ArrayRef<SubtargetFeatureKV> PF,
-                                 ArrayRef<SubtargetSubTypeKV> PD,
-                                 const MCWriteProcResEntry *WPR,
-                                 const MCWriteLatencyEntry *WL,
-                                 const MCReadAdvanceEntry *RA,
-                                 const InstrStage *IS, const unsigned *OC,
-                                 const unsigned *FP)
+MCSubtargetInfo::MCSubtargetInfo(
+    const Triple &TT, StringRef C, StringRef TC, StringRef FS,
+    ArrayRef<SubtargetFeatureKV> PF, ArrayRef<SubtargetSubTypeKV> PD,
+    const MCWriteProcResEntry *WPR, const MCWriteLatencyEntry *WL,
+    const MCReadAdvanceEntry *RA, const InstrStage *IS, const unsigned *OC,
+    const unsigned *FP, const mdl::CpuTableDef *MDL)
     : TargetTriple(TT), CPU(std::string(C)), TuneCPU(std::string(TC)),
       ProcFeatures(PF), ProcDesc(PD), WriteProcResTable(WPR),
       WriteLatencyTable(WL), ReadAdvanceTable(RA), Stages(IS),
-      OperandCycles(OC), ForwardingPaths(FP) {
+      OperandCycles(OC), ForwardingPaths(FP), CpuTable(MDL) {
   InitMCProcessorInfo(CPU, TuneCPU, FS);
 }
 

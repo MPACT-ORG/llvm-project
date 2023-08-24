@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "R600MCTargetDesc.h"
+#include "llvm/Config/config.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/TargetParser/SubtargetFeature.h"
 
@@ -20,6 +21,11 @@ using namespace llvm;
 #define GET_INSTRINFO_MC_DESC
 #define ENABLE_INSTR_PREDICATE_VERIFIER
 #include "R600GenInstrInfo.inc"
+
+// Include the generated MDL database
+#if ENABLE_MDL_USE
+#include "R600GenMdlInfo.inc"
+#endif
 
 MCInstrInfo *llvm::createR600MCInstrInfo() {
   MCInstrInfo *X = new MCInstrInfo();

@@ -13,9 +13,11 @@
 #include "ARMMCTargetDesc.h"
 #include "ARMAddressingModes.h"
 #include "ARMBaseInfo.h"
+#include "ARMBaseInstrInfo.h"
 #include "ARMInstPrinter.h"
 #include "ARMMCAsmInfo.h"
 #include "TargetInfo/ARMTargetInfo.h"
+#include "llvm/Config/config.h"
 #include "llvm/DebugInfo/CodeView/CodeView.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -34,6 +36,14 @@ using namespace llvm;
 
 #define GET_REGINFO_MC_DESC
 #include "ARMGenRegisterInfo.inc"
+
+// Include the generated MDL database.
+#if ENABLE_MDL_USE
+#include "ARMGenMdlInfo.inc"
+#define ARMCpuTable &ARM::CpuTable
+#else
+#define ARMCpuTable nullptr
+#endif
 
 static bool getMCRDeprecationInfo(MCInst &MI, const MCSubtargetInfo &STI,
                                   std::string &Info) {
@@ -211,7 +221,8 @@ MCSubtargetInfo *ARM_MC::createARMMCSubtargetInfo(const Triple &TT,
       ArchFS = std::string(FS);
   }
 
-  return createARMMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, ArchFS);
+  return createARMMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, ArchFS,
+                                      ARMCpuTable);
 }
 
 static MCInstrInfo *createARMMCInstrInfo() {

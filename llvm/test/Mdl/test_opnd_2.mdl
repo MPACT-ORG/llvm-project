@@ -1,0 +1,62 @@
+//----------------------------------------------------------------------------
+// Test error checking on operand references.
+//----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { E1, E2 };
+
+register_class GPR { s[0..1] };
+register_class PPR { p[0..1] };
+
+cpu test {
+  cluster test {
+    func_unit test test();
+  }
+}
+
+func_unit test() {
+  subunit add();
+  subunit sub();
+}
+
+operand i32imm() { type(int32); }
+
+operand deep2(GPR z) { type(int32); }
+operand deep1(deep2 y) { type(int32); }
+operand deep(deep1 x) { type(int32); }
+
+operand deep_imm2(i32imm z) { type(int32); }
+operand deep_imm1(deep2 y) { type(int32); }
+operand deep_imm(deep1 x) { type(int32); }
+
+operand pred(PPR reg, i32imm invert) { type(int32); }
+
+instruction ADDrr(GPR d, i32imm x, deep deep, deep_imm dimm, pred pred) {
+  subunit(add);
+}
+instruction SUBrr(GPR d, i32imm x, deep deep, deep_imm dimm, pred pred) {
+  subunit(sub);
+}
+
+subunit add() {{
+    // operand type specified - these will be error checked.
+    use(E1, pred:$pred);                  // error: under-qualified
+    use(E1, pred:$pred.reg);              // correct
+    use(E1, pred:$pred.xxx);              // error: undefined
+    use(E1, pred:$pred.reg.blah);         // error: over-qualified
+}}
+
+subunit sub() {{
+    // no operand type specified - these will be ignored if in error.
+    use(E1, $pred);                       // warning: under-qualified
+    use(E1, $pred.reg);                   // correct
+    use(E1, $pred.xxx);                   // warning: undefined
+    use(E1, $pred.reg.blah);              // warning: over-qualified
+}}
+
+// CHECK: test_opnd_2.mdl:45:13 Under-qualified operand reference: pred:$pred
+// CHECK: test_opnd_2.mdl:47:13 Undefined operand type: pred:$pred.xxx
+// CHECK: test_opnd_2.mdl:48:13 Over-qualified operand reference: pred:$pred.reg.blah
+

@@ -1,0 +1,75 @@
+//-----------------------------------------------------------------------------
+// Check template instantiations.
+// - Check references to ports, groups, arrays, and scalar resources.
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test_predicates;
+
+phases x { E1, E2, E3 };
+
+cpu cpu {
+   resource group { a, b, c };
+   resource scalar, array[10];
+   func_unit unit good(GPR, group, array, group.b);
+}
+
+func_unit unit(class regs; resource group, array, scalar) {
+   port port<regs>(group);
+   subunit sub(port, group, array, scalar);
+   subunit sub(port, group, array, group.a);
+}
+subunit sub(port port; resource group, array, scalar) {
+   latency lat(port, array, group, scalar);
+}
+latency lat(port port; resource array, group, scalar) {
+  def(E2, $op1, port);
+  def(E2, $op1, port:1);
+  def(E2, $op1, port.b);
+  def(E2, $op1, port:2);                   // Invalid allocation size
+  def(E2, $op1, port[2]);                  // ignored
+  use(E1, $op2, array:*);
+  use(E1, $op2, array);                    // Unqualified pool
+  use(E1, $op2, array:3);                  // Size must evenly divide size
+  use(E1, $op2, array:11);                 // Invalid resource allocation size
+  use(E1, $op2, undefined);                // Resource undefined
+  use(E1, $op2, array[12]);                // Invalid pool index
+  use(E1, $op2, array[3..14]);             // Invalid pool subrange
+  use(E1, $op2, array.b);                  // Invalid member reference
+  use(E1, $op2, group.x);                  // Invalid member reference
+  use(E1, $op2, group:5);                  // Invalid allocation size
+  use(E1, $op2, group[2]);                 // ignored
+  use(E1, $op2, group[2..3]);              // ignored
+  use(E1, $op2, group:2);                  // Invalid allocation size
+  use(E1, $op2, scalar:2);                 // Invalid allocation size
+  use(E1, $op2, scalar[2]);                // Invalid resource qualifiers
+  res(E1, group);
+}
+
+register R[0..15];
+register_class GPR { r[0..15] }
+operand IMM() {}
+operand IMM2 : IMM {
+  attribute size = 1 if address;
+  attribute size = -1;
+}
+
+instruction add(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction sub(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction xor(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+
+// CHECK: test_refs_1.mdl:29:17 Invalid resource allocation size: 2
+// CHECK: test_refs_1.mdl:32:3 Unqualified pool - use :* to reference whole pool: array[0..9]
+// CHECK: test_refs_1.mdl:33:17 Pool count must evenly divide the resource pool size
+// CHECK: test_refs_1.mdl:34:17 Invalid resource allocation size: 11
+// CHECK: test_refs_1.mdl:35:17 Resource undefined: undefined
+// CHECK: test_refs_1.mdl:36:17 Invalid resource pool index: 12; expected [0..9]
+// CHECK: test_refs_1.mdl:37:17 Invalid resource pool subrange
+// CHECK: test_refs_1.mdl:38:17 Invalid member reference: b
+// CHECK: test_refs_1.mdl:39:17 Resource member not found: x
+// CHECK: test_refs_1.mdl:40:17 Invalid resource allocation size: 5
+// CHECK: test_refs_1.mdl:43:17 Invalid resource allocation size: 2
+// CHECK: test_refs_1.mdl:44:17 Invalid resource allocation size: 2
+// CHECK: test_refs_1.mdl:45:17 Invalid resource qualifiers
+// CHECK: test_refs_1.mdl:46:3 Hold/reserve not supported on pool references: group{0,0,0}:1
+// CHECK: Errors found, aborting

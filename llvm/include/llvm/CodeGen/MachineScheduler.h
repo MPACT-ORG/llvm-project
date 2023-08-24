@@ -90,6 +90,7 @@
 #include "llvm/CodeGen/TargetSchedule.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/MC/MDLInfo.h"
 #include <algorithm>
 #include <cassert>
 #include <llvm/Support/raw_ostream.h>
@@ -98,6 +99,8 @@
 #include <vector>
 
 namespace llvm {
+
+using namespace mdl;
 
 extern cl::opt<bool> ForceTopDown;
 extern cl::opt<bool> ForceBottomUp;
@@ -1014,6 +1017,10 @@ public:
                                                      unsigned PIdx,
                                                      unsigned ReleaseAtCycle,
                                                      unsigned AcquireAtCycle);
+  std::tuple<unsigned, unsigned, unsigned>
+     getNextResourceCycle(const PooledResourceRef *Ref,
+                          unsigned ReleaseAtCycle,
+                          unsigned AcquireAtCycle);
 
   bool isUnbufferedGroup(unsigned PIdx) const {
     return SchedModel->getProcResource(PIdx)->SubUnitsIdxBegin &&
@@ -1042,9 +1049,10 @@ public:
   void incExecutedResources(unsigned PIdx, unsigned Count);
 
   unsigned countResource(const MCSchedClassDesc *SC, unsigned PIdx,
-                         unsigned Cycles, unsigned ReadyCycle,
+                         unsigned Cycles, unsigned Factor,
                          unsigned StartAtCycle);
-
+  unsigned countResource(const PooledResourceRef *Ref, unsigned Cycles,
+                         unsigned Factor, unsigned StartAtCycle);
   void bumpNode(SUnit *SU);
 
   void releasePending();

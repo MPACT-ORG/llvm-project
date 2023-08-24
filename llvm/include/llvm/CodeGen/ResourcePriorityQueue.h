@@ -17,6 +17,8 @@
 #define LLVM_CODEGEN_RESOURCEPRIORITYQUEUE_H
 
 #include "llvm/CodeGen/ScheduleDAG.h"
+#include "llvm/CodeGen/ScheduleHazardRecognizer.h"
+#include "llvm/MC/MDLInfo.h"
 
 namespace llvm {
   class DFAPacketizer;
@@ -65,6 +67,12 @@ namespace llvm {
     /// definition of DFA by a target.
     std::unique_ptr<DFAPacketizer> ResourcesModel;
 
+    /// Hazard model from parent.
+    ScheduleHazardRecognizer *HazardRec;
+
+    /// MDL database pointer (if used)
+    mdl::CpuInfo *Cpu;
+
     /// Resource model - packet/bundle model. Purely
     /// internal at the time.
     std::vector<SUnit*> Packet;
@@ -74,7 +82,8 @@ namespace llvm {
     int HorizontalVerticalBalance;
 
   public:
-    ResourcePriorityQueue(SelectionDAGISel *IS);
+    ResourcePriorityQueue(SelectionDAGISel *IS,
+                          ScheduleHazardRecognizer *HazardRec);
 
     bool isBottomUp() const override { return false; }
 
@@ -122,8 +131,9 @@ namespace llvm {
     void scheduledNode(SUnit *SU) override;
     bool isResourceAvailable(SUnit *SU);
     void reserveResources(SUnit *SU);
+    void reset();
 
-private:
+  private:
     void adjustPriorityOfUnscheduledPreds(SUnit *SU);
     SUnit *getSingleUnscheduledPred(SUnit *SU);
     unsigned numberRCValPredInSU (SUnit *SU, unsigned RCId);
