@@ -1,0 +1,44 @@
+//----------------------------------------------------------------------------
+// Check that latencies predicated for a single CPU, and are "empty" for other
+// CPUs, don't produce references for other CPUs.
+//----------------------------------------------------------------------------
+// RUN: llvm-mdl --dump_instr %s 2>& 1 | FileCheck %s
+family x;
+
+phases x { E1, E2, E3, E4, E5 };
+
+cpu x1 {
+   func_unit F f();
+}
+
+cpu x2 {
+   func_unit F f();
+}
+
+subunit s1() {{ x1: { def(E2, $d); fus(F, 1); } }}
+subunit s2() {{ x2: { def(E5, $d); fus(F, 2); } }}
+
+// xxx should have 2 versions - one for x1, and another for x2.
+instruction xxx(GPR d) { subunit(s1, s2); }
+
+register_class GPR { r[0..31] };
+
+
+// CHECK: Instruction: xxx(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s1,s2); }
+// CHECK:     Subunit: x1.:x1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E2, GPR:$d[0])  {x1}
+// CHECK:       FU references:
+// CHECK:       --->  fus(F<E1:1> Mops=1 )  {x1}
+
+// CHECK: Instruction: xxx(GPR d)
+// CHECK: 		flat(GPR d)
+// CHECK: 		{ subunit(s1,s2); }
+// CHECK:     Subunit: x2.:x2
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E5, GPR:$d[0])  {x2}
+// CHECK:       FU references:
+// CHECK:       --->  fus(F<E1:1> Mops=2 )  {x2}
+

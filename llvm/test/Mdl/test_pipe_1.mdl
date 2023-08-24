@@ -1,0 +1,93 @@
+//-------------------------------------------------------------------
+// Test CPU-specific pipeline definitions.
+//-------------------------------------------------------------------
+// RUN: llvm-mdl --dump_instr %s --output_dir /tmp/ 2>&1 | FileCheck %s
+
+family test;
+
+register r1;
+register_class REGS { r1 };
+
+phases test { E1, E2=8 };
+
+cpu test1 {
+  resource(E1) cpu;
+  func_unit alu my_alu(cpu);
+}
+cpu test2 {
+  phases test { E1=3, E2 };
+  resource(E1) cpu;
+  func_unit alu my_alu(cpu);
+}
+cpu test3 {
+  phases test { E1=5 };      // E2 not defined here
+  resource(E1) cpu;
+  func_unit alu my_alu(cpu);
+}
+
+func_unit alu(resource cpu) {
+  resource(E1) fu;
+  subunit xyz(cpu, fu);
+}
+
+subunit xyz(resource cpu, fu) { latency xyz(cpu, fu); }
+
+latency xyz(resource cpu, fu) {
+  use(E1, $s1, cpu); use(E1, $s2, fu); def(E2[2], $d);
+}
+
+instruction c(REGS d, REGS s1, REGS s2) {
+  subunit (xyz);
+}
+
+
+
+// CHECK:  Instruction info
+// CHECK: ---------------------------------------------------------
+// CHECK: Instruction: c(REGS d, REGS s1, REGS s2)
+// CHECK: 		flat(REGS d, REGS s1, REGS s2)
+// CHECK: 		{ subunit(xyz); }
+// CHECK:     Subunit: test1.my_alu
+// CHECK:       Operand references:
+// CHECK-DAG:       ===>  use.p(E1, REGS:$s1[1], <cpu{2}-->1>)
+// CHECK-DAG:       ===>  use.p(E1, REGS:$s2[2], <fu{3}-->2>)
+// CHECK-DAG:       ===>  def.p(E2, REGS:$d[0])
+// CHECK-DAG:       ===>  def.p((E2+1), REGS:$d[0])
+// CHECK:       Resources:
+// CHECK-DAG:         use.p(E1,cpu{2}-->1)
+// CHECK-DAG:         use.p(E1,fu{3}-->2)
+// CHECK-DAG:         use.p(E1,my_alu{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: c(REGS d, REGS s1, REGS s2)
+// CHECK: 		flat(REGS d, REGS s1, REGS s2)
+// CHECK: 		{ subunit(xyz); }
+// CHECK:     Subunit: test2.my_alu
+// CHECK:       Operand references:
+// CHECK-DAG:       ===>  use.p(E1, REGS:$s1[1], <cpu{2}-->1>)
+// CHECK-DAG:       ===>  use.p(E1, REGS:$s2[2], <fu{3}-->2>)
+// CHECK-DAG:       ===>  def.p(E2, REGS:$d[0])
+// CHECK-DAG:       ===>  def.p((E2+1), REGS:$d[0])
+// CHECK:       Resources:
+// CHECK-DAG:         use.p(E1,cpu{2}-->1)
+// CHECK-DAG:         use.p(E1,fu{3}-->2)
+// CHECK-DAG:         use.p(E1,my_alu{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: c(REGS d, REGS s1, REGS s2)
+// CHECK: 		flat(REGS d, REGS s1, REGS s2)
+// CHECK: 		{ subunit(xyz); }
+// CHECK:     Subunit: test3.my_alu
+// CHECK:       Operand references:
+// CHECK-DAG:       ===>  use.p(E1, REGS:$s1[1], <cpu{2}-->1>)
+// CHECK-DAG:       ===>  use.p(E1, REGS:$s2[2], <fu{3}-->2>)
+// CHECK-DAG:       ===>  def.p(E2, REGS:$d[0])
+// CHECK-DAG:       ===>  def.p((E2+1), REGS:$d[0])
+// CHECK:       Resources:
+// CHECK-DAG:         use.p(E1,cpu{2}-->1)
+// CHECK-DAG:         use.p(E1,fu{3}-->2)
+// CHECK-DAG:         use.p(E1,my_alu{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:

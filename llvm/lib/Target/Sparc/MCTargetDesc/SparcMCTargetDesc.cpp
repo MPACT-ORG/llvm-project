@@ -15,6 +15,7 @@
 #include "SparcMCAsmInfo.h"
 #include "SparcTargetStreamer.h"
 #include "TargetInfo/SparcTargetInfo.h"
+#include "llvm/Config/config.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -39,6 +40,14 @@ using namespace llvm;
 
 #define GET_REGINFO_MC_DESC
 #include "SparcGenRegisterInfo.inc"
+
+// Include the generated MDL database.
+#if ENABLE_MDL_USE
+#include "SparcGenMdlInfo.inc"
+#define SparcCpuTable &SP::CpuTable
+#else
+#define SparcCpuTable nullptr
+#endif
 
 static MCAsmInfo *createSparcMCAsmInfo(const MCRegisterInfo &MRI,
                                        const Triple &TT,
@@ -76,7 +85,8 @@ static MCSubtargetInfo *
 createSparcMCSubtargetInfo(const Triple &TT, StringRef CPU, StringRef FS) {
   if (CPU.empty())
     CPU = (TT.getArch() == Triple::sparcv9) ? "v9" : "v8";
-  return createSparcMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS);
+  return createSparcMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS,
+                                        SparcCpuTable);
 }
 
 static MCTargetStreamer *

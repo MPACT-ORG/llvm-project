@@ -18,6 +18,7 @@
 #include "MipsRegisterBankInfo.h"
 #include "MipsRegisterInfo.h"
 #include "MipsTargetMachine.h"
+#include "llvm/Config/config.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -32,6 +33,16 @@ using namespace llvm;
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "MipsGenSubtargetInfo.inc"
+
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "MipsGenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "MipsGenMdlTarget.inc"
+#define MipsCpuTable &Mips::CpuTable
+#else
+#define MipsCpuTable nullptr
+#endif
 
 // FIXME: Maybe this should be on by default when Mips16 is specified
 //
@@ -71,7 +82,7 @@ void MipsSubtarget::anchor() {}
 MipsSubtarget::MipsSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
                              bool little, const MipsTargetMachine &TM,
                              MaybeAlign StackAlignOverride)
-    : MipsGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS),
+    : MipsGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS, MipsCpuTable),
       MipsArchVersion(MipsDefault), IsLittle(little), IsSoftFloat(false),
       IsSingleFloat(false), IsFPXX(false), NoABICalls(false), Abs2008(false),
       IsFP64bit(false), UseOddSPReg(true), IsNaN2008bit(false),
@@ -79,13 +90,14 @@ MipsSubtarget::MipsSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
       HasMips3_32(false), HasMips3_32r2(false), HasMips4_32(false),
       HasMips4_32r2(false), HasMips5_32r2(false), InMips16Mode(false),
       InMips16HardFloat(Mips16HardFloat), InMicroMipsMode(false), HasDSP(false),
-      HasDSPR2(false), HasDSPR3(false), AllowMixed16_32(Mixed16_32 || Mips_Os16),
-      Os16(Mips_Os16), HasMSA(false), UseTCCInDIV(false), HasSym32(false),
-      HasEVA(false), DisableMadd4(false), HasMT(false), HasCRC(false),
-      HasVirt(false), HasGINV(false), UseIndirectJumpsHazard(false),
-      StackAlignOverride(StackAlignOverride), TM(TM), TargetTriple(TT),
-      TSInfo(), InstrInfo(MipsInstrInfo::create(
-                    initializeSubtargetDependencies(CPU, FS, TM))),
+      HasDSPR2(false), HasDSPR3(false),
+      AllowMixed16_32(Mixed16_32 || Mips_Os16), Os16(Mips_Os16), HasMSA(false),
+      UseTCCInDIV(false), HasSym32(false), HasEVA(false), DisableMadd4(false),
+      HasMT(false), HasCRC(false), HasVirt(false), HasGINV(false),
+      UseIndirectJumpsHazard(false), StackAlignOverride(StackAlignOverride),
+      TM(TM), TargetTriple(TT), TSInfo(),
+      InstrInfo(
+          MipsInstrInfo::create(initializeSubtargetDependencies(CPU, FS, TM))),
       FrameLowering(MipsFrameLowering::create(*this)),
       TLInfo(MipsTargetLowering::create(TM, *this)) {
 
@@ -219,6 +231,11 @@ MipsSubtarget::MipsSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
   RegBankInfo.reset(RBI);
   InstSelector.reset(createMipsInstructionSelector(
       *static_cast<const MipsTargetMachine *>(&TM), *this, *RBI));
+
+  // Register the Target-library-specific predicate table in the cpu table.
+#if ENABLE_MDL_USE
+  Mips::CpuTable.SetInstrPredicates(&Mips::InstrPredicates);
+#endif
 }
 
 bool MipsSubtarget::isPositionIndependent() const {

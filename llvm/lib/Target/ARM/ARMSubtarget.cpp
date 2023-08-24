@@ -28,6 +28,7 @@
 #include "llvm/CodeGen/GlobalISel/InstructionSelect.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/Config/config.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -45,6 +46,16 @@ using namespace llvm;
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "ARMGenSubtargetInfo.inc"
+
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "ARMGenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "ARMGenMdlTarget.inc"
+#define ARMCpuTable &ARM::CpuTable
+#else
+#define ARMCpuTable nullptr
+#endif
 
 static cl::opt<bool>
 UseFusedMulOps("arm-use-mulops",
@@ -93,19 +104,16 @@ ARMSubtarget::ARMSubtarget(const Triple &TT, const std::string &CPU,
                            const std::string &FS,
                            const ARMBaseTargetMachine &TM, bool IsLittle,
                            bool MinSize)
-    : ARMGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS),
+    : ARMGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS, ARMCpuTable),
       UseMulOps(UseFusedMulOps), CPUString(CPU), OptMinSize(MinSize),
       IsLittle(IsLittle), TargetTriple(TT), Options(TM.Options), TM(TM),
       FrameLowering(initializeFrameLowering(CPU, FS)),
       // At this point initializeSubtargetDependencies has been called so
       // we can query directly.
-      InstrInfo(isThumb1Only()
-                    ? (ARMBaseInstrInfo *)new Thumb1InstrInfo(*this)
-                    : !isThumb()
-                          ? (ARMBaseInstrInfo *)new ARMInstrInfo(*this)
-                          : (ARMBaseInstrInfo *)new Thumb2InstrInfo(*this)),
+      InstrInfo(isThumb1Only() ? (ARMBaseInstrInfo *)new Thumb1InstrInfo(*this)
+                : !isThumb()   ? (ARMBaseInstrInfo *)new ARMInstrInfo(*this)
+                             : (ARMBaseInstrInfo *)new Thumb2InstrInfo(*this)),
       TLInfo(TM, *this) {
-
   CallLoweringInfo.reset(new ARMCallLowering(*getTargetLowering()));
   Legalizer.reset(new ARMLegalizerInfo(*this));
 
@@ -118,6 +126,11 @@ ARMSubtarget::ARMSubtarget(const Triple &TT, const std::string &CPU,
       *static_cast<const ARMBaseTargetMachine *>(&TM), *this, *RBI));
 
   RegBankInfo.reset(RBI);
+
+  // Register the Target-library-specific predicate table in the cpu table.
+#if ENABLE_MDL_USE
+  ARM::CpuTable.SetInstrPredicates(&ARM::InstrPredicates);
+#endif
 }
 
 const CallLowering *ARMSubtarget::getCallLowering() const {

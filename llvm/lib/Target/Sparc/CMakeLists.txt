@@ -12,8 +12,12 @@ tablegen(LLVM SparcGenMCCodeEmitter.inc -gen-emitter)
 tablegen(LLVM SparcGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM SparcGenSearchableTables.inc -gen-searchable-tables)
 tablegen(LLVM SparcGenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM Sparc.txt -print-records)
 
 add_public_tablegen_target(SparcCommonTableGen)
+
+##### Build the MDL components for this processor (if selected)
+buildmdl(Sparc Sparc SP)
 
 add_llvm_target(SparcCodeGen
   DelaySlotFiller.cpp

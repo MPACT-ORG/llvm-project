@@ -1848,9 +1848,10 @@ void SubtargetEmitter::emitGenMCSubtargetInfo(raw_ostream &OS) {
      << "    const MCWriteProcResEntry *WPR,\n"
      << "    const MCWriteLatencyEntry *WL,\n"
      << "    const MCReadAdvanceEntry *RA, const InstrStage *IS,\n"
-     << "    const unsigned *OC, const unsigned *FP) :\n"
+     << "    const unsigned *OC, const unsigned *FP,\n"
+     << "    mdl::CpuTableDef *MDL = nullptr) :\n"
      << "      MCSubtargetInfo(TT, CPU, TuneCPU, FS, PF, PD,\n"
-     << "                      WPR, WL, RA, IS, OC, FP) { }\n\n"
+     << "                      WPR, WL, RA, IS, OC, FP, MDL) { }\n\n"
      << "  unsigned resolveVariantSchedClass(unsigned SchedClass,\n"
      << "      const MCInst *MI, const MCInstrInfo *MCII,\n"
      << "      unsigned CPUID) const override {\n"
@@ -1925,7 +1926,8 @@ void SubtargetEmitter::run(raw_ostream &OS) {
 
   OS << "\nstatic inline MCSubtargetInfo *create" << Target
      << "MCSubtargetInfoImpl("
-     << "const Triple &TT, StringRef CPU, StringRef TuneCPU, StringRef FS) {\n";
+     << "const Triple &TT, StringRef CPU, StringRef TuneCPU, StringRef FS,\n"
+     << "                    mdl::CpuTableDef *CpuTable = nullptr) {\n";
   OS << "  return new " << Target
      << "GenMCSubtargetInfo(TT, CPU, TuneCPU, FS, ";
   if (NumFeatures)
@@ -1947,6 +1949,7 @@ void SubtargetEmitter::run(raw_ostream &OS) {
        << Target << "ForwardingPaths";
   } else
     OS << "nullptr, nullptr, nullptr";
+  OS << ", CpuTable";
   OS << ");\n}\n\n";
 
   OS << "} // end namespace llvm\n\n";
@@ -1975,7 +1978,8 @@ void SubtargetEmitter::run(raw_ostream &OS) {
      << "} // end namespace " << Target << "_MC\n\n";
   OS << "struct " << ClassName << " : public TargetSubtargetInfo {\n"
      << "  explicit " << ClassName << "(const Triple &TT, StringRef CPU, "
-     << "StringRef TuneCPU, StringRef FS);\n"
+     << "StringRef TuneCPU, StringRef FS, "
+     << "const mdl::CpuTableDef *CpuTable = nullptr);\n"
      << "public:\n"
      << "  unsigned resolveSchedClass(unsigned SchedClass, "
      << " const MachineInstr *DefMI,"
@@ -2019,7 +2023,8 @@ void SubtargetEmitter::run(raw_ostream &OS) {
   }
 
   OS << ClassName << "::" << ClassName << "(const Triple &TT, StringRef CPU, "
-     << "StringRef TuneCPU, StringRef FS)\n"
+     << "StringRef TuneCPU, StringRef FS, "
+     << "const mdl::CpuTableDef *CpuTable)\n"
      << "  : TargetSubtargetInfo(TT, CPU, TuneCPU, FS, ";
   if (NumFeatures)
     OS << "ArrayRef(" << Target << "FeatureKV, " << NumFeatures << "), ";
@@ -2040,6 +2045,7 @@ void SubtargetEmitter::run(raw_ostream &OS) {
        << Target << "ForwardingPaths";
   } else
     OS << "nullptr, nullptr, nullptr";
+  OS << ", CpuTable";
   OS << ") {}\n\n";
 
   EmitSchedModelHelpers(ClassName, OS);

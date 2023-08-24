@@ -1,0 +1,32 @@
+//----------------------------------------------------------------------------
+// Recursively defined operands are not allowed.
+//----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+register_class PPR { p[0..1] };
+
+operand imm(imm recur) { type(int32); }             // Direct recursion
+operand pred(PPR reg, imm value) { type(int32); }   // Use of recursive operand
+
+operand recur1(recur2 value2) { type(int32); }      // Indirect recursion
+operand recur2(recur1 value1) { type(int32); }      // Indirect recursion
+
+operand level1(level2 val)    { type(int32); }      // Very indirect recursion
+operand level2(level3 val)    { type(int32); }      // Very indirect recursion
+operand level3(level4 val)    { type(int32); }      // Very indirect recursion
+operand level4(level5 val)    { type(int32); }      // Very indirect recursion
+operand level5(level6 val)    { type(int32); }      // Very indirect recursion
+operand level6(level1 val)    { type(int32); }      // Very indirect recursion
+
+// CHECK: test_opnd_5.mdl:10:1 Recursively defined operand: imm
+// CHECK: test_opnd_5.mdl:11:1 Recursively defined operand: pred
+// CHECK: test_opnd_5.mdl:13:1 Recursively defined operand: recur1
+// CHECK: test_opnd_5.mdl:14:1 Recursively defined operand: recur2
+// CHECK: test_opnd_5.mdl:16:1 Recursively defined operand: level1
+// CHECK: test_opnd_5.mdl:17:1 Recursively defined operand: level2
+// CHECK: test_opnd_5.mdl:18:1 Recursively defined operand: level3
+// CHECK: test_opnd_5.mdl:19:1 Recursively defined operand: level4
+// CHECK: test_opnd_5.mdl:20:1 Recursively defined operand: level5
+// CHECK: test_opnd_5.mdl:21:1 Recursively defined operand: level6

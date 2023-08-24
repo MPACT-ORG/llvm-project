@@ -1011,10 +1011,36 @@ struct FuncUnitSorter {
   // Compute the number of functional unit alternatives needed
   // at each stage, and take the minimum value. We prioritize the
   // instructions by the least number of choices first.
+
   unsigned minFuncUnits(const MachineInstr *Inst,
                         InstrStage::FuncUnits &F) const {
-    unsigned SchedClass = Inst->getDesc().getSchedClass();
     unsigned min = UINT_MAX;
+
+    // Implement minFuncUnits for an Mdl Model
+    if (STI && STI->hasInstrMdlModel()) {
+      Instr Ins(Inst, static_cast<const TargetSubtargetInfo *>(STI));
+      auto *Subunits = Ins.getSubunit();
+      if (Subunits == nullptr)
+        return 1;
+      for (auto &Unit : *Subunits) {
+        if (auto *Refs = Unit.getUsedResourceReferences()) {
+          for (auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
+            if (Ref.isFus() && Ref.getCycles() && Ref.hasResourceId()) {
+              F = Ref.getResourceId();
+              return 1;
+            }
+        }
+        // TODO-MDL : we need to return some value in F.
+        if (auto *Prefs = Unit.getPooledResourceReferences()) {
+          for (auto &Ref : ReferenceIter<PooledResourceRef>(Prefs, &Ins))
+            if (Ref.isFus())
+              min = std::min(min, (unsigned)Ref.getSize());
+        }
+      }
+      return (min == UINT_MAX) ? 1 : min;
+    }
+
+    unsigned SchedClass = Inst->getDesc().getSchedClass();
     if (InstrItins && !InstrItins->isEmpty()) {
       for (const InstrStage &IS :
            make_range(InstrItins->beginStage(SchedClass),
@@ -1057,9 +1083,25 @@ struct FuncUnitSorter {
   // Compute the critical resources needed by the instruction. This
   // function records the functional units needed by instructions that
   // must use only one functional unit. We use this as a tie breaker
-  // for computing the resource MII. The instrutions that require
+  // for computing the resource MII. The instructions that require
   // the same, highly used, functional unit have high priority.
   void calcCriticalResources(MachineInstr &MI) {
+    if (STI && STI->hasInstrMdlModel()) {
+      Instr Ins(&MI, static_cast<const TargetSubtargetInfo *>(STI));
+      if (auto *Subunit = Ins.getSubunit()) {
+        if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+          for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
+            if (Ref.isFus() && Ref.hasResourceId() && Ref.getCycles())
+              Resources[Ref.getResourceId()]++;
+        if (auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
+          for (const auto &Ref : ReferenceIter<PooledResourceRef>(Prefs, &Ins))
+            if (Ref.isFus())
+              for (int Res = Ref.getFirst(); Res <= Ref.getLast(); Res++)
+                Resources[Ref.getResourceIds()[Res]]++;
+      }
+      return;
+    }
+
     unsigned SchedClass = MI.getDesc().getSchedClass();
     if (InstrItins && !InstrItins->isEmpty()) {
       for (const InstrStage &IS :
@@ -3089,6 +3131,7 @@ void ResourceManager::reserveResources(SUnit &SU, int Cycle) {
   });
 }
 
+// TODO-MDL - Write MDL version of this
 void ResourceManager::reserveResources(const MCSchedClassDesc *SCDesc,
                                        int Cycle) {
   assert(!UseDFA);
@@ -3101,6 +3144,7 @@ void ResourceManager::reserveResources(const MCSchedClassDesc *SCDesc,
     ++NumScheduledMops[positiveModulo(C, InitiationInterval)];
 }
 
+// TODO-MDL - Write MDL version of this
 void ResourceManager::unreserveResources(const MCSchedClassDesc *SCDesc,
                                          int Cycle) {
   assert(!UseDFA);
@@ -3113,6 +3157,7 @@ void ResourceManager::unreserveResources(const MCSchedClassDesc *SCDesc,
     --NumScheduledMops[positiveModulo(C, InitiationInterval)];
 }
 
+// TODO-MDL - Write MDL version of this
 bool ResourceManager::isOverbooked() const {
   assert(!UseDFA);
   for (int Slot = 0; Slot < InitiationInterval; ++Slot) {
@@ -3127,6 +3172,7 @@ bool ResourceManager::isOverbooked() const {
   return false;
 }
 
+// TODO-MDL - Write MDL version of this
 int ResourceManager::calculateResMIIDFA() const {
   assert(UseDFA);
 
@@ -3190,6 +3236,7 @@ int ResourceManager::calculateResMIIDFA() const {
   return Resmii;
 }
 
+// TODO-MDL - implement MDL version of this.
 int ResourceManager::calculateResMII() const {
   if (UseDFA)
     return calculateResMIIDFA();

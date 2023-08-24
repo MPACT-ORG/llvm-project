@@ -1,0 +1,36 @@
+//-----------------------------------------------------------------------------
+// Check template instantiations.
+// - Check for undefined mask references
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test_mask;
+
+phases x { E1, E2, E3 };
+
+cpu cpu {
+   resource array[10];
+   func_unit unit good(array);
+}
+
+func_unit unit(resource array) {
+   subunit sub(array);
+}
+subunit sub(resource array) {
+   latency lat(array);
+}
+latency lat(resource array) {
+  use(E2, IMM2:$op3, array:1:mask);   // Invalid value mask name
+}
+
+register R[0..15];
+register_class GPR { r[0..15] }
+operand IMM() {}
+operand IMM2 : IMM {
+  attribute size = 1 if address;
+}
+
+instruction add(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+
+// CHECK: test_refs_3.mdl:23:3 Invalid value mask name: mask
+// CHECK: Errors found, aborting

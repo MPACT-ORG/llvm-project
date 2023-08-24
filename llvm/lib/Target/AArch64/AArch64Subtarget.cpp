@@ -23,6 +23,7 @@
 #include "llvm/CodeGen/GlobalISel/InstructionSelect.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineScheduler.h"
+#include "llvm/Config/config.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/TargetParser/AArch64TargetParser.h"
 
@@ -33,6 +34,16 @@ using namespace llvm;
 #define GET_SUBTARGETINFO_CTOR
 #define GET_SUBTARGETINFO_TARGET_DESC
 #include "AArch64GenSubtargetInfo.inc"
+
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "AArch64GenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "AArch64GenMdlTarget.inc"
+#define AArch64CpuTable &AArch64::CpuTable
+#else
+#define AArch64CpuTable nullptr
+#endif
 
 static cl::opt<bool>
 EnableEarlyIfConvert("aarch64-early-ifcvt", cl::desc("Enable the early if "
@@ -315,7 +326,7 @@ AArch64Subtarget::AArch64Subtarget(const Triple &TT, StringRef CPU,
                                    bool StreamingSVEMode,
                                    bool StreamingCompatibleSVEMode,
                                    bool HasMinSize)
-    : AArch64GenSubtargetInfo(TT, CPU, TuneCPU, FS),
+    : AArch64GenSubtargetInfo(TT, CPU, TuneCPU, FS, AArch64CpuTable),
       ReserveXRegister(AArch64::GPR64commonRegClass.getNumRegs()),
       ReserveXRegisterForRA(AArch64::GPR64commonRegClass.getNumRegs()),
       CustomCallSavedXRegs(AArch64::GPR64commonRegClass.getNumRegs()),
@@ -349,6 +360,10 @@ AArch64Subtarget::AArch64Subtarget(const Triple &TT, StringRef CPU,
     if (ReservedRegNames.count(TRI->getName(AArch64::X0 + i)))
       ReserveXRegisterForRA.set(i);
   }
+  // Register the MDL Target-library-specific predicate table in the cpu table.
+#if ENABLE_MDL_USE
+  AArch64::CpuTable.SetInstrPredicates(&AArch64::InstrPredicates);
+#endif
   // X30 is named LR, so we can't use TRI->getName to check X30.
   if (ReservedRegNames.count("X30") || ReservedRegNames.count("LR"))
     ReserveXRegisterForRA.set(30);

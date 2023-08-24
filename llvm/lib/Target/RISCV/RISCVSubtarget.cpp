@@ -18,6 +18,7 @@
 #include "RISCVFrameLowering.h"
 #include "RISCVMacroFusion.h"
 #include "RISCVTargetMachine.h"
+#include "llvm/Config/config.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/ErrorHandling.h"
 
@@ -28,6 +29,16 @@ using namespace llvm;
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "RISCVGenSubtargetInfo.inc"
+
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "RISCVGenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "RISCVGenMdlTarget.inc"
+#define RISCVCpuTable &RISCV::CpuTable
+#else
+#define RISCVCpuTable nullptr
+#endif
 
 namespace llvm::RISCVTuneInfoTable {
 
@@ -92,7 +103,7 @@ RISCVSubtarget::RISCVSubtarget(const Triple &TT, StringRef CPU,
                                StringRef ABIName, unsigned RVVVectorBitsMin,
                                unsigned RVVVectorBitsMax,
                                const TargetMachine &TM)
-    : RISCVGenSubtargetInfo(TT, CPU, TuneCPU, FS),
+    : RISCVGenSubtargetInfo(TT, CPU, TuneCPU, FS, RISCVCpuTable),
       RVVVectorBitsMin(RVVVectorBitsMin), RVVVectorBitsMax(RVVVectorBitsMax),
       FrameLowering(
           initializeSubtargetDependencies(TT, CPU, TuneCPU, FS, ABIName)),
@@ -104,6 +115,11 @@ RISCVSubtarget::RISCVSubtarget(const Triple &TT, StringRef CPU,
   RegBankInfo.reset(RBI);
   InstSelector.reset(createRISCVInstructionSelector(
       *static_cast<const RISCVTargetMachine *>(&TM), *this, *RBI));
+
+  // Register the Target-library-specific predicate table in the cpu table.
+#if ENABLE_MDL_USE
+  RISCV::CpuTable.SetInstrPredicates(&RISCV::InstrPredicates);
+#endif
 }
 
 const CallLowering *RISCVSubtarget::getCallLowering() const {

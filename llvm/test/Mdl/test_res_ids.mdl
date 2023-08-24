@@ -1,0 +1,63 @@
+//----------------------------------------------------------------------------
+// Test that resources and resource pools get proper resource indexes.
+//----------------------------------------------------------------------------
+// RUN: llvm-mdl --dump_instr %s --output_dir /tmp/ 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { E1, E2,E3 };
+
+register_class GPR { s[0..1] };
+register_class PPR { p[0..1] };
+
+cpu cpu1 {
+  cluster clu1 {
+    func_unit fu fu1();
+  }
+}
+
+func_unit fu() {
+  resource imm[12];
+  resource struct { a, b, c, d };
+  subunit xyz(imm, imm[1], imm[0..2], struct, struct.c);
+}
+
+subunit xyz(resource imm, imm1, imm02, whole, member) {{
+    use(E1, $val3, imm:1);
+    use(E2, $val4, imm:2);
+    use(E3, $val3, imm02:1);
+    def(E2, $d0, member);
+    use(E3, $s1, whole:1);
+    use(E3, $s2, whole.d);
+}}
+
+operand imm1() { type(int32); }
+operand imm2() { type(int32); }
+
+instruction ADDrr(GPR d0, GPR s1, GPR s2, imm1 val3, imm2 val4, imm1 val5) {
+  subunit(xyz);
+}
+
+// CHECK:  Instruction info
+// CHECK: ---------------------------------------------------------
+// CHECK: Instruction: ADDrr(GPR d0, GPR s1, GPR s2, imm1 val3, imm2 val4, imm1 val5)
+// CHECK:                 flat(GPR d0, GPR s1, GPR s2, imm1 val3, imm2 val4, imm1 val5)
+// CHECK:                 { subunit(xyz); }
+// CHECK:     Subunit: cpu1.fu1
+// CHECK:       Operand references:
+// CHECK-DAG:       ===>  use.p(E1, imm1:$val3[3], <imm{2}[0..11]:1-->3>)
+// CHECK-DAG:       ===>  use.p(E2, imm2:$val4[4], <imm{2}[0..11]:2-->4>)
+// CHECK-DAG:       ===>  def.p(E2, GPR:$d0[0], <c{16}-->0>)
+// CHECK-DAG:       ===>  use.p(E3, imm1:$val3[3], <imm{2}[0..2]:1-->3>)
+// CHECK-DAG:       ===>  use.p(E3, GPR:$s1[1], <struct{14,15,16,17}:1-->1>)
+// CHECK-DAG:       ===>  use.p(E3, GPR:$s2[2], <d{17}-->2>)
+// CHECK:       Resources:
+// CHECK-DAG:             use.p(E2,c{16}-->0)
+// CHECK-DAG:             use.p(E3,d{17}-->2)
+// CHECK-DAG:             use.p(E1,fu1{1})
+// CHECK:       Pool Resources:
+// CHECK-DAG:             use.p(E1,imm{2}[0..11]:1-->3)  subpool id: 2 size requests: 1,2
+// CHECK-DAG:             use.p(E2,imm{2}[0..11]:2-->4)  subpool id: 2 size requests: 1,2
+// CHECK-DAG:             use.p(E3,imm{2}[0..2]:1-->3)  subpool id: 1 size requests: 1
+// CHECK-DAG:             use.p(E3,struct{14,15,16,17}:1-->1)  subpool id: 0 size requests: 1
+// CHECK:       Architectural Register Constraints:

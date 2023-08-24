@@ -21,6 +21,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/ELF.h"
+#include "llvm/Config/config.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -54,6 +55,14 @@ using namespace llvm;
 
 #define GET_REGINFO_MC_DESC
 #include "HexagonGenRegisterInfo.inc"
+
+// Include the generated MDL database.
+#if ENABLE_MDL_USE
+#include "HexagonGenMdlInfo.inc"
+#define HexagonCpuTable &Hexagon::CpuTable
+#else
+#define HexagonCpuTable nullptr
+#endif
 
 cl::opt<bool> llvm::HexagonDisableCompound
   ("mno-compound",
@@ -538,7 +547,7 @@ MCSubtargetInfo *Hexagon_MC::createHexagonMCSubtargetInfo(const Triple &TT,
   StringRef ArchFS = Features.second;
 
   MCSubtargetInfo *X = createHexagonMCSubtargetInfoImpl(
-      TT, CPUName, /*TuneCPU*/ CPUName, ArchFS);
+      TT, CPUName, /*TuneCPU*/ CPUName, ArchFS, HexagonCpuTable);
   if (X != nullptr && (CPUName == "hexagonv67t" || CPUName == "hexagon71t"))
     addArchSubtarget(X, ArchFS);
 

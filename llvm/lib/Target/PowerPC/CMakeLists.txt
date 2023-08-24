@@ -15,8 +15,12 @@ tablegen(LLVM PPCGenSubtargetInfo.inc -gen-subtarget)
 tablegen(LLVM PPCGenExegesis.inc -gen-exegesis)
 tablegen(LLVM PPCGenRegisterBank.inc -gen-register-bank)
 tablegen(LLVM PPCGenGlobalISel.inc -gen-global-isel)
+tablegen(LLVM PPC.txt -print-records)
 
 add_public_tablegen_target(PowerPCCommonTableGen)
+
+##### Build the MDL components for this processor (if selected)
+buildmdl(PPC PowerPC PPC)
 
 add_llvm_target(PowerPCCodeGen
   GISel/PPCInstructionSelector.cpp

@@ -1,0 +1,58 @@
+//----------------------------------------------------------------------------
+// Test derived operands.
+//----------------------------------------------------------------------------
+// RUN: llvm-mdl --dump_instr %s --output_dir /tmp/ 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { E1, E2 };
+
+register_class GPR { s[0..3] };
+register_class PPR { p[0..3] };
+
+operand i32imm() { type(int32); }
+operand f32imm() { type(float32); }
+
+operand imm2 : i32imm  { attribute size = 2; }
+operand imm1 : imm2  { attribute size = 1 if lit[{0x0F0F0}]; }
+operand imm0 : imm1  { attribute size = 0 if lit[0, 1, 2, 10..20]; }
+
+instruction ADD1(GPR d, i32imm x) { subunit(xyz); }
+
+subunit xyz(resource fun1, fun2, fun3, fun4, fun5) {{
+    use(E1, GPR:$d);
+    use(E1, i32imm:$x, fun1:size);
+    use(E1, imm0:$x, fun2:size);
+    use(E1, imm1:$x, fun3:size);
+    use(E1, imm2:$x, fun4:size);
+}}
+
+func_unit func() {
+   resource res1[3], res2[3], res3[3], res4[3], res5[3];
+   subunit xyz(res1, res2, res3, res4, res5);
+}
+
+cpu xyz {
+   func_unit func whatever();
+}
+
+// CHECK:  Instruction info
+// CHECK: ---------------------------------------------------------
+// CHECK: Instruction: ADD1(GPR d, i32imm x)
+// CHECK: flat(GPR d, i32imm x)
+// CHECK: { subunit(xyz); }
+// CHECK:     Subunit: xyz.whatever
+// CHECK:       Operand references:
+// CHECK-DAG:       ===>  use.p(E1, i32imm:$x[1], <res1{2}[0..2]:size-->1>)
+// CHECK-DAG:       ===>  use.p(E1, GPR:$d[0])
+// CHECK-DAG:       ===>  use.p(E1, i32imm:$x[1], <res3{8}[0..2]:size-->1>)
+// CHECK-DAG:       ===>  use.p(E1, i32imm:$x[1], <res2{5}[0..2]:size-->1>)
+// CHECK-DAG:       ===>  use.p(E1, i32imm:$x[1], <res4{11}[0..2]:size-->1>)
+// CHECK:       Resources:
+// CHECK:             use.p(E1,whatever{1})
+// CHECK:       Pool Resources:
+// CHECK-DAG:             use.p(E1,res1{2}[0..2]:size-->1)  subpool id: 0 size requests: 3
+// CHECK-DAG:             use.p(E1,res3{8}[0..2]:size-->1)  subpool id: 5 size requests: 1,2
+// CHECK-DAG:             use.p(E1,res2{5}[0..2]:size-->1)  subpool id: 3 size requests: 1,2
+// CHECK-DAG:             use.p(E1,res4{11}[0..2]:size-->1)  subpool id: 7 size requests: 2
+// CHECK:       Architectural Register Constraints:

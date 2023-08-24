@@ -1,0 +1,53 @@
+//----------------------------------------------------------------------------
+// Test that references without operand types get properly annotated with the
+// appropriate operand definition.  Also check phase expressions based on
+// instruction operands.
+//----------------------------------------------------------------------------
+// RUN: llvm-mdl  --dump_instr %s --output_dir /tmp/ | FileCheck %s
+
+family test;
+
+protected phases test { E1, E2,E3 };
+
+register_class GPR { s[0..1] };
+register_class PPR { p[0..1] };
+
+cpu cpu1 {
+  cluster clu1 {
+    func_unit fu fu1();
+  }
+}
+
+func_unit fu() {
+  subunit xyz();
+}
+
+operand imm() { type(int32); }
+operand pred_operand(PPR reg, imm value) { type(int32); }
+
+instruction ADDrr(GPR d, pred_operand pred) {
+  subunit(xyz);
+}
+
+subunit xyz() {{
+    use(E1 + pred_operand:$pred.value, pred_operand:$pred.reg);
+    use(E2 + $pred.value, $pred.reg);       // no operand type specified
+    def(E2, $d);
+    def(E3, GPR:$d);
+}}
+
+// CHECK:  Instruction info
+// CHECK: ---------------------------------------------------------
+// CHECK: Instruction: ADDrr(GPR d, pred_operand pred)
+// CHECK: 		flat(GPR d, (pred_operand.PPR) (pred.reg), (pred_operand.imm) (pred.value))
+// CHECK: 		{ subunit(xyz); }
+// CHECK:     Subunit: cpu1.fu1
+// CHECK:       Operand references:
+// CHECK-DAG:       ===>  def.p(E2, GPR:$d[0])
+// CHECK-DAG:       ===>  def.p(E3, GPR:$d[0])
+// CHECK-DAG:       ===>  use.p((E1+pred_operand:$pred.value[2]), pred_operand:$pred.reg[1])
+// CHECK-DAG:       ===>  use.p((E2+pred_operand:$pred.value[2]), pred_operand:$pred.reg[1])
+// CHECK:       Resources:
+// CHECK:             use.p(E1,fu1{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:

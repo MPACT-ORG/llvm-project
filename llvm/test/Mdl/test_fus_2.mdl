@@ -1,0 +1,23 @@
+//-----------------------------------------------------------------------------
+// Check fus() clauses for invalid functional units.
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { F1, E[1..20] };
+
+cpu cpu {
+   func_unit FU1<> fu_1();
+}
+
+// Reference an undefined functional unit FU_UNDEF
+subunit a() {{ def(E3, $op);  fus(FU1&FU_UNDEF, 1); }}
+
+register r[0..16];
+register_class GPR { r[0..16] };
+instruction abc(GPR op) { subunit(a); }
+
+
+// CHECK: test_fus_2.mdl:15:39 Invalid functional unit specifier: FU_UNDEF
+// CHECK: Errors found, aborting

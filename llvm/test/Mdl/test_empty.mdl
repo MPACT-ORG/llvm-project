@@ -1,0 +1,13 @@
+//----------------------------------------------------------------------------
+// Test graceful handling of empty files.
+//----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+// CHECK: Error: Specify a processor family name
+// CHECK: Error: Specify at least one cpu definition
+// CHECK: Error: Specify at least one pipeline definition.
+// CHECK: Error: Specify at least one functional unit definition.
+// CHECK: Error: Specify at least one subunit definition.
+// CHECK: Error: Specify at least one latency definition.
+// CHECK: Error: Specify at least one instruction definition.
+// CHECK: Errors found, aborting

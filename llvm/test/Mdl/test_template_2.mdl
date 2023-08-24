@@ -1,0 +1,47 @@
+//-----------------------------------------------------------------------------
+// Check template instantiations.
+// - Check number of template arguments
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test_predicates;
+
+phases x { E1, E2, E3 };
+
+cpu cpu {
+   resource group { a, b, c };
+   resource array[10];
+   func_unit unit good(GPR, group, array);
+   func_unit unit too_many(GPR, group, group, array);  // Too many arguments
+   func_unit unit too_few(GPR);                        // Too few arguments
+}
+
+func_unit unit(class regs; resource group, array) {
+   resource x, y, z;
+   port port<regs>(group);
+   subunit sub(port, group, array);
+   subunit sub(port, x | y | z, array);                // implicit group (ok)
+   subunit sub(port);                                  // too few arguments
+   subunit sub2(x, y, z);
+}
+subunit sub(port port; resource group, array) {
+   latency lat(port, array);
+   latency lat(port);                                  // too few arguments
+}
+
+latency lat(port port; resource whatevs) { def(E1, $op1); }
+
+subunit sub2(resource a, b, c) {
+   latency lat2(a & b & c);
+}
+latency lat2(resource group) { def(E2, $op1); }
+
+register R[0..15];
+register_class GPR { r[0..15] }
+operand IMM() {}
+instruction add(GPR op1, GPR op2, IMM op3) { subunit(sub, sub2); }
+instruction sub(GPR op1, GPR op2, IMM op3) { subunit(sub, sub2); }
+instruction xor(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+
+// CHECK: test_template_2.mdl:35:17 Implicit group definition not allowed
+// CHECK: Errors found, aborting

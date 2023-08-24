@@ -212,6 +212,7 @@ MachineCombiner::getDepth(SmallVectorImpl<MachineInstr *> &InsInstrs,
                           MachineTraceMetrics::Trace BlockTrace,
                           const MachineBasicBlock &MBB) {
   SmallVector<unsigned, 16> InstrDepth;
+
   // For each instruction in the new sequence compute the depth based on the
   // operands. Use the trace information when possible. For new operands which
   // are tracked in the InstrIdxForVirtReg map depth is looked up in InstrDepth
@@ -445,29 +446,43 @@ bool MachineCombiner::preservesResourceLen(
     MachineBasicBlock *MBB, MachineTraceMetrics::Trace BlockTrace,
     SmallVectorImpl<MachineInstr *> &InsInstrs,
     SmallVectorImpl<MachineInstr *> &DelInstrs) {
-  if (!TSchedModel.hasInstrSchedModel())
+
+  if (!TSchedModel.hasInstrSchedModel() && !TSchedModel.hasInstrMdlModel())
     return true;
 
-  // Compute current resource length
+  unsigned ResLenBeforeCombine;
+  unsigned ResLenAfterCombine;
 
-  //ArrayRef<const MachineBasicBlock *> MBBarr(MBB);
-  SmallVector <const MachineBasicBlock *, 1> MBBarr;
-  MBBarr.push_back(MBB);
-  unsigned ResLenBeforeCombine = BlockTrace.getResourceLength(MBBarr);
+  // Compute resource lengths using MDL model.
+  if (TSchedModel.hasInstrMdlModel()) {
+    SmallVector <const MachineBasicBlock *, 1> MBBarr;
+    MBBarr.push_back(MBB);
+    ResLenBeforeCombine = BlockTrace.getInstrResourceLength(MBBarr);
+    ResLenAfterCombine =
+         BlockTrace.getInstrResourceLength(MBBarr, &InsInstrs, &DelInstrs);
 
-  // Deal with SC rather than Instructions.
-  SmallVector<const MCSchedClassDesc *, 16> InsInstrsSC;
-  SmallVector<const MCSchedClassDesc *, 16> DelInstrsSC;
+  // Compute resource lengths using SchedModel
+  } else {
+    // Compute current resource length
+    //ArrayRef<const MachineBasicBlock *> MBBarr(MBB);
+    SmallVector <const MachineBasicBlock *, 1> MBBarr;
+    MBBarr.push_back(MBB);
+    ResLenBeforeCombine = BlockTrace.getResourceLength(MBBarr);
+ 
+    // Deal with SC rather than Instructions.
+    SmallVector<const MCSchedClassDesc *, 16> InsInstrsSC;
+    SmallVector<const MCSchedClassDesc *, 16> DelInstrsSC;
+ 
+    instr2instrSC(InsInstrs, InsInstrsSC);
+    instr2instrSC(DelInstrs, DelInstrsSC);
+ 
+    ArrayRef<const MCSchedClassDesc *> MSCInsArr{InsInstrsSC};
+    ArrayRef<const MCSchedClassDesc *> MSCDelArr{DelInstrsSC};
 
-  instr2instrSC(InsInstrs, InsInstrsSC);
-  instr2instrSC(DelInstrs, DelInstrsSC);
-
-  ArrayRef<const MCSchedClassDesc *> MSCInsArr{InsInstrsSC};
-  ArrayRef<const MCSchedClassDesc *> MSCDelArr{DelInstrsSC};
-
-  // Compute new resource length.
-  unsigned ResLenAfterCombine =
-      BlockTrace.getResourceLength(MBBarr, MSCInsArr, MSCDelArr);
+    // Compute new resource length.
+    ResLenAfterCombine =
+        BlockTrace.getResourceLength(MBBarr, MSCInsArr, MSCDelArr);
+  }
 
   LLVM_DEBUG(dbgs() << "\t\tResource length before replacement: "
                     << ResLenBeforeCombine
@@ -551,7 +566,7 @@ void MachineCombiner::verifyPatternOrder(
     // Found pattern, but did not generate alternative sequence.
     // This can happen e.g. when an immediate could not be materialized
     // in a single instruction.
-    if (InsInstrs.empty() || !TSchedModel.hasInstrSchedModelOrItineraries())
+    if (InsInstrs.empty() || !TSchedModel.hasAnySchedModel())
       continue;
 
     unsigned NewRootLatency, RootLatency;

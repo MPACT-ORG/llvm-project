@@ -924,7 +924,13 @@ bool EarlyIfConverter::shouldConvertIf() {
   SmallVector<const MachineBasicBlock*, 1> ExtraBlocks;
   if (IfConv.TBB != IfConv.Tail)
     ExtraBlocks.push_back(IfConv.TBB);
-  unsigned ResLength = FBBTrace.getResourceLength(ExtraBlocks);
+
+  unsigned ResLength;
+  if (MBB.getParent()->getSubtarget().hasMdlModel())
+    ResLength = FBBTrace.getInstrResourceLength(ExtraBlocks);
+  else
+    ResLength = FBBTrace.getResourceLength(ExtraBlocks);
+
   LLVM_DEBUG(dbgs() << "Resource length " << ResLength
                     << ", minimal critical path " << MinCrit << '\n');
   if (ResLength > MinCrit + CritLimit) {

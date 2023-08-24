@@ -25,6 +25,7 @@
 #include "llvm/CodeGen/GlobalISel/InlineAsmLowering.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/TargetFrameLowering.h"
+#include "llvm/Config/config.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsR600.h"
 #include "llvm/IR/MDBuilder.h"
@@ -40,6 +41,16 @@ using namespace llvm;
 #define AMDGPUSubtarget GCNSubtarget
 #include "AMDGPUGenSubtargetInfo.inc"
 #undef AMDGPUSubtarget
+
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "AMDGPUGenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "AMDGPUGenMdlTarget.inc"
+#define AMDGPUCpuTable &AMDGPU::CpuTable
+#else
+#define AMDGPUCpuTable nullptr
+#endif
 
 static cl::opt<bool> EnablePowerSched(
   "amdgpu-enable-power-sched",
@@ -174,7 +185,7 @@ bool AMDGPUSubtarget::useRealTrue16Insts() const {
 GCNSubtarget::GCNSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
                            const GCNTargetMachine &TM)
     : // clang-format off
-    AMDGPUGenSubtargetInfo(TT, GPU, /*TuneCPU*/ GPU, FS),
+    AMDGPUGenSubtargetInfo(TT, GPU, /*TuneCPU*/ GPU, FS, AMDGPUCpuTable),
     AMDGPUSubtarget(TT),
     TargetTriple(TT),
     TargetID(*this),
@@ -191,6 +202,11 @@ GCNSubtarget::GCNSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
   RegBankInfo.reset(new AMDGPURegisterBankInfo(*this));
   InstSelector.reset(new AMDGPUInstructionSelector(
   *this, *static_cast<AMDGPURegisterBankInfo *>(RegBankInfo.get()), TM));
+
+  // Register the Target-library-specific predicate table in the cpu table.
+#if ENABLE_MDL_USE
+  AMDGPU::CpuTable.SetInstrPredicates(&AMDGPU::InstrPredicates);
+#endif
 }
 
 unsigned GCNSubtarget::getConstantBusLimit(unsigned Opcode) const {

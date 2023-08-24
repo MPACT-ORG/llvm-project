@@ -37,6 +37,7 @@
 #include <utility>
 
 using namespace llvm;
+using namespace mdl;
 
 #define DEBUG_TYPE "machine-trace-metrics"
 
@@ -115,27 +116,81 @@ MachineTraceMetrics::getResources(const MachineBasicBlock *MBB) {
     if (MI.isCall())
       FBI->HasCalls = true;
 
-    // Count processor resources used.
-    if (!SchedModel.hasInstrSchedModel())
-      continue;
-    const MCSchedClassDesc *SC = SchedModel.resolveSchedClass(&MI);
-    if (!SC->isValid())
-      continue;
+    // MI.dump();
 
-    for (TargetSchedModel::ProcResIter
-         PI = SchedModel.getWriteProcResBegin(SC),
-         PE = SchedModel.getWriteProcResEnd(SC); PI != PE; ++PI) {
-      assert(PI->ProcResourceIdx < PRKinds && "Bad processor resource kind");
-      PRCycles[PI->ProcResourceIdx] += PI->ReleaseAtCycle;
+    // Count processor resources used for MDL-based model.
+    if (SchedModel.hasInstrMdlModel()) {
+      Instr Ins(&MI, SchedModel.getSubtargetInfo());
+      if (auto *Subunit = Ins.getSubunit()) {
+        int ResFactor = SchedModel.getResourcePoolFactor(1);
+        if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+          for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
+            if (Ref.isFus() && Ref.hasResourceId() && Ref.getCycles()) {
+              PRCycles[Ref.getResourceId()] += Ref.getCycles() * ResFactor;
+    //        dbgs() << "    --- "
+    //               << SchedModel.getResourceName(Ref.getResourceId())
+    //               << "  " << Ref.getCycles() * ResFactor << "c\n";
+            }
+
+        if (auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
+          for (const auto &Ref : ReferenceIter<PooledResourceRef>(Prefs, &Ins))
+            if (Ref.isFus()) {
+              int Factor = SchedModel.getResourcePoolFactor(Ref.getSize());
+              int Cycles = Ref.getCycles() * Factor;
+              for (int res = Ref.getFirst(); res <= Ref.getLast(); res++) {
+                PRCycles[Ref.getResourceIds()[res]] += Cycles;
+    //          dbgs() << "    --- "
+    //             << SchedModel.getResourceName(Ref.getResourceIds()[res])
+    //             << "  " << Cycles << "c\n";
+              }
+            }
+      }
+      continue;
+    }
+
+    // Count processor resources used for SchedModel-based model.
+    if (SchedModel.hasInstrSchedModel()) {
+      const MCSchedClassDesc *SC = SchedModel.resolveSchedClass(&MI);
+      if (!SC->isValid())
+        continue;
+
+      for (TargetSchedModel::ProcResIter
+               PI = SchedModel.getWriteProcResBegin(SC),
+               PE = SchedModel.getWriteProcResEnd(SC);
+           PI != PE; ++PI) {
+        auto PIdx = PI->ProcResourceIdx;
+        assert(PI->ProcResourceIdx < PRKinds && "Bad processor resource kind");
+        PRCycles[PI->ProcResourceIdx] += PI->ReleaseAtCycle;
+   //   dbgs() << "    --- "
+   //          << SchedModel.getResourceName(PIdx)
+   //          << "  " << PI->ReleaseAtCycle *
+   //                     SchedModel.getResourceFactor(PIdx) << "c\n";
+                
+      }
     }
   }
   FBI->InstrCount = InstrCount;
-
-  // Scale the resource cycles so they are comparable.
   unsigned PROffset = MBB->getNumber() * PRKinds;
-  for (unsigned K = 0; K != PRKinds; ++K)
-    ProcReleaseAtCycles[PROffset + K] =
-      PRCycles[K] * SchedModel.getResourceFactor(K);
+
+  // Save release cycles for each resource.
+  if (SchedModel.hasMdlModel()) {
+    for (unsigned K = 0; K != PRKinds; ++K)
+      ProcReleaseAtCycles[PROffset + K] = PRCycles[K];
+  } else {
+    // Scale the resource cycles so they are comparable.
+    for (unsigned K = 0; K != PRKinds; ++K)
+      ProcReleaseAtCycles[PROffset + K] =
+          PRCycles[K] * SchedModel.getResourceFactor(K);
+  }
+
+  // dbgs() << "Resources for block " << MBB->getNumber() << "\n";
+  // for (unsigned K = 0; K != PRKinds; ++K) {
+  //   if (ProcReleaseAtCycles[PROffset + K] != 0)
+  //     dbgs() << ">>> " << SchedModel.getResourceName(K) << ": "
+  //                      << ProcReleaseAtCycles[PROffset + K] << " "
+  //                      << getCycles(ProcReleaseAtCycles[PROffset + K])
+  //                      << "\n";
+  // }
 
   return FBI;
 }
@@ -882,9 +937,12 @@ computeInstrDepths(const MachineBasicBlock *MBB) {
       ArrayRef<unsigned> PRDepths = getProcResourceDepths(MBB->getNumber());
       for (unsigned K = 0; K != PRDepths.size(); ++K)
         if (PRDepths[K]) {
-          unsigned Factor = MTM.SchedModel.getResourceFactor(K);
+          unsigned Factor;
+          if (MTM.SchedModel.hasMdlModel())
+               Factor = MTM.SchedModel.getResourcePoolFactor(1);
+          else Factor = MTM.SchedModel.getResourceFactor(K);
           dbgs() << format("%6uc @ ", MTM.getCycles(PRDepths[K]))
-                 << MTM.SchedModel.getProcResource(K)->Name << " ("
+                 << MTM.SchedModel.getResourceName(K) << " ("
                  << PRDepths[K]/Factor << " ops x" << Factor << ")\n";
         }
     });
@@ -1062,9 +1120,12 @@ computeInstrHeights(const MachineBasicBlock *MBB) {
       ArrayRef<unsigned> PRHeights = getProcResourceHeights(MBB->getNumber());
       for (unsigned K = 0; K != PRHeights.size(); ++K)
         if (PRHeights[K]) {
-          unsigned Factor = MTM.SchedModel.getResourceFactor(K);
+          unsigned Factor;
+          if (MTM.SchedModel.hasMdlModel())
+               Factor = MTM.SchedModel.getResourcePoolFactor(1);
+          else Factor = MTM.SchedModel.getResourceFactor(K);
           dbgs() << format("%6uc @ ", MTM.getCycles(PRHeights[K]))
-                 << MTM.SchedModel.getProcResource(K)->Name << " ("
+                 << MTM.SchedModel.getResourceName(K) << " ("
                  << PRHeights[K]/Factor << " ops x" << Factor << ")\n";
         }
     });
@@ -1219,6 +1280,79 @@ unsigned MachineTraceMetrics::Trace::getResourceDepth(bool Bottom) const {
   // plus instructions in current block
   if (Bottom)
     Instrs += TE.MTM.BlockInfo[getBlockNum()].InstrCount;
+  if (unsigned IW = TE.MTM.SchedModel.getIssueWidth())
+    Instrs /= IW;
+  // Assume issue width 1 without a schedule model.
+  return std::max(Instrs, PRMax);
+}
+
+// MDL-based version of getResourceLength
+unsigned MachineTraceMetrics::Trace::getInstrResourceLength(
+   ArrayRef<const MachineBasicBlock *> Extrablocks,
+   SmallVectorImpl<MachineInstr *> *ExtraInstrs,
+   SmallVectorImpl<MachineInstr *> *RemoveInstrs) const {
+ // Add up resources above and below the center block.
+  ArrayRef<unsigned> PRDepths = TE.getProcResourceDepths(getBlockNum());
+  ArrayRef<unsigned> PRHeights = TE.getProcResourceHeights(getBlockNum());
+
+  SmallVector<unsigned> PRCycles(PRDepths.size());
+  for (unsigned K = 0;  K < PRDepths.size(); K++) {
+    PRCycles[K] = PRDepths[K] + PRHeights[K];
+    for (const MachineBasicBlock *MBB : Extrablocks)
+      PRCycles[K] += TE.MTM.getProcReleaseAtCycles(MBB->getNumber())[K];
+  }
+
+  // Capture computing cycles from extra instructions
+  auto extraCycles = [this](SmallVectorImpl<MachineInstr *> *Instrs,
+                            SmallVector<unsigned> &PRCycles,
+                            bool Insert) ->void {
+    auto *SchedModel = &TE.MTM.SchedModel;
+    auto *STI = SchedModel->getSubtargetInfo();
+    for (auto *MI : *Instrs) {
+      mdl::Instr Ins(MI, STI);
+      if (auto *Subunit = Ins.getSubunit()) {
+        if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+          for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
+            if (Ref.isFus() && Ref.getCycles() && Ref.hasResourceId()) {
+              int Cycles =
+                       Ref.getCycles() * SchedModel->getResourcePoolFactor(1);
+              if (Insert)
+                PRCycles[Ref.getResourceId()] += Cycles;
+              else
+                PRCycles[Ref.getResourceId()] -= Cycles;
+            }
+
+        if (auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
+          for (const auto &Ref : ReferenceIter<PooledResourceRef>(Prefs, &Ins))
+            if (Ref.isFus())
+              for (int Res = Ref.getFirst(); Res <= Ref.getLast(); Res++) {
+                int Factor = SchedModel->getResourcePoolFactor(Ref.getSize());
+                int Cycles = Ref.getCycles() * Factor;
+                if (Insert)
+                  PRCycles[Ref.getResourceIds()[Res]] += Cycles;
+                else
+                  PRCycles[Ref.getResourceIds()[Res]] -= Cycles;
+              }
+      }
+    }
+  };
+
+  if (ExtraInstrs)
+    extraCycles(ExtraInstrs, PRCycles, true);
+  if (RemoveInstrs)
+    extraCycles(RemoveInstrs, PRCycles, false);
+
+  // Find maximum cycles and convert to cycle count.
+  unsigned PRMax = *std::max_element(PRCycles.begin(), PRCycles.end());
+  PRMax = TE.MTM.getCycles(PRMax);
+
+  // Instrs: #instructions in current trace outside current block.
+  unsigned Instrs = TBI.InstrDepth + TBI.InstrHeight;
+  // Add instruction count from the extra blocks.
+  for (const MachineBasicBlock *MBB : Extrablocks)
+    Instrs += TE.MTM.getResources(MBB)->InstrCount;
+  if (ExtraInstrs) Instrs += ExtraInstrs->size();
+  if (RemoveInstrs) Instrs -= RemoveInstrs->size();
   if (unsigned IW = TE.MTM.SchedModel.getIssueWidth())
     Instrs /= IW;
   // Assume issue width 1 without a schedule model.

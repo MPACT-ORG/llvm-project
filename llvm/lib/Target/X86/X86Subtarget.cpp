@@ -22,6 +22,7 @@
 #include "llvm/CodeGen/GlobalISel/InstructionSelect.h"
 #include "llvm/CodeGen/GlobalISel/InstructionSelector.h"
 #include "llvm/CodeGen/ScheduleDAGMutation.h"
+#include "llvm/Config/config.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/Function.h"
@@ -46,6 +47,16 @@ using namespace llvm;
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "X86GenSubtargetInfo.inc"
+
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "X86GenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "X86GenMdlTarget.inc"
+#define X86CpuTable &X86::CpuTable
+#else
+#define X86CpuTable nullptr
+#endif
 
 // Temporary option to control early if-conversion for x86 while adding machine
 // models.
@@ -325,7 +336,7 @@ X86Subtarget::X86Subtarget(const Triple &TT, StringRef CPU, StringRef TuneCPU,
                            MaybeAlign StackAlignOverride,
                            unsigned PreferVectorWidthOverride,
                            unsigned RequiredVectorWidth)
-    : X86GenSubtargetInfo(TT, CPU, TuneCPU, FS),
+    : X86GenSubtargetInfo(TT, CPU, TuneCPU, FS, X86CpuTable),
       PICStyle(PICStyles::Style::None), TM(TM), TargetTriple(TT),
       StackAlignOverride(StackAlignOverride),
       PreferVectorWidthOverride(PreferVectorWidthOverride),
@@ -352,6 +363,11 @@ X86Subtarget::X86Subtarget(const Triple &TT, StringRef CPU, StringRef TuneCPU,
   auto *RBI = new X86RegisterBankInfo(*getRegisterInfo());
   RegBankInfo.reset(RBI);
   InstSelector.reset(createX86InstructionSelector(TM, *this, *RBI));
+
+  // Register the Target-library-specific predicate table in the cpu table.
+#if ENABLE_MDL_USE
+  X86::CpuTable.SetInstrPredicates(&X86::InstrPredicates);
+#endif
 }
 
 const CallLowering *X86Subtarget::getCallLowering() const {

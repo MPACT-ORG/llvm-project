@@ -1,0 +1,37 @@
+//----------------------------------------------------------------------------
+// Pipeline phase declarations.
+//----------------------------------------------------------------------------
+// RUN: llvm-mdl --dump_instr %s --output_dir /tmp/ 2>&1 | FileCheck %s
+
+family test;
+
+protected phases fish { F1, D1, E[1..132] };
+
+cpu test {
+   resource (E1) imm[5];
+   resource (E1) thing;
+   func_unit x y(imm, thing);
+};
+
+func_unit x(resource imm, thing) { subunit xxx(imm, thing); }
+subunit xxx(resource imm, thing) { latency xxx(imm, thing); }
+latency xxx(resource imm, thing) { use(E1, $imm, imm:1, thing); }
+
+operand immediate() { type(I32); }
+instruction abc(immediate imm) { subunit(xxx); }
+
+
+// CHECK:  Instruction info
+// CHECK: ---------------------------------------------------------
+// CHECK: Instruction: abc(immediate imm)
+// CHECK: flat(immediate imm)
+// CHECK: { subunit(xxx); }
+// CHECK:     Subunit: test.y
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E1, immediate:$imm[0], <imm{2}[0..4]:1-->0, thing{7}-->0>)
+// CHECK:       Resources:
+// CHECK-DAG:             use.p(E1,thing{7}-->0)
+// CHECK-DAG:             use.p(F1,y{1})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E1,imm{2}[0..4]:1-->0)  subpool id: 0 size requests: 1
+// CHECK:       Architectural Register Constraints:

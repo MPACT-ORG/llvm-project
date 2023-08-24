@@ -1,0 +1,24 @@
+//-----------------------------------------------------------------------------
+// Check for undefined subunit references in instructions
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { F1, E[1..20] };
+
+cpu cpu {
+   func_unit XYZZY fu1();
+}
+
+func_unit XYZZY() { subunit a(); }
+subunit a() { latency a(); }
+latency a() { def(E3, $op); }
+
+register r[0..16];
+register_class GPR { r[0..16] };
+instruction abc(GPR op) { subunit(b); }          // Undefined subunit
+
+
+// CHECK: test_fus_6.mdl:20:35 Undefined subunit reference: b
+// CHECK: Errors found, aborting

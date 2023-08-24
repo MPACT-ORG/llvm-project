@@ -12,6 +12,7 @@
 
 #include "SparcSubtarget.h"
 #include "Sparc.h"
+#include "llvm/Config/config.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -22,6 +23,16 @@ using namespace llvm;
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "SparcGenSubtargetInfo.inc"
+
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "SparcGenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "SparcGenMdlTarget.inc"
+#define SparcCpuTable &SP::CpuTable
+#else
+#define SparcCpuTable nullptr
+#endif
 
 void SparcSubtarget::anchor() { }
 
@@ -45,9 +56,17 @@ SparcSubtarget &SparcSubtarget::initializeSubtargetDependencies(StringRef CPU,
 SparcSubtarget::SparcSubtarget(const Triple &TT, const std::string &CPU,
                                const std::string &FS, const TargetMachine &TM,
                                bool is64Bit)
-    : SparcGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS), TargetTriple(TT),
-      Is64Bit(is64Bit), InstrInfo(initializeSubtargetDependencies(CPU, FS)),
-      TLInfo(TM, *this), FrameLowering(*this) {}
+    : SparcGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS, SparcCpuTable),
+      TargetTriple(TT), Is64Bit(is64Bit),
+      InstrInfo(initializeSubtargetDependencies(CPU, FS)), TLInfo(TM, *this),
+      FrameLowering(*this) {
+  // Register the Target-library-specific predicate table in the cpu table.
+  // This table is only accessible if the Target library is included in an
+  // application.
+#if ENABLE_MDL_USE
+  SP::CpuTable.SetInstrPredicates(&SP::InstrPredicates);
+#endif
+}
 
 int SparcSubtarget::getAdjustedFrameSize(int frameSize) const {
 

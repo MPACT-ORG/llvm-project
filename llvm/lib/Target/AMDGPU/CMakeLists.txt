@@ -14,6 +14,7 @@ tablegen(LLVM AMDGPUGenRegisterBank.inc -gen-register-bank)
 tablegen(LLVM AMDGPUGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM AMDGPUGenSearchableTables.inc -gen-searchable-tables)
 tablegen(LLVM AMDGPUGenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM AMDGPU.txt -print-records)
 
 set(LLVM_TARGET_DEFINITIONS AMDGPUGISel.td)
 tablegen(LLVM AMDGPUGenGlobalISel.inc -gen-global-isel)
@@ -33,12 +34,17 @@ tablegen(LLVM R600GenInstrInfo.inc -gen-instr-info)
 tablegen(LLVM R600GenMCCodeEmitter.inc -gen-emitter)
 tablegen(LLVM R600GenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM R600GenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM R600.txt -print-records)
 
 add_public_tablegen_target(AMDGPUCommonTableGen)
 
 set(LLVM_TARGET_DEFINITIONS InstCombineTables.td)
 tablegen(LLVM InstCombineTables.inc -gen-searchable-tables)
 add_public_tablegen_target(InstCombineTableGen)
+
+##### Build the MDL components for this processor (if selected)
+buildmdl(AMDGPU AMDGPU AMDGPU)
+buildmdl(R600 AMDGPU R600)
 
 add_llvm_target(AMDGPUCodeGen
   AMDGPUAliasAnalysis.cpp
@@ -201,3 +207,4 @@ add_subdirectory(MCA)
 add_subdirectory(MCTargetDesc)
 add_subdirectory(TargetInfo)
 add_subdirectory(Utils)
+

@@ -11,6 +11,7 @@
 #include "SystemZMCAsmInfo.h"
 #include "SystemZTargetStreamer.h"
 #include "TargetInfo/SystemZTargetInfo.h"
+#include "llvm/Config/config.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDwarf.h"
 #include "llvm/MC/MCInst.h"
@@ -31,6 +32,14 @@ using namespace llvm;
 
 #define GET_REGINFO_MC_DESC
 #include "SystemZGenRegisterInfo.inc"
+
+// Include the generated MDL database.
+#if ENABLE_MDL_USE
+#include "SystemZGenMdlInfo.inc"
+#define SystemZCpuTable &SystemZ::CpuTable
+#else
+#define SystemZCpuTable nullptr
+#endif
 
 const unsigned SystemZMC::GR32Regs[16] = {
   SystemZ::R0L, SystemZ::R1L, SystemZ::R2L, SystemZ::R3L,
@@ -178,7 +187,8 @@ static MCRegisterInfo *createSystemZMCRegisterInfo(const Triple &TT) {
 
 static MCSubtargetInfo *
 createSystemZMCSubtargetInfo(const Triple &TT, StringRef CPU, StringRef FS) {
-  return createSystemZMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS);
+  return createSystemZMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS,
+                                          SystemZCpuTable);
 }
 
 static MCInstPrinter *createSystemZMCInstPrinter(const Triple &T,
