@@ -19,6 +19,7 @@
 #include "R600InstPrinter.h"
 #include "R600MCTargetDesc.h"
 #include "TargetInfo/AMDGPUTargetInfo.h"
+#include "llvm/Config/config.h"
 #include "llvm/MC/LaneBitmask.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -53,6 +54,14 @@ using namespace llvm;
 #define GET_REGINFO_MC_DESC
 #include "R600GenRegisterInfo.inc"
 
+// Include the generated MDL database.
+#if ENABLE_MDL_USE
+#include "AMDGPUGenMdlInfo.inc"
+#define AMDGPUCpuTable &AMDGPU::CpuTable
+#else
+#define AMDGPUCpuTable nullptr
+#endif
+
 static MCInstrInfo *createAMDGPUMCInstrInfo() {
   MCInstrInfo *X = new MCInstrInfo();
   InitAMDGPUMCInstrInfo(X);
@@ -77,8 +86,10 @@ MCRegisterInfo *llvm::createGCNMCRegisterInfo(AMDGPUDwarfFlavour DwarfFlavour) {
 static MCSubtargetInfo *
 createAMDGPUMCSubtargetInfo(const Triple &TT, StringRef CPU, StringRef FS) {
   if (TT.getArch() == Triple::r600)
-    return createR600MCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS);
-  return createAMDGPUMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS);
+    return createR600MCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS,
+                                         AMDGPUCpuTable);
+  return createAMDGPUMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS,
+                                         AMDGPUCpuTable);
 }
 
 static MCInstPrinter *createAMDGPUMCInstPrinter(const Triple &T,

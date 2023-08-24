@@ -9,6 +9,7 @@
 #include "SystemZSubtarget.h"
 #include "MCTargetDesc/SystemZMCTargetDesc.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
+#include "llvm/Config/config.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/Target/TargetMachine.h"
 
@@ -19,6 +20,16 @@ using namespace llvm;
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "SystemZGenSubtargetInfo.inc"
+
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "SystemZGenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "SystemZGenMdlTarget.inc"
+#define SystemZCpuTable &SystemZ::CpuTable
+#else
+#define SystemZCpuTable nullptr
+#endif
 
 static cl::opt<bool> UseSubRegLiveness(
     "systemz-subreg-liveness",
@@ -67,10 +78,16 @@ SystemZSubtarget::SystemZSubtarget(const Triple &TT, const std::string &CPU,
                                    const std::string &TuneCPU,
                                    const std::string &FS,
                                    const TargetMachine &TM)
-    : SystemZGenSubtargetInfo(TT, CPU, TuneCPU, FS), TargetTriple(TT),
-      SpecialRegisters(initializeSpecialRegisters()),
+    : SystemZGenSubtargetInfo(TT, CPU, TuneCPU, FS, SystemZCpuTable),
+      TargetTriple(TT), SpecialRegisters(initializeSpecialRegisters()),
       InstrInfo(initializeSubtargetDependencies(CPU, TuneCPU, FS)),
-      TLInfo(TM, *this), FrameLowering(SystemZFrameLowering::create(*this)) {}
+      TLInfo(TM, *this), FrameLowering(SystemZFrameLowering::create(*this)) {
+
+  // Register the Target-library-specific predicate table in the cpu table.
+#if ENABLE_MDL_USE
+  SystemZ::CpuTable.SetInstrPredicates(&SystemZ::InstrPredicates);
+#endif
+}
 
 bool SystemZSubtarget::enableSubRegLiveness() const {
   return UseSubRegLiveness;

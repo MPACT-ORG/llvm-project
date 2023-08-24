@@ -1,0 +1,39 @@
+//-----------------------------------------------------------------------------
+// Test invalid functional unit and group definitions
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { F1, E[1..20] };
+
+cpu cpu {
+   issue(F1) s1, s2, s3;
+   func_unit XYZZY fu1();
+   func_unit IMPLICIT fu2();
+}
+
+func_unit XYZZY() { subunit a(); subunit undefined(); }
+func_unit XYZZY() { }                     // Duplicate FU definition
+
+func_group GROUP : A, IMPLICIT;           // Undefined FU
+func_group CIRCLE : XYZZY, CIRCLE;        // Recursive
+func_group HYBRID : XYZZY, IMPLICIT;      // OKAY
+func_group HYBRID : XYZZY, IMPLICIT;      // Duplicate
+func_group XYZZY : IMPLICIT;              // Conflicts with FU name
+func_group IMPLICIT : XYZZY;              // Conflicts with implicit FU name
+
+subunit a() {{ def(E3, $op); fus(IMPLICIT, 1); }}
+
+register r[0..16];
+register_class GPR { r[0..16] };
+instruction abc(GPR op) { subunit(a); }
+
+
+// CHECK: test_fus_4.mdl:17:1 Duplicate functional unit definition: XYZZY
+// CHECK: test_fus_4.mdl:22:1 Duplicate functional unit group definition: HYBRID
+// CHECK: test_fus_4.mdl:23:1 Group name conflicts with functional unit name: XYZZY
+// CHECK: test_fus_4.mdl:24:1 Group name conflicts with functional unit name: IMPLICIT
+// CHECK: test_fus_4.mdl:19:20 Undefined functional unit reference: A
+// CHECK: test_fus_4.mdl:20:1 Group is recursively defined: CIRCLE
+// CHECK: Errors found, aborting

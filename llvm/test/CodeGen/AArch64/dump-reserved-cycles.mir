@@ -28,16 +28,16 @@ body:             |
 # CHECK-NEXT:   - Latency limited.
 # CHECK-NEXT: CortexA55UnitALU(0) = 1
 # CHECK-NEXT: CortexA55UnitALU(1) = 0
-# CHECK-NEXT: CortexA55UnitB(0) = 4294967295
-# CHECK-NEXT: CortexA55UnitDiv(0) = 4294967295
-# CHECK-NEXT: CortexA55UnitFPALU(0) = 4294967295
-# CHECK-NEXT: CortexA55UnitFPALU(1) = 4294967295
-# CHECK-NEXT: CortexA55UnitFPDIV(0) = 4294967295
-# CHECK-NEXT: CortexA55UnitFPMAC(0) = 4294967295
-# CHECK-NEXT: CortexA55UnitFPMAC(1) = 4294967295
-# CHECK-NEXT: CortexA55UnitLd(0) = 4294967295
-# CHECK-NEXT: CortexA55UnitMAC(0) = 4294967295
-# CHECK-NEXT: CortexA55UnitSt(0) = 4294967295
+# CHECK-NEXT: CortexA55UnitB{{.*}} = 4294967295
+# CHECK-NEXT: CortexA55UnitDiv{{.*}} = 4294967295
+# CHECK-NEXT: CortexA55UnitFPALU{{.*}} = 4294967295
+# CHECK-NEXT: CortexA55UnitFPALU{{.*}} = 4294967295
+# CHECK-NEXT: CortexA55UnitFPDIV{{.*}} = 4294967295
+# CHECK-NEXT: CortexA55UnitFPMAC{{.*}} = 4294967295
+# CHECK-NEXT: CortexA55UnitFPMAC{{.*}} = 4294967295
+# CHECK-NEXT: CortexA55UnitLd{{.*}} = 4294967295
+# CHECK-NEXT: CortexA55UnitMAC{{.*}} = 4294967295
+# CHECK-NEXT: CortexA55UnitSt{{.*}} = 4294967295
 # CHECK-NEXT: ** ScheduleDAGMILive::schedule picking next node
 # CHECK-NEXT: *** Final schedule for %bb.0 ***
 # CHECK-NEXT: SU(0):   $x3 = ADDXrr $x0, $x0
@@ -45,7 +45,7 @@ body:             |
 # CHECK-NEXT: SU(2):   $x5 = ADDXrr $x2, $x2
 
 # NODUMP-LABEL:   Ready @1c
-# NODUMP-NEXT:   CortexA55UnitALU +1x1u
+# NODUMP-NEXT:   CortexA55UnitALU{{.*}} +1x1u
 # NODUMP-NEXT: BotQ.A @1c
 # NODUMP-NEXT:   Retired: 3
 # NODUMP-NEXT:   Executed: 1c

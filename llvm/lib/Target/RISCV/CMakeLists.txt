@@ -15,6 +15,7 @@ tablegen(LLVM RISCVGenRegisterBank.inc -gen-register-bank)
 tablegen(LLVM RISCVGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM RISCVGenSearchableTables.inc -gen-searchable-tables)
 tablegen(LLVM RISCVGenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM RISCV.txt -print-records)
 
 set(LLVM_TARGET_DEFINITIONS RISCVGISel.td)
 tablegen(LLVM RISCVGenGlobalISel.inc -gen-global-isel)
@@ -26,6 +27,9 @@ tablegen(LLVM RISCVGenPostLegalizeGICombiner.inc -gen-global-isel-combiner
               -combiners="RISCVPostLegalizerCombiner")
 
 add_public_tablegen_target(RISCVCommonTableGen)
+
+##### Build the MDL components for this processor (if selected)
+buildmdl(RISCV RISCV RISCV)
 
 add_llvm_target(RISCVCodeGen
   RISCVAsmPrinter.cpp

@@ -17,6 +17,7 @@
 #include "MCTargetDesc/AArch64AddressingModes.h"
 #include "MCTargetDesc/AArch64InstPrinter.h"
 #include "TargetInfo/AArch64TargetInfo.h"
+#include "llvm/Config/config.h"
 #include "llvm/DebugInfo/CodeView/CodeView.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -43,6 +44,14 @@ using namespace llvm;
 #define GET_REGINFO_MC_DESC
 #include "AArch64GenRegisterInfo.inc"
 
+// Include the generated MDL database.
+#if ENABLE_MDL_USE
+#include "AArch64GenMdlInfo.inc"
+#define AArch64CpuTable &AArch64::CpuTable
+#else
+#define AArch64CpuTable nullptr
+#endif
+
 static MCInstrInfo *createAArch64MCInstrInfo() {
   MCInstrInfo *X = new MCInstrInfo();
   InitAArch64MCInstrInfo(X);
@@ -60,7 +69,8 @@ createAArch64MCSubtargetInfo(const Triple &TT, StringRef CPU, StringRef FS) {
       CPU = "apple-a12";
   }
 
-  return createAArch64MCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS);
+  return createAArch64MCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS,
+                                          AArch64CpuTable);
 }
 
 void AArch64_MC::initLLVMToCVRegMapping(MCRegisterInfo *MRI) {

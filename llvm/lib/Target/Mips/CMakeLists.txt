@@ -18,8 +18,12 @@ tablegen(LLVM MipsGenRegisterBank.inc -gen-register-bank)
 tablegen(LLVM MipsGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM MipsGenSubtargetInfo.inc -gen-subtarget)
 tablegen(LLVM MipsGenExegesis.inc -gen-exegesis)
+tablegen(LLVM Mips.txt -print-records)
 
 add_public_tablegen_target(MipsCommonTableGen)
+
+##### Build the MDL components for this processor (if selected)
+buildmdl(Mips Mips Mips)
 
 add_llvm_target(MipsCodeGen
   Mips16FrameLowering.cpp

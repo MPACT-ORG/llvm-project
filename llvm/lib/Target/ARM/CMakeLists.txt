@@ -16,8 +16,12 @@ tablegen(LLVM ARMGenRegisterBank.inc -gen-register-bank)
 tablegen(LLVM ARMGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM ARMGenSubtargetInfo.inc -gen-subtarget)
 tablegen(LLVM ARMGenSystemRegister.inc -gen-searchable-tables)
+tablegen(LLVM ARM.txt -print-records)
 
 add_public_tablegen_target(ARMCommonTableGen)
+
+##### Build the MDL components for this processor (if selected)
+buildmdl(ARM ARM ARM)
 
 add_llvm_target(ARMCodeGen
   A15SDOptimizer.cpp

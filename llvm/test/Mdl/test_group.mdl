@@ -1,0 +1,205 @@
+//---------------------------------------------------------------------------
+// Test of groups, and implicitly defined groups
+//---------------------------------------------------------------------------
+// RUN: llvm-mdl --dump_instr %s --output_dir /tmp/ 2>&1 | FileCheck %s
+
+family test;
+
+phases test { F1, E[1..10] };
+
+cpu test {
+   func_unit x1 u1(a | b | c | d | e);  // Func unit instance argument
+   resource abcde  { a, b, c, d, e };
+   func_unit x1 u1a(abcde);             // Explicit struct - should be the same
+   resource abcd   { a, b, c, d };
+   func_unit x1 u1b(abcd);              // Explicit struct - should be the same
+   func_unit x1 u1c(e | a | b | d | c); // Shuffled!
+// func_unit x1 u1d(e | a | b | e | c); // Duplicate definition of e
+
+   func_unit x2 u2();
+   func_unit x3 u3(a, b, c, d, e);
+   func_unit x4 u4(a, b, c, d, e);
+// func_unit x4_err u4(a, b, c, d, e);      // error - c gets redefined
+   func_unit x5 u5(a, b, c, d, e);
+   func_unit x6 u6(a, b, c, d, e);
+};
+
+func_unit x1(resource group) {             // Pass a group through to subunit.
+  subunit test(group);
+};
+
+func_unit x2() {
+  subunit test(a | b | c | d | e);        // Define one in the subunit instance.
+}
+
+func_unit x3(resource a, b, c, d, e) {
+  subunit test(a | b | c | d | e);        // Create group from arguments
+}
+
+func_unit x4(resource f, g, h, i, j) {
+  subunit test(f & g & h & i & j);        // Create group from arguments
+}
+
+func_unit x4_err(resource f, g, h, i, j) {
+  subunit test(f | g | h | i | j | c);    // Error - c gets redefined
+}
+
+func_unit x5(resource f, g, h, i, j) {
+  resource struct { f, g, h, i, j };
+  subunit test(struct);
+}
+
+func_unit x6(resource f, g, h, i, j) {
+  resource struct { f & g & h & i & j };
+  subunit test(struct);
+}
+
+subunit test(resource group) { latency test(group); }
+
+latency test(resource group) {
+   use(E1, $dst, group:1);
+   use(E2, $src1, group.c);
+   use(E3, group:*);
+   // use(E3, $src2, group);
+}
+
+register r[0..15];
+register_class GPR { r[0..15] };
+instruction abc(GPR dst, GPR src1, GPR src2) { subunit(test); }
+
+
+// CHECK: Instruction: abc(GPR dst, GPR src1, GPR src2)
+// CHECK: 		flat(GPR dst, GPR src1, GPR src2)
+// CHECK: 		{ subunit(test); }
+// CHECK:     Subunit: test.u1
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E1, GPR:$dst[0], <<group_0>{10,11,12,13,14}:1-->0>)
+// CHECK:       ===>  use.p(E2, GPR:$src1[1], <c{12}-->1>)
+// CHECK:       Resources:
+// CHECK:             use.p(E2,c{12}-->1)
+// CHECK:             use.p(E3,<group_0>{10,11,12,13,14})
+// CHECK:             use.p(F1,u1{1})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E1,<group_0>{10,11,12,13,14}:1-->0)  subpool id: 1 size requests: 1
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: abc(GPR dst, GPR src1, GPR src2)
+// CHECK: 		flat(GPR dst, GPR src1, GPR src2)
+// CHECK: 		{ subunit(test); }
+// CHECK:     Subunit: test.u1a
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E1, GPR:$dst[0], <abcde{10,11,12,13,14}:1-->0>)
+// CHECK:       ===>  use.p(E2, GPR:$src1[1], <c{12}-->1>)
+// CHECK:       Resources:
+// CHECK:             use.p(E2,c{12}-->1)
+// CHECK:             use.p(E3,abcde{10,11,12,13,14})
+// CHECK:             use.p(F1,u1a{2})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E1,abcde{10,11,12,13,14}:1-->0)  subpool id: 2 size requests: 1
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: abc(GPR dst, GPR src1, GPR src2)
+// CHECK: 		flat(GPR dst, GPR src1, GPR src2)
+// CHECK: 		{ subunit(test); }
+// CHECK:     Subunit: test.u1b
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E1, GPR:$dst[0], <abcd{10,11,12,13}:1-->0>)
+// CHECK:       ===>  use.p(E2, GPR:$src1[1], <c{12}-->1>)
+// CHECK:       Resources:
+// CHECK:             use.p(E2,c{12}-->1)
+// CHECK:             use.p(E3,abcd{10,11,12,13})
+// CHECK:             use.p(F1,u1b{3})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E1,abcd{10,11,12,13}:1-->0)  subpool id: 0 size requests: 1
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: abc(GPR dst, GPR src1, GPR src2)
+// CHECK: 		flat(GPR dst, GPR src1, GPR src2)
+// CHECK: 		{ subunit(test); }
+// CHECK:     Subunit: test.u1c
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E1, GPR:$dst[0], <<group_1>{14,10,11,13,12}:1-->0>)
+// CHECK:       ===>  use.p(E2, GPR:$src1[1], <c{12}-->1>)
+// CHECK:       Resources:
+// CHECK:             use.p(E2,c{12}-->1)
+// CHECK:             use.p(E3,<group_1>{14,10,11,13,12})
+// CHECK:             use.p(F1,u1c{4})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E1,<group_1>{14,10,11,13,12}:1-->0)  subpool id: 3 size requests: 1
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: abc(GPR dst, GPR src1, GPR src2)
+// CHECK: 		flat(GPR dst, GPR src1, GPR src2)
+// CHECK: 		{ subunit(test); }
+// CHECK:     Subunit: test.u2
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E1, GPR:$dst[0], <<group_2>{15,16,17,18,19}:1-->0>)
+// CHECK:       ===>  use.p(E2, GPR:$src1[1], <c{17}-->1>)
+// CHECK:       Resources:
+// CHECK:             use.p(E2,c{17}-->1)
+// CHECK:             use.p(E3,<group_2>{15,16,17,18,19})
+// CHECK:             use.p(F1,u2{5})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E1,<group_2>{15,16,17,18,19}:1-->0)  subpool id: 4 size requests: 1
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: abc(GPR dst, GPR src1, GPR src2)
+// CHECK: 		flat(GPR dst, GPR src1, GPR src2)
+// CHECK: 		{ subunit(test); }
+// CHECK:     Subunit: test.u3
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E1, GPR:$dst[0], <<group_3>{10,11,12,13,14}:1-->0>)
+// CHECK:       ===>  use.p(E2, GPR:$src1[1], <c{12}-->1>)
+// CHECK:       Resources:
+// CHECK:             use.p(E2,c{12}-->1)
+// CHECK:             use.p(E3,<group_3>{10,11,12,13,14})
+// CHECK:             use.p(F1,u3{6})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E1,<group_3>{10,11,12,13,14}:1-->0)  subpool id: 5 size requests: 1
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: abc(GPR dst, GPR src1, GPR src2)
+// CHECK: 		flat(GPR dst, GPR src1, GPR src2)
+// CHECK: 		{ subunit(test); }
+// CHECK:     Subunit: test.u4
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E1, GPR:$dst[0], <<group_4>{10&11&12&13&14}:1-->0>)
+// CHECK:       ===>  use.p(E2, GPR:$src1[1], <c{12}-->1>)
+// CHECK:       Resources:
+// CHECK:             use.p(E2,c{12}-->1)
+// CHECK:             use.p(E3,<group_4>{10&11&12&13&14})
+// CHECK:             use.p(F1,u4{7})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E1,<group_4>{10&11&12&13&14}:1-->0)  subpool id: 6 size requests: 1
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: abc(GPR dst, GPR src1, GPR src2)
+// CHECK: 		flat(GPR dst, GPR src1, GPR src2)
+// CHECK: 		{ subunit(test); }
+// CHECK:     Subunit: test.u5
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E1, GPR:$dst[0], <struct{10,11,12,13,14}:1-->0>)
+// CHECK:       ===>  use.p(E2, GPR:$src1[1], <c{12}-->1>)
+// CHECK:       Resources:
+// CHECK:             use.p(E2,c{12}-->1)
+// CHECK:             use.p(E3,struct{10,11,12,13,14})
+// CHECK:             use.p(F1,u5{8})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E1,struct{10,11,12,13,14}:1-->0)  subpool id: 7 size requests: 1
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: abc(GPR dst, GPR src1, GPR src2)
+// CHECK: 		flat(GPR dst, GPR src1, GPR src2)
+// CHECK: 		{ subunit(test); }
+// CHECK:     Subunit: test.u6
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E1, GPR:$dst[0], <struct{10&11&12&13&14}:1-->0>)
+// CHECK:       ===>  use.p(E2, GPR:$src1[1], <c{12}-->1>)
+// CHECK:       Resources:
+// CHECK:             use.p(E2,c{12}-->1)
+// CHECK:             use.p(E3,struct{10&11&12&13&14})
+// CHECK:             use.p(F1,u6{9})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E1,struct{10&11&12&13&14}:1-->0)  subpool id: 8 size requests: 1
+// CHECK:       Architectural Register Constraints:
+

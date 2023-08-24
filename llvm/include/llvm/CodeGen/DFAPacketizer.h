@@ -25,9 +25,11 @@
 #ifndef LLVM_CODEGEN_DFAPACKETIZER_H
 #define LLVM_CODEGEN_DFAPACKETIZER_H
 
+#include "llvm/CodeGen/MDLHazardRecognizer.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/ScheduleDAGInstrs.h"
 #include "llvm/CodeGen/ScheduleDAGMutation.h"
+#include "llvm/CodeGen/ScheduleHazardRecognizer.h"
 #include "llvm/Support/Automaton.h"
 #include <cstdint>
 #include <map>
@@ -148,6 +150,9 @@ protected:
   // Map: MI -> SU.
   std::map<MachineInstr*, SUnit*> MIToSUnit;
 
+  // MDL-based packetizer (embedded in the hazard recognizer)
+  MDLHazardRecognizer *HazardRec;
+
 public:
   // The AAResults parameter can be nullptr.
   VLIWPacketizerList(MachineFunction &MF, MachineLoopInfo &MLI,
@@ -164,10 +169,28 @@ public:
   // Return the ResourceTracker.
   DFAPacketizer *getResourceTracker() {return ResourceTracker;}
 
+  bool canReserveResources(MachineInstr &MI) {
+    if (HazardRec)
+      return HazardRec->canReserveResources(MI);
+    return ResourceTracker->canReserveResources(MI);
+  }
+  void reserveResources(MachineInstr &MI) {
+    if (HazardRec)
+      HazardRec->reserveResources(MI);
+    else
+      ResourceTracker->reserveResources(MI);
+  }
+  void clearResources() {
+    if (HazardRec)
+      HazardRec->clearResources();
+    else
+      ResourceTracker->clearResources();
+  }
+
   // addToPacket - Add MI to the current packet.
   virtual MachineBasicBlock::iterator addToPacket(MachineInstr &MI) {
     CurrentPacketMIs.push_back(&MI);
-    ResourceTracker->reserveResources(MI);
+    reserveResources(MI);
     return MI;
   }
 

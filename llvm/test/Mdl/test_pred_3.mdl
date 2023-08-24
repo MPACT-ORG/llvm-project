@@ -1,0 +1,78 @@
+//-----------------------------------------------------------------------------
+// Check for recursively defined predicate definitions.
+// This check happens after parsing, but before instantiation.
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test_predicates;
+
+protected phases test { E[1..40] }
+
+cpu cpu { func_unit unit unit(); }
+
+func_unit unit() { subunit sub(); }
+
+subunit sub() { latency lat(); }
+
+latency lat() { }
+
+register R[0..15];
+register_class GPR { r[0..15] }
+operand IMM() {}
+
+instruction add(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction sub(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction xor(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+
+// Fodder for recursive definitions.
+predicate p1 : CheckNumOperands<3>;
+predicate p2 : CheckIsImmOperand<3>;
+predicate p3 : CheckImmOperand<3>;
+predicate p4 : CheckImmOperand<3, 4>;
+predicate p5 : CheckZeroOperand<4>;
+predicate p6 : CheckInvalidRegOperand<2>;
+predicate p7 : CheckIsRegOperand<1>;
+predicate p8 : CheckSameRegOperand<1, 2>;
+predicate p9 : CheckRegOperand<1, R5>;
+predicate p10 : TruePred;
+predicate p11 : FalsePred;
+predicate p12 : CheckFunctionPredicate<"MCFunc", "MIFunc">;
+predicate p13 : CheckFunctionPredicateWithTII<"MCFunc", "MIFunc", "TII">;
+predicate p14: CheckOpcode<add, sub, xor>;
+
+// These are all the predicate types that have predicate operands.
+predicate p15a : CheckAny<p1, p2, p15, p5>;          // Directly recursive
+predicate p15b : CheckAll<p2, p3, p4, p5, p6, p15b>; // Directly recusive
+predicate p15c : CheckAll<p7, p8, p9, p10, p15b>;    // Not recursive
+predicate p15d : CheckAll<p11, p12, p13, p14, p15c>; // Not recursive
+
+predicate p18a : CheckNot<p18a>;                     // Directly recursive
+predicate p18b : CheckNot<p18c>;                     // Indirectly recursive
+predicate p18c : CheckNot<p18b>;                     // Indirectly recursive
+predicate p18d : CheckNot<p18b>;                     // Not recursive
+
+predicate p19a: ReturnStatement<p1>;
+predicate p19b: ReturnStatement<p19b>;               // Recursive
+
+predicate p20a: OpcodeSwitchCase<[add, xor], p20a>;  // Directly recursive
+predicate p20b: OpcodeSwitchCase<[add, sub], p20c>;  // Indirectly recursive
+predicate p20c: OpcodeSwitchCase<[sub, xor], p20b>;  // Indirectly recursive
+predicate p20d: OpcodeSwitchCase<[sub, xor], p20b>;  // Indirectly recursive
+
+predicate p23: OpcodeSwitchStatement<                // Recursive
+                    OpcodeSwitchCase<[add, xor], ReturnStatement<p23>>,
+                    OpcodeSwitchCase<[sub], ReturnStatement<p2>>,
+                    ReturnStatement<p3>>;
+predicate p24: OpcodeSwitchStatement<p20d, p19a>;
+
+
+// CHECK: test_pred_3.mdl:45:18 Recursively defined predicate: p15b
+// CHECK: test_pred_3.mdl:49:18 Recursively defined predicate: p18a
+// CHECK: test_pred_3.mdl:50:18 Recursively defined predicate: p18b
+// CHECK: test_pred_3.mdl:51:18 Recursively defined predicate: p18c
+// CHECK: test_pred_3.mdl:55:17 Recursively defined predicate: p19b
+// CHECK: test_pred_3.mdl:57:17 Recursively defined predicate: p20a
+// CHECK: test_pred_3.mdl:58:17 Recursively defined predicate: p20b
+// CHECK: test_pred_3.mdl:59:17 Recursively defined predicate: p20c
+// CHECK: test_pred_3.mdl:62:16 Recursively defined predicate: p23
+// CHECK: Errors found, aborting

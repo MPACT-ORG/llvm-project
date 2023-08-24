@@ -15,6 +15,7 @@
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MDLInstrInfo.h"
 #include <optional>
 #include <type_traits>
 
@@ -69,6 +70,10 @@ int MCSchedModel::computeInstrLatency(const MCSubtargetInfo &STI,
 int MCSchedModel::computeInstrLatency(const MCSubtargetInfo &STI,
                                       const MCInstrInfo &MCII,
                                       const MCInst &Inst) const {
+  // If we have MDL information, use it to compute the latency.
+  if (STI.getCpuInfo() != nullptr) {
+    return mdl::calculateInstructionLatency(&Inst, &STI, &MCII);
+  }
   unsigned SchedClass = MCII.get(Inst.getOpcode()).getSchedClass();
   const MCSchedClassDesc *SCDesc = getSchedClassDesc(SchedClass);
   if (!SCDesc->isValid())

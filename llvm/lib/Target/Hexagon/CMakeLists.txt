@@ -12,8 +12,12 @@ tablegen(LLVM HexagonGenInstrInfo.inc -gen-instr-info)
 tablegen(LLVM HexagonGenMCCodeEmitter.inc -gen-emitter)
 tablegen(LLVM HexagonGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM HexagonGenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM Hexagon.txt -print-records)
 
 add_public_tablegen_target(HexagonCommonTableGen)
+
+##### Build the MDL components for this processor (if selected)
+buildmdl(Hexagon Hexagon Hexagon)
 
 add_llvm_target(HexagonCodeGen
   BitTracker.cpp

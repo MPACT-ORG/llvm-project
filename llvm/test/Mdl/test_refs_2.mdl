@@ -1,0 +1,45 @@
+//-----------------------------------------------------------------------------
+// Check template instantiations.
+// - Check for invalid resource reference attributes
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test_predicates;
+
+phases x { E1, E2, E3 };
+
+cpu cpu {
+   resource group { a, b, c };
+   resource scalar, array[10];
+   func_unit unit good(GPR, group, array, group.b);
+}
+
+func_unit unit(class regs; resource group, array, scalar) {
+   port port<regs>(group);
+   subunit sub(port, group, array, scalar);
+   subunit sub(port, group, array, group.a);
+}
+subunit sub(port port; resource group, array, scalar) {
+   latency lat(port, array, group, scalar);
+}
+latency lat(port port; resource array, group, scalar) {
+  use(E2, IMM2:$op3, array:size);  // Negative allocation size
+                                   // Allocation size exceeds pool size
+}
+
+register R[0..15];
+register_class GPR { r[0..15] }
+operand IMM() {}
+operand IMM2 : IMM {
+  attribute size = 1 if address;
+  attribute size = -1 if lit;
+  attribute size = 42;
+}
+
+instruction add(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction sub(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction xor(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+
+// CHECK: test_refs_2.mdl:26:3 Negative allocation size
+// CHECK: test_refs_2.mdl:26:3 Allocation size exceeds resource pool size: array[0..9]:size-->2
+// CHECK: Errors found, aborting

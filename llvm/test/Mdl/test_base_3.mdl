@@ -1,0 +1,32 @@
+//---------------------------------------------------------------------------
+// Check handling of instruction expressions as subunit bases.
+//---------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test_subunit_expression_base;
+
+phases x { E1 }
+
+cpu cpu {};
+
+func_unit f() {}
+
+subunit abc:"abc"() {}
+subunit abcx:"abcx"() {}
+subunit abc12:"abc[12]"() {}
+subunit xy:"xy"() {}
+
+subunit error: "Error" () {}
+
+latency x() {}
+
+instruction abc1() {}       // abc, abc12
+instruction abc2() {}       // abc, abc12
+instruction abcx() {}       // abc, abcx
+instruction xyz1() {}       // xy
+instruction xyz2() {}       // xy
+instruction xyzx() {}       // xy
+
+
+// CHECK: test_base_3.mdl:19:1 Unmatched base instruction expression "Error"
+// CHECK: Errors found, aborting

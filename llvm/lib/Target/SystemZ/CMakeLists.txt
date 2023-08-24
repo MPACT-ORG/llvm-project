@@ -11,8 +11,12 @@ tablegen(LLVM SystemZGenInstrInfo.inc -gen-instr-info)
 tablegen(LLVM SystemZGenMCCodeEmitter.inc -gen-emitter)
 tablegen(LLVM SystemZGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM SystemZGenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM SystemZ.txt -print-records)
 
 add_public_tablegen_target(SystemZCommonTableGen)
+
+##### Build the MDL components for this processor (if selected)
+buildmdl(SystemZ SystemZ SystemZ)
 
 add_llvm_target(SystemZCodeGen
   SystemZAsmPrinter.cpp

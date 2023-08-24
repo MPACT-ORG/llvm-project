@@ -39,6 +39,7 @@ InstrBuilder::InstrBuilder(const llvm::MCSubtargetInfo &sti,
   computeProcResourceMasks(STI.getSchedModel(), ProcResourceMasks);
 }
 
+// TODO-MDL - It appears that this isn't necessary for MDL-based models
 static void initializeUsedResources(InstrDesc &ID,
                                     const MCSchedClassDesc &SCDesc,
                                     const MCSubtargetInfo &STI,
