@@ -26,8 +26,12 @@ tablegen(LLVM AArch64GenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM AArch64GenSubtargetInfo.inc -gen-subtarget)
 tablegen(LLVM AArch64GenSystemOperands.inc -gen-searchable-tables)
 tablegen(LLVM AArch64GenExegesis.inc -gen-exegesis)
+tablegen(LLVM AArch64.txt -print-records)
 
 add_public_tablegen_target(AArch64CommonTableGen)
+
+##### Build the MDL components for this processor (if selected)
+buildmdl(AArch64 AArch64 AArch64)
 
 add_llvm_target(AArch64CodeGen
   GISel/AArch64CallLowering.cpp

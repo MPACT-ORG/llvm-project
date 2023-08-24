@@ -22,6 +22,9 @@
 #include "llvm/CodeGen/GlobalISel/InstructionSelector.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineScheduler.h"
+#include "llvm/Config/config.h"
+#include "llvm/IR/Attributes.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalAlias.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/GlobalVariable.h"
@@ -39,6 +42,26 @@ using namespace llvm;
 #define GET_SUBTARGETINFO_CTOR
 #include "PPCGenSubtargetInfo.inc"
 
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "PPCGenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "PPCGenMdlTarget.inc"
+#define PPCCpuTable &PPC::CpuTable
+#else
+#define PPCCpuTable nullptr
+#endif
+
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "PPCGenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "PPCGenMdlTarget.inc"
+#define PPCCpuTable &PPC::CpuTable
+#else
+#define PPCCpuTable nullptr
+#endif
+
 static cl::opt<bool>
     EnableMachinePipeliner("ppc-enable-pipeliner",
                            cl::desc("Enable Machine Pipeliner for PPC"),
@@ -55,7 +78,7 @@ PPCSubtarget &PPCSubtarget::initializeSubtargetDependencies(StringRef CPU,
 PPCSubtarget::PPCSubtarget(const Triple &TT, const std::string &CPU,
                            const std::string &TuneCPU, const std::string &FS,
                            const PPCTargetMachine &TM)
-    : PPCGenSubtargetInfo(TT, CPU, TuneCPU, FS), TargetTriple(TT),
+    : PPCGenSubtargetInfo(TT, CPU, TuneCPU, FS, PPCCpuTable), TargetTriple(TT),
       IsPPC64(TargetTriple.getArch() == Triple::ppc64 ||
               TargetTriple.getArch() == Triple::ppc64le),
       TM(TM), FrameLowering(initializeSubtargetDependencies(CPU, TuneCPU, FS)),
@@ -68,6 +91,11 @@ PPCSubtarget::PPCSubtarget(const Triple &TT, const std::string &CPU,
   RegBankInfo.reset(RBI);
 
   InstSelector.reset(createPPCInstructionSelector(TM, *this, *RBI));
+
+  // Register the Target-library-specific predicate table in the cpu table.
+#if ENABLE_MDL_USE
+  PPC::CpuTable.SetInstrPredicates(&PPC::InstrPredicates);
+#endif
 }
 
 PPCSubtarget::~PPCSubtarget() = default;

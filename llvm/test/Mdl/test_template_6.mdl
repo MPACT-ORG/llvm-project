@@ -1,0 +1,50 @@
+//-----------------------------------------------------------------------------
+// Check template instantiations.
+// - Check template base arguments
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test_predicates;
+
+phases x { E1, E2, E3 };
+
+cpu cpu {
+   resource group { a, b, c };
+   resource scalar, array[10];
+   func_unit unit slot(GPR, group, array, scalar);
+}
+
+// Check that parameters between parent and base have compatible types
+func_unit base(resource item) {}
+func_unit unit : base(class regs; resource group, array, scalar) {
+   port port<regs>(group);
+   subunit sub(port, group, array, scalar);
+   subunit sub(port, group, array, group.a);
+}
+
+func_unit parent : unit(class regs) {}           // Incompatible parameters
+
+// Subunit bases don't have to have compatible parameters to parents.
+subunit base(resource xyz) {}
+subunit sub : base(port port; resource group, array, scalar) {
+   latency lat(port, array, group, scalar);
+}
+
+latency base(resource port) {}
+latency lat : base(port port; resource array, group, scalar) { }
+latency parent : lat(port regs) {}
+
+register R[0..15];
+register_class GPR { r[0..15] }
+operand IMM() {}
+
+instruction add(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction sub(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction xor(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+
+// CHECK: test_template_6.mdl:19:1 Unmatched parameter types for template and base
+// CHECK: test_template_6.mdl:19:1 Unmatched parameter names for template and base
+// CHECK: test_template_6.mdl:25:1 Incompatible parameters for template and base
+// CHECK: test_template_6.mdl:34:1 Unmatched parameter types for template and base
+// CHECK: test_template_6.mdl:35:1 Incompatible parameters for template and base
+// CHECK: Errors found, aborting

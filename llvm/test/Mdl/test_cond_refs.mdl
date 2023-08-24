@@ -1,0 +1,131 @@
+//--------------------------------------------------------------------------
+// Test conditional resource references (pooled and unpooled) and
+// conditional register constraints.
+//--------------------------------------------------------------------------
+// RUN: llvm-mdl --dump_instr %s --output_dir /tmp/ 2>&1 | FileCheck %s
+
+family test;
+
+phases x { FETCH, E[1..50] };
+
+cpu cpu {
+   resource a, b, c[4];
+   func_unit fu fu_a(a, b, c);
+}
+
+func_unit fu(resource x, y, z) {
+  port p<LOW>;
+  subunit sub(x, z, p);
+  subunit sub(y, __, __);
+}
+
+subunit sub(resource s, t; port p) { latency lat1(s, t, p); }
+
+latency lat1(resource l, m; port p) {
+  if IsR0 { def(E17, $dst, l, m:2); }
+  else if IsR1 { def(E29, $dst, l, p); }
+  def(E42, $src, l, p);
+}
+
+// Different operands in different clauses - can't simplify
+latency lat2(resource l, m; port p) {
+  if IsR0 { def(E17, $dst, l, m:2); }
+  else if IsR1 { def(E29, $dst, l, p); fus(fu, 1); }
+  def(E42, $src, l);
+}
+
+// Some clauses have no matching operand rules.
+latency lat3(resource l, m; port p) {
+  if IsR0 { def(E17, $xxx, l, m:2); }
+  else if IsR1 { def(E29, $dst, l); }
+  def(E42, $src, l);
+}
+
+cpu cpu1 { func_unit FU fu1(); }
+cpu cpu2 { func_unit FU fu1(); func_unit FU fu2(); }
+
+subunit sub2() {{
+  if IsR0 { def(E17, $dst); }
+  else if IsR1 { def(E29, $dst); fus(FU, 14); }
+  else { fus(FU, 12); }
+  def(E42, $src);
+}}
+
+
+register r[0..15];
+register_class REG { r[0..15] }
+register_class LOW { r[0..7] }
+
+instruction abc(REG dst, REG src) { subunit(sub, sub2); }
+
+predicate IsR0 : CheckRegOperand<0, r0>;
+predicate IsR1 : CheckRegOperand<0, r1>;
+
+
+// CHECK: Instruction: abc(REG dst, REG src)
+// CHECK: 		flat(REG dst, REG src)
+// CHECK: 		{ subunit(sub,sub2); }
+// CHECK:     Subunit: cpu.fu_a
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E42, REG:$src[1], <a{2}-->1>, port p<LOW>)
+// CHECK:       ===>   if IsR0
+// CHECK:            def.p(E17, REG:$dst[0], <a{2}, c{4}[0..3]:2>)
+// CHECK:  else  if IsR1
+// CHECK:            def.p(E29, REG:$dst[0], <a{2}>, port p<LOW>)
+
+// CHECK:       FU references:
+// CHECK:       Resources:
+// CHECK:             use.p(E42,a{2}-->1)
+// CHECK:             use.p(FETCH,fu_a{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 1: LOW
+
+// CHECK: Instruction: abc(REG dst, REG src)
+// CHECK: 		flat(REG dst, REG src)
+// CHECK: 		{ subunit(sub,sub2); }
+// CHECK:     Subunit: cpu.fu_a
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E42, REG:$src[1], <b{3}-->1>)
+// CHECK:       ===>   if IsR0
+// CHECK:            def.p(E17, REG:$dst[0], <b{3}, __>)
+// CHECK:  else  if IsR1
+// CHECK:            def.p(E29, REG:$dst[0], <b{3}>)
+
+// CHECK:       FU references:
+// CHECK:       Resources:
+// CHECK:             use.p(E42,b{3}-->1)
+// CHECK:             use.p(FETCH,fu_a{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: abc(REG dst, REG src)
+// CHECK: 		flat(REG dst, REG src)
+// CHECK: 		{ subunit(sub,sub2); }
+// CHECK:     Subunit: cpu1.:cpu1
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E42, REG:$src[1])
+// CHECK:       ===>   if IsR0
+// CHECK:            def.p(E17, REG:$dst[0])
+// CHECK:  else  if IsR1
+// CHECK:            def.p(E29, REG:$dst[0])
+// CHECK:            fus(FU<E1:1> Mops=14 )
+// CHECK:  else  
+// CHECK:            fus(FU<E1:1> Mops=12 )
+
+// CHECK:       FU references:
+
+// CHECK: Instruction: abc(REG dst, REG src)
+// CHECK: 		flat(REG dst, REG src)
+// CHECK: 		{ subunit(sub,sub2); }
+// CHECK:     Subunit: cpu2.:cpu2
+// CHECK:       Operand references:
+// CHECK:       ===>  def.p(E42, REG:$src[1])
+// CHECK:       ===>   if IsR0
+// CHECK:            def.p(E17, REG:$dst[0])
+// CHECK:  else  if IsR1
+// CHECK:            def.p(E29, REG:$dst[0])
+// CHECK:            fus(FU<E1:1> Mops=14 )
+// CHECK:  else  
+// CHECK:            fus(FU<E1:1> Mops=12 )
+

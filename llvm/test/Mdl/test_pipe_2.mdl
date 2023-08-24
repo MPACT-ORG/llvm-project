@@ -1,0 +1,49 @@
+//-------------------------------------------------------------------
+// Test CPU-specific pipeline definitions.
+// This tests for some error conditions.
+//-------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+register r1;
+register_class REGS { r1 };
+
+phases test { E1, E2=8 };
+
+cpu test1 {
+  resource(E1) cpu;          // E2, E3 not defined here
+  func_unit alu my_alu(cpu);
+}
+cpu test2 {
+  phases test { E1=3, E2, E3 };
+  resource(E1) cpu;
+  func_unit alu my_alu(cpu);
+}
+cpu test3 {
+  phases test { E1=5 };      // E2, E3 not defined here
+  resource(E1) cpu;
+  func_unit alu my_alu(cpu);
+}
+
+func_unit alu(resource cpu) {
+  resource(E3) fu;
+  subunit xyz(cpu, fu);
+}
+
+subunit xyz(resource cpu, fu) { latency xyz(cpu, fu); }
+
+latency xyz(resource cpu, fu) {
+  use(E1, $s1, cpu);
+  use(E3, $s2, fu);     // E3 is undefined at global level
+  def(E2, $d);
+}
+
+instruction c(REGS d, REGS s1, REGS s2) {
+  subunit (xyz);
+}
+
+// CHECK: test_pipe_2.mdl:38:7 Pipeline phase "E3" not found for cpu: test1
+// CHECK: test_pipe_2.mdl:30:12 Pipeline phase "E3" not found for cpu: test1
+// CHECK: test_pipe_2.mdl:38:7 Pipeline phase "E3" not found for cpu: test3
+// CHECK: test_pipe_2.mdl:30:12 Pipeline phase "E3" not found for cpu: test3

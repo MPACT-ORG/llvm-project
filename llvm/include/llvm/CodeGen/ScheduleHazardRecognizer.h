@@ -14,6 +14,8 @@
 #ifndef LLVM_CODEGEN_SCHEDULEHAZARDRECOGNIZER_H
 #define LLVM_CODEGEN_SCHEDULEHAZARDRECOGNIZER_H
 
+#include "llvm/MC/MDLInfo.h"
+
 namespace llvm {
 
 class MachineInstr;
@@ -49,6 +51,9 @@ public:
   ///
   /// FIXME: remove this once MachineScheduler is the only client.
   virtual bool atIssueLimit() const { return false; }
+
+  virtual unsigned IssueSize() const { return 0; }
+  virtual mdl::SlotSet *getPacket() { return nullptr; }
 
   /// getHazardType - Return the hazard type of emitting this node.  There are
   /// three possible results.  Either:
@@ -122,6 +127,14 @@ public:
     for (unsigned i = 0; i < Quantity; ++i)
       EmitNoop();
   }
+
+  /// These methods replicate what DFAPacketizer methods do.
+  /// canReserveResources - Check that an instruction can be issued.
+  virtual bool canReserveResources(MachineInstr &MI) { return true; }
+  /// reserveResources - Check that an instruction can be issued.
+  virtual void reserveResources(MachineInstr &MI) {}
+  /// clearResources - Clear all resource tracking.
+  virtual void clearResources() {}
 };
 
 } // end namespace llvm

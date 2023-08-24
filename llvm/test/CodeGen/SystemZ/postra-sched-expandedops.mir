@@ -6,15 +6,15 @@
 # instruction with 6 decoder slots.
 
 # CHECK:      ++ | Current cycle index: 3
-# CHECK-NEXT: ++ | Resource counters: Z13_FXaUnit:2
+# CHECK-NEXT: ++ | Resource counters: Z13_FXaUnit{{.*}}:2
 # CHECK-NEXT: ** ScheduleDAGMI::schedule picking next node
-# CHECK-NEXT: ** Available: {SU(3):DL/FXa(4cyc)/LSU/6uops/GroupsAlone,  SU(6):LARL/FXa}
-# CHECK-NEXT: ** Best so far: SU(3):DL/FXa(4cyc)/LSU/6uops/GroupsAlone  Grouping cost:-1 Height:43
-# CHECK-NEXT: ** Tried      : SU(6):LARL/FXa Height:14
+# CHECK-NEXT: ** Available: {SU(3):DL/FXa{{.*}}(4cyc)/LSU{{.*}}/6uops/GroupsAlone,  SU(6):LARL/{{.*}}FXa}
+# CHECK-NEXT: ** Best so far: SU(3):DL/FXa{{.*}}(4cyc)/LSU{{.*}}/6uops/GroupsAlone  Grouping cost:-1 Height:43
+# CHECK-NEXT: ** Tried      : SU(6):LARL/FXa{{.*}} Height:14
 # CHECK-NEXT: ** Scheduling SU(3)   Grouping cost:-1
-# CHECK-NEXT: ++ HazardRecognizer emitting SU(3):DL/FXa(4cyc)/LSU/6uops/GroupsAlone
+# CHECK-NEXT: ++ HazardRecognizer emitting SU(3):DL/FXa{{.*}}(4cyc)/LSU{{.*}}/6uops/GroupsAlone
 # CHECK-NEXT: ++ Decode group before emission:  <empty>
-# CHECK-NEXT: ++ Completed decode group: { SU(3):DL/FXa(4cyc)/LSU/6uops/GroupsAlone } (6 decoder slots)
+# CHECK-NEXT: ++ Completed decode group: { SU(3):DL/FXa{{.*}}(4cyc)/LSU{{.*}}/6uops/GroupsAlone } (6 decoder slots)
 # CHECK-NEXT: ++ | Current decoder group:  <empty>
 # CHECK-NEXT: ++ | Current cycle index: 3
 

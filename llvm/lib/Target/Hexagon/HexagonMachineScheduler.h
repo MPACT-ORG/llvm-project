@@ -32,7 +32,8 @@ class HexagonConvergingVLIWScheduler : public ConvergingVLIWScheduler {
 protected:
   VLIWResourceModel *
   createVLIWResourceModel(const TargetSubtargetInfo &STI,
-                          const TargetSchedModel *SchedModel) const override;
+                          const TargetSchedModel *SchedModel,
+                          ScheduleHazardRecognizer *HazardRec) const override;
   int SchedulingCost(ReadyQueue &Q, SUnit *SU, SchedCandidate &Candidate,
                      RegPressureDelta &Delta, bool verbose) override;
 };

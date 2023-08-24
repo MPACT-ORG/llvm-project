@@ -1,0 +1,10 @@
+//-----------------------------------------------------------------------------
+// Check incompatible family name declarations.
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+family test_duplicate;     // incompatible family name.
+
+// CHECK: test_family.mdl:7:8 Incompatible family name specification
+// CHECK: Errors found, aborting

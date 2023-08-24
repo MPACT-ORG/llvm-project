@@ -12,6 +12,7 @@
 
 #include "SparcSubtarget.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Config/config.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -22,6 +23,16 @@ using namespace llvm;
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "SparcGenSubtargetInfo.inc"
+
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "SparcGenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "SparcGenMdlTarget.inc"
+#define SparcCpuTable &SP::CpuTable
+#else
+#define SparcCpuTable nullptr
+#endif
 
 void SparcSubtarget::anchor() { }
 

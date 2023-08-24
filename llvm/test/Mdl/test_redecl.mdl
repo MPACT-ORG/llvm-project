@@ -1,0 +1,226 @@
+//----------------------------------------------------------------------------
+// Test redeclarations - some are legal, some are not.
+//----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+protected phases pipe1 { T1, T2, T3, T1 };   // Redef in a phases spec.
+protected phases pipe1 { X1 };               // Redefinition of pipe class.
+protected phases pipe2 { T5, T6, T1 };       // Redef between phases specs.
+protected phases pipe2 { T7, T8, T9 };       // Redef of phases names.
+protected phases pipe3 { T0, T0, T0, T0 };   // 3 redefs, not 6!
+
+register R[0..15];
+register R5;                                 // Redef of R5.
+register pipe1, T1;                          // Not redefs.
+
+register_class pipe1 { R0, R1, R2 };         // Not a redef of pipe1.
+register_class R5 { R9, R6, R7 };            // Redef of R5 as class name.
+
+register_class class1 { R[0..5] };
+register_class class1 { R[5..9] };           // Redef of class1.
+register_class class2 { R0, R0, R0, R0 };    // This is ok.
+register_class pipe1 { R10, R11 };           // Redef of register pipe1.
+register_class pipe2 { R11, R12 };           // Not a redef of phase pipe2.
+register_class T1 { R1, R2 };                // Redef of register T1.
+register_class T2 { R5, R9 };                // Not a redef of phase T2.
+
+resource res0;
+resource res1, res1;                         // Redef of a resource.
+resource str1 { mema, memb, mema };          // Redef of a member.
+resource str2 { res1, res2 };                // Not a redef.
+resource str3 { R4, R6 };                    // Not a redef of registers.
+resource R8;                                 // Redef of a register.
+
+// Since operand and instruction names are scraped from LLVM, we want these
+// names to be in separate namespaces from other things, but they do conflict
+// with registers and register classes.
+operand op1()   { type(int32); }
+operand op1()   { type(int32); }             // Redef of operand op1.
+operand pipe1() { type(int32); }             // Not a redef of phase pipe1.
+operand T1()    { type(int32); }             // Redef of register T1.
+operand R11()   { type(int32); }             // Redef of register R11.
+operand T2()    { type(int32); }             // Redef of register class T2.
+operand res0()  { type(int32); }             // Not a redef of a resource.
+
+// Check sub-operands - they should only conflict with themselves.
+operand op2(class1 a, class1 a) { type(int32); }   // Redef of suboperand a.
+operand op3(class1 R1, class1 T1) { type(int32); }        // No redefs.
+operand op4(class1 op2, class1 class2) { type(int32); }   // No redefs.
+operand op5(op1 a) { type(int32); }
+operand op6(op1 op2) { type(int32); }        // Not redef of an operand.
+operand op7(op1 class1) { type(int32); }     // Not redef of a register class.
+operand op8(op1 R6) { type(int32); }         // Not redef of a register.
+operand op9(op1 res0) { type(int32); }       // Not redef of a resource.
+operand op10(op1 pipe1) { type(int32); }     // Not redef of phases pipe1.
+operand op11(op1 T2) { type(int32); }        // Not redef of phase T2.
+operand op12(op1 T1) { type(int32); }        // Not redef of register T1.
+operand op13(op10 a) { type(int32); }        // Self-recursive definition.
+operand op14(op1 ins) { type(int32); }       // Not a redef of an instruction.
+operand op15(op1 f1) { type(int32); }        // Not a redef of a func_unit.
+operand op16(op1 s1) { type(int32); }        // Not a redef of a subunit.
+operand op17(op1 l1) { type(int32); }        // Not a redef of a latency.
+
+// Instructions are a separate namespace.
+instruction ins(op1 a) { subunit(su); }      // Not a redef of pipe or regs.
+instruction pipe1(op1 a) { subunit(su); }    // Not a redef of pipe or regs.
+instruction T1(op1 a) { subunit(su); }       // Not a redef of pipe phase.
+instruction class1(op1 a) { subunit(su); }   // Not a redef of a class.
+instruction R8(op1 a) { subunit(su); }       // Not a redef of a register.
+instruction res0(op1 a) { subunit(su); }     // Not a redef of a resource.
+instruction op5(op1 a) { subunit(su); }      // Not a redef of an operand.
+instruction pipe1(op1 a) { subunit(su); }    // Redef of instruction.
+
+// Instruction operand definitions should only conflict with themselves.
+instruction ins1(op1 a, op1 a) { subunit(su); }  // Redef of operand a.
+instruction ins2(op1 T9) { subunit(su); }    // Not a redef of a pipeline phase.
+instruction ins3(op1 pipe3) { subunit(su); } // Not a redef of a pipe class.
+instruction ins4(op1 R5) { subunit(su); }    // Not a redef of a pipe class.
+instruction ins5(op1 res0) { subunit(su); }  // Not a redef of a resource.
+instruction ins6(op1 op2) { subunit(su); }   // Not a redef of an operand.
+instruction ins7(op1 ins) { subunit(su); }   // Not a redef of an instruction.
+instruction ins8(op1 su) { subunit(su); }    // Not a redef of a subunit.
+instruction ins9(op1 f1) { subunit(su); }    // Not a redef of a func_unit.
+instruction ins10(op1 l1) { subunit(su); }   // Not a redef of a latency.
+
+// Functional unit names are a separate namespace.
+func_unit pipe1() {}                         // Not a redef (of lots of things).
+func_unit pipe1() {}                         // Redef of a func_unit.
+func_unit pipe2() {}                         // Not a redef of phases.
+func_unit T1() {}                            // Not a redef (of lots of things).
+func_unit T2() {}                            // Not a redef of a pipe phase.
+func_unit class1() {}                        // Not a redef of a register class.
+func_unit R6() {}                            // Not a redef of a register.
+func_unit res0() {}                          // Not a redef of a resource.
+func_unit op5() {}                           // Not a redef of an operand.
+func_unit ins() {}                           // Not a redef of an instruction.
+
+// Functional unit template operand definitions are a separate namespace.
+func_unit f1(resource dup, dup) {}           // Redef of parameter dup.
+func_unit f2(resource pipe3) {}              // Not a redef of a pipe class.
+func_unit f3(resource T1) {}                 // Not a redef of a pipeline phase.
+func_unit f4(resource R4) {}                 // Not a redef of a register.
+func_unit f5(resource class2) {}             // Not a redef of a register class.
+func_unit f6(resource op1) {}                // Not a redef of an operand.
+func_unit f7(resource ins) {}                // Not a redef of an instruction.
+func_unit f8(resource f1) {}                 // Not a redef of a func_unit.
+func_unit f8(resource s1) {}                 // Not a redef of a subunit.
+func_unit f9(resource l1) {}                 // Not a redef of a latency.
+
+func_unit f10(resource a) {
+    resource a;                              // Redef of func_unit parameter.
+    resource b;
+    resource b;                              // Redef of local resource.
+    resource R11;                            // Not redef of register.
+    resource class1;                         // Not redef of register class.
+    port R12, class2;                        // Not redef of other things.
+    resource R12;                            // Redef of port.
+}
+
+// Subunits are a separate namespace.
+subunit su() {}
+subunit su() {}                              // Redef of a subunit.
+subunit pipe1() {}                           // Not a redef of a func_unit.
+subunit pipe2() {}                           // Not a redef of phases.
+subunit T1() {}                              // Not a redef (of lots of things).
+subunit T2() {}                              // Not a redef of a pipe phase.
+subunit class1() {}                          // Not a redef of a register class.
+subunit R6() {}                              // Not a redef of a register.
+subunit op5() {}                             // Not a redef of an operand.
+subunit ins() {}                             // Not a redef of an instruction.
+
+// Subunit template operand definitions are a separate namespace.
+subunit s1(resource a, a) {}                // Redef of parameter a.
+subunit s2(resource pipe3) {}               // Not a redef of a pipe class.
+subunit s3(resource T1) {}                  // Not a redef of a pipeline phase.
+subunit s4(resource R4) {}                  // Not a redef of a register.
+subunit s5(resource class2) {}              // Not a redef of a register class.
+subunit s6(resource op1) {}                 // Not a redef of an operand.
+subunit s7(resource ins) {}                 // Not a redef of an instruction.
+subunit s8(resource f1) {}                  // Not a redef of a func_unit
+subunit s9(resource s1) {}                  // Not a redef of a subunit.
+subunit s10(resource l1) {}                 // Not a redef of a latency.
+
+// Latency templates have a separate namespace.
+latency lat() {}
+latency lat() {}                             // Redef of a latency.
+latency pipe1() {}                           // Not a redef of a func_unit.
+latency pipe2() {}                           // Not a redef of phases.
+latency T1() {}                              // Not a redef (of lots of things).
+latency T2() {}                              // Not a redef of a pipe phase.
+latency class1() {}                          // Not a redef of a register class.
+latency R6() {}                              // Not a redef of a register.
+latency op5() {}                             // Not a redef of an operand.
+latency ins() {}                             // Not a redef of an instruction.
+latency su() {}                              // Not a redef of a subunit.
+
+// Latency template operand definitions are a separate namespace.
+latency l1(resource a, a) {}                // Redef of parameter a.
+latency l2(resource pipe3) {}               // Not a redef of a pipe class.
+latency l3(resource T1) {}                  // Not a redef of a pipeline phase.
+latency l4(resource R4) {}                  // Not a redef of a register.
+latency l5(resource class2) {}              // Not a redef of a register class.
+latency l6(resource op1) {}                 // Not a redef of an operand.
+latency l7(resource ins) {}                 // Not a redef of an instruction.
+latency l8(resource f1) {}                  // Not a redef of a func_unit
+latency l9(resource s1) {}                  // Not a redef of a subunit.
+latency l9(resource l1) {}                  // Not a redef of a latency.
+
+// Cpus are a separate namespace.
+cpu my_cpu { resource xyz; };
+cpu my_cpu { resource xyz; };               // Redef of a cpu.
+cpu pipe3  { resource xyz; };               // Not a redef of a pipe class.
+cpu T4     { resource xyz; };               // Not a redef of a pipe phase.
+cpu R4     { resource xyz; };               // Not a redef of a register.
+cpu class1 { resource xyz; };               // Not a redef of a register class.
+cpu op1    { resource xyz; };               // Not a redef of an operand.
+cpu ins    { resource xyz; };               // Not a redef of an instruction.
+cpu fu     { resource xyz; };               // Not a redef of a func_unit.
+cpu su     { resource xyz; };               // Not a redef of a subunit.
+cpu lat    { resource xyz; };               // Not a redef of a latency.
+
+// CHECK: test_redecl.mdl:89:1 Duplicate functional unit definition: pipe1
+// CHECK: test_redecl.mdl:108:1 Duplicate functional unit definition: f8
+// CHECK: test_redecl.mdl:123:1 Duplicate subunit definition: su
+// CHECK: test_redecl.mdl:147:1 Duplicate latency definition: lat
+// CHECK: test_redecl.mdl:168:1 Duplicate latency definition: l9
+// CHECK: test_redecl.mdl:40:1 Duplicate operand definition: op1
+// CHECK: test_redecl.mdl:73:1 Duplicate instruction definition: pipe1
+// CHECK: test_redecl.mdl:22:1 Duplicate register class definition: class1
+// CHECK: test_redecl.mdl:24:1 Duplicate register class definition: pipe1
+// CHECK: test_redecl.mdl:9:1 Duplicate definition of pipe1
+// CHECK: test_redecl.mdl:11:1 Duplicate definition of pipe2
+// CHECK: test_redecl.mdl:8:38 Duplicate definition of T1
+// CHECK: test_redecl.mdl:8:26 Duplicate definition of T1
+// CHECK: test_redecl.mdl:8:38 Duplicate definition of T1
+// CHECK: test_redecl.mdl:10:34 Duplicate definition of T1
+// CHECK: test_redecl.mdl:10:34 Duplicate definition of T1
+// CHECK: test_redecl.mdl:12:30 Duplicate definition of T0
+// CHECK: test_redecl.mdl:12:34 Duplicate definition of T0
+// CHECK: test_redecl.mdl:12:38 Duplicate definition of T0
+// CHECK: test_redecl.mdl:30:16 Duplicate definition of res1
+// CHECK: test_redecl.mdl:15:10 Duplicate definition of R5
+// CHECK: test_redecl.mdl:14:10 Duplicate definition of R8
+// CHECK: test_redecl.mdl:14:10 Duplicate definition of R5
+// CHECK: test_redecl.mdl:15:10 Duplicate definition of R5
+// CHECK: test_redecl.mdl:16:10 Duplicate definition of pipe1
+// CHECK: test_redecl.mdl:16:10 Duplicate definition of pipe1
+// CHECK: test_redecl.mdl:16:17 Duplicate definition of T1
+// CHECK: test_redecl.mdl:31:29 Duplicate definition of mema
+// CHECK: test_redecl.mdl:18:1 Duplicate definition of pipe1
+// CHECK: test_redecl.mdl:24:1 Duplicate definition of pipe1
+// CHECK: test_redecl.mdl:26:1 Duplicate definition of T1
+// CHECK: test_redecl.mdl:27:1 Duplicate definition of T2
+// CHECK: test_redecl.mdl:14:10 Duplicate definition of R11
+// CHECK: test_redecl.mdl:16:10 Duplicate definition of pipe1
+// CHECK: test_redecl.mdl:16:17 Duplicate definition of T1
+// CHECK: test_redecl.mdl:100:28 Duplicate definition of dup
+// CHECK: test_redecl.mdl:114:14 Duplicate definition of b
+// CHECK: test_redecl.mdl:117:10 Duplicate definition of R12
+// CHECK: test_redecl.mdl:112:14 Duplicate definition of a
+// CHECK: test_redecl.mdl:134:24 Duplicate definition of a
+// CHECK: test_redecl.mdl:159:24 Duplicate definition of a
+// CHECK: test_redecl.mdl:172:1 Duplicate definition of my_cpu
+// CHECK: test_redecl.mdl:76:25 Duplicate definition of a
+// CHECK: test_redecl.mdl:48:23 Duplicate definition of a

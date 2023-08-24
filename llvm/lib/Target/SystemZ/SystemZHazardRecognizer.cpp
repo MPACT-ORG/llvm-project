@@ -29,8 +29,10 @@
 
 #include "SystemZHazardRecognizer.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/MC/MDLInfo.h"
 
 using namespace llvm;
+using namespace mdl;
 
 #define DEBUG_TYPE "machine-scheduler"
 
@@ -172,24 +174,68 @@ void SystemZHazardRecognizer::dumpSU(SUnit *SU, raw_ostream &OS) const {
   if (!SC->isValid())
     return;
 
-  for (TargetSchedModel::ProcResIter
-         PI = SchedModel->getWriteProcResBegin(SC),
-         PE = SchedModel->getWriteProcResEnd(SC); PI != PE; ++PI) {
-    const MCProcResourceDesc &PRD =
-      *SchedModel->getProcResource(PI->ProcResourceIdx);
-    std::string FU(PRD.Name);
+  auto WriteFU = [this](int ResId, int Cycles)-> std::string {
     // trim e.g. Z13_FXaUnit -> FXa
+    std::string FU = SchedModel->getResourceName(ResId);
     FU = FU.substr(FU.find('_') + 1);
     size_t Pos = FU.find("Unit");
     if (Pos != std::string::npos)
       FU.resize(Pos);
     if (FU == "LS") // LSUnit -> LSU
       FU = "LSU";
-    OS << "/" << FU;
+    if (Cycles > 1)
+      FU += "(" + std::to_string(Cycles) + "cyc)";
+    return "/" + FU;
+  };
 
-    if (PI->ReleaseAtCycle> 1)
-      OS << "(" << PI->ReleaseAtCycle << "cyc)";
+  if (SchedModel->hasMdlModel()) {
+    bool BeginsGroup = false;
+    bool EndsGroup = false;
+    int MicroOps = 0;
+
+    Instr Ins(SU->getInstr(), SchedModel->getSubtargetInfo());
+    if (auto *Subunit = Ins.getSubunit()) {
+      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+        for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
+          if (Ref.isFus()) {
+            if (Ref.getCycles())
+              OS << WriteFU(Ref.getResourceId(), Ref.getCycles());
+            BeginsGroup |= Ref.isBeginGroup();
+            EndsGroup |= Ref.isEndGroup();
+            MicroOps += Ref.getMicroOps();
+          }
+ 
+      if (auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
+        for (const auto &Ref : ReferenceIter<PooledResourceRef>(Prefs, &Ins))
+          if (Ref.isFus()) {
+            for (int Res = Ref.getFirst(); Res <= Ref.getLast(); Res++) 
+              OS << WriteFU(Ref.getResourceIds()[Res], 0);
+            if (Ref.getCycles() > 1)
+              OS << "(" << Ref.getCycles() << "cyc)";
+            BeginsGroup |= Ref.isBeginGroup();
+            EndsGroup |= Ref.isEndGroup();
+            MicroOps += Ref.getMicroOps();
+          }
+    }
+    if (MicroOps > 1)
+      OS << "/" << MicroOps << "uops";
+    if (BeginsGroup && EndsGroup)
+      OS << "/GroupsAlone";
+    else if (BeginsGroup)
+      OS << "/BeginsGroup";
+    else if (EndsGroup)
+      OS << "/EndsGroup";
+    if (SU->isUnbuffered)
+      OS << "/Unbuffered";
+    if (has4RegOps(SU->getInstr()))
+      OS << "/4RegOps";
+    return;
   }
+
+  for (TargetSchedModel::ProcResIter
+         PI = SchedModel->getWriteProcResBegin(SC),
+         PE = SchedModel->getWriteProcResEnd(SC); PI != PE; ++PI)
+    OS << "/" << WriteFU(PI->ProcResourceIdx, PI->ReleaseAtCycle);
 
   if (SC->NumMicroOps > 1)
     OS << "/" << SC->NumMicroOps << "uops";
@@ -235,13 +281,13 @@ void SystemZHazardRecognizer::dumpProcResourceCounters() const {
   dbgs() << "++ | Resource counters: ";
   for (unsigned i = 0; i < SchedModel->getNumProcResourceKinds(); ++i)
     if (ProcResourceCounters[i] > 0)
-      dbgs() << SchedModel->getProcResource(i)->Name
+      dbgs() << SchedModel->getResourceName(i)
              << ":" << ProcResourceCounters[i] << " ";
   dbgs() << "\n";
 
   if (CriticalResourceIdx != UINT_MAX)
     dbgs() << "++ | Critical resource: "
-           << SchedModel->getProcResource(CriticalResourceIdx)->Name
+           << SchedModel->getResourceName(CriticalResourceIdx)
            << "\n";
 }
 
@@ -265,6 +311,8 @@ static inline bool isBranchRetTrap(MachineInstr *MI) {
   return (MI->isBranch() || MI->isReturn() ||
           MI->getOpcode() == SystemZ::CondTrap);
 }
+
+// TODO-MDL - Write an MDL-specific version of this.
 
 // Update state with SU as the next scheduled unit.
 void SystemZHazardRecognizer::
@@ -292,27 +340,44 @@ EmitInstruction(SUnit *SU) {
     return;
   }
 
-  // Increase counter for execution unit(s).
-  for (TargetSchedModel::ProcResIter
-         PI = SchedModel->getWriteProcResBegin(SC),
-         PE = SchedModel->getWriteProcResEnd(SC); PI != PE; ++PI) {
-    // Don't handle FPd together with the other resources.
-    if (SchedModel->getProcResource(PI->ProcResourceIdx)->BufferSize == 1)
-      continue;
-    int &CurrCounter =
-      ProcResourceCounters[PI->ProcResourceIdx];
-    CurrCounter += PI->ReleaseAtCycle;
+  auto UpdateResourceCounters = [this](unsigned ResId, int Cycles) -> void {
+    int &CurrCounter = ProcResourceCounters[ResId];
+    CurrCounter += Cycles;
     // Check if this is now the new critical resource.
     if ((CurrCounter > ProcResCostLim) &&
         (CriticalResourceIdx == UINT_MAX ||
-         (PI->ProcResourceIdx != CriticalResourceIdx &&
-          CurrCounter >
-          ProcResourceCounters[CriticalResourceIdx]))) {
+        (ResId != CriticalResourceIdx &&
+         CurrCounter > ProcResourceCounters[CriticalResourceIdx]))) {
       LLVM_DEBUG(
           dbgs() << "++ New critical resource: "
-                 << SchedModel->getProcResource(PI->ProcResourceIdx)->Name
-                 << "\n";);
-      CriticalResourceIdx = PI->ProcResourceIdx;
+                << SchedModel->getResourceName(ResId)
+                << "\n";);
+      CriticalResourceIdx = ResId;
+    }
+  };
+
+  // Increase counter for execution unit(s).
+  if (SchedModel->hasMdlModel()) {
+    Instr Ins(LastEmittedMI, SchedModel->getSubtargetInfo());
+    if (auto *Subunit = Ins.getSubunit()) {
+      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+        for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
+          if (Ref.isFus() && Ref.getCycles() && !Ref.isInOrder())
+            UpdateResourceCounters(Ref.getResourceId(), Ref.getCycles());
+ 
+      if (auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
+        for (const auto &Ref : ReferenceIter<PooledResourceRef>(Prefs, &Ins))
+          if (Ref.isFus() && !Ref.isInOrder())
+            for (int Res = Ref.getFirst(); Res <= Ref.getLast(); Res++)
+              UpdateResourceCounters(Ref.getResourceIds()[Res], Ref.getCycles());
+    }
+  } else {
+    for (TargetSchedModel::ProcResIter
+          PI = SchedModel->getWriteProcResBegin(SC),
+          PE = SchedModel->getWriteProcResEnd(SC); PI != PE; ++PI) {
+      // Don't handle FPd together with the other resources.
+      if (SchedModel->getProcResource(PI->ProcResourceIdx)->BufferSize != 1)
+        UpdateResourceCounters(PI->ProcResourceIdx, PI->ReleaseAtCycle);
     }
   }
 
@@ -385,18 +450,43 @@ bool SystemZHazardRecognizer::isFPdOpPreferred_distance(SUnit *SU) const {
 
 int SystemZHazardRecognizer::
 resourcesCost(SUnit *SU) {
+  // For a FPd op, either return min or max value as indicated by the
+  // distance to any prior FPd op.
+  if (SU->isUnbuffered)
+    return (isFPdOpPreferred_distance(SU) ? INT_MIN : INT_MAX);
+  if (CriticalResourceIdx == UINT_MAX)
+    return 0;
+
   int Cost = 0;
+
+  if (SchedModel->hasMdlModel()) {
+    Instr Ins(SU->getInstr(), SchedModel->getSubtargetInfo());
+    if (auto *Subunit = Ins.getSubunit()) {
+      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+        for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins)) {
+          if (Ref.isFus() && Ref.getCycles()) {
+            if (Ref.getResourceId() == (int)CriticalResourceIdx)
+              Cost = Ref.getCycles();
+          }
+        }
+      if (auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
+        for (const auto &Ref : ReferenceIter<PooledResourceRef>(Prefs, &Ins)) {
+          if (Ref.isFus()) {
+            for (int Res = Ref.getFirst(); Res <= Ref.getLast(); Res++)
+              if (Ref.getResourceIds()[Res] == (int)CriticalResourceIdx)
+                Cost = Ref.getCycles();
+          }
+        }
+    }
+    return Cost;
+  }
 
   const MCSchedClassDesc *SC = getSchedClass(SU);
   if (!SC->isValid())
     return 0;
 
-  // For a FPd op, either return min or max value as indicated by the
-  // distance to any prior FPd op.
-  if (SU->isUnbuffered)
-    Cost = (isFPdOpPreferred_distance(SU) ? INT_MIN : INT_MAX);
   // For other instructions, give a cost to the use of the critical resource.
-  else if (CriticalResourceIdx != UINT_MAX) {
+  if (CriticalResourceIdx != UINT_MAX) {
     for (TargetSchedModel::ProcResIter
            PI = SchedModel->getWriteProcResBegin(SC),
            PE = SchedModel->getWriteProcResEnd(SC); PI != PE; ++PI)
@@ -415,19 +505,46 @@ void SystemZHazardRecognizer::emitInstruction(MachineInstr *MI,
   // Set interesting flags.
   SU.isCall = MI->isCall();
 
-  const MCSchedClassDesc *SC = SchedModel->resolveSchedClass(MI);
-  for (const MCWriteProcResEntry &PRE :
-         make_range(SchedModel->getWriteProcResBegin(SC),
-                    SchedModel->getWriteProcResEnd(SC))) {
-    switch (SchedModel->getProcResource(PRE.ProcResourceIdx)->BufferSize) {
-    case 0:
-      SU.hasReservedResource = true;
-      break;
-    case 1:
-      SU.isUnbuffered = true;
-      break;
-    default:
-      break;
+  if (SchedModel->hasMdlModel()) {
+    Instr Ins(MI, SchedModel->getSubtargetInfo());
+    if (auto *Subunit = Ins.getSubunit()) {
+      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+        for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins)) {
+          if (Ref.isFus() && Ref.getCycles()) {
+            // Note: the SU member names are counterintuitive here...
+            if (Ref.isUnbuffered())         // BufferSize == 0
+              SU.hasReservedResource = true;
+            if (Ref.isInOrder())            // BufferSize == 1
+              SU.isUnbuffered = true;
+          }
+        }
+      if (auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
+        for (const auto &Ref :
+              ReferenceIter<PooledResourceRef>(Prefs, &Ins)) {
+            // Note: the SU member names are counterintuitive here...
+          if (Ref.isFus()) {
+            if (Ref.isUnbuffered())        // BufferSize == 0
+              SU.hasReservedResource = true;
+            if (Ref.isInOrder())           // BufferSize == 1
+              SU.isUnbuffered = true;
+          }
+        }
+    }
+  } else {
+    const MCSchedClassDesc *SC = SchedModel->resolveSchedClass(MI);
+    for (const MCWriteProcResEntry &PRE :
+          make_range(SchedModel->getWriteProcResBegin(SC),
+                      SchedModel->getWriteProcResEnd(SC))) {
+      switch (SchedModel->getProcResource(PRE.ProcResourceIdx)->BufferSize) {
+      case 0:
+        SU.hasReservedResource = true;
+        break;
+      case 1:
+        SU.isUnbuffered = true;
+        break;
+      default:
+        break;
+      }
     }
   }
 

@@ -17,6 +17,8 @@
 #include "RISCVMCObjectFileInfo.h"
 #include "RISCVTargetStreamer.h"
 #include "TargetInfo/RISCVTargetInfo.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/Config/config.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -40,6 +42,14 @@
 
 #define GET_SUBTARGETINFO_MC_DESC
 #include "RISCVGenSubtargetInfo.inc"
+
+// Include the generated MDL database.
+#if ENABLE_MDL_USE
+#include "RISCVGenMdlInfo.inc"
+#define RISCVCpuTable &RISCV::CpuTable
+#else
+#define RISCVCpuTable nullptr
+#endif
 
 using namespace llvm;
 
@@ -81,7 +91,8 @@ static MCSubtargetInfo *createRISCVMCSubtargetInfo(const Triple &TT,
     CPU = TT.isArch64Bit() ? "generic-rv64" : "generic-rv32";
 
   MCSubtargetInfo *X =
-      createRISCVMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS);
+      createRISCVMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS,
+                                        RISCVCpuTable);
 
   // If the CPU is "help" fill in 64 or 32 bit feature so we can pass
   // RISCVFeatures::validate.

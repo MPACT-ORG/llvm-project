@@ -1,0 +1,33 @@
+//-----------------------------------------------------------------------------
+// Check for undefined functional units and invalid template bases
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { F1, E[1..20] };
+
+cpu cpu {
+   func_unit XYZZY fu1();
+}
+cpu cpu2 {
+   func_unit NONE fu1();
+}
+
+func_unit XYZZY : PLUGH() {                 // undefined base unit
+   subunit a();
+}
+subunit a : b() { latency a(); }
+subunit c : "INSTR" () { latency a(); }
+latency a : b() { def(E3, $op); }
+
+register r[0..16];
+register_class GPR { r[0..16] };
+instruction abc(GPR op) { subunit(a); }
+
+
+// CHECK: test_fus_3.mdl:17:1 Undefined functional unit base: PLUGH
+// CHECK: test_fus_3.mdl:20:1 Undefined subunit base: b
+// CHECK: test_fus_3.mdl:21:1 Unmatched base instruction expression "INSTR"
+// CHECK: test_fus_3.mdl:22:1 Undefined latency base: b
+// CHECK: Errors found, aborting

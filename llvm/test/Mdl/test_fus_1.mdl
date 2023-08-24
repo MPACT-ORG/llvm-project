@@ -1,0 +1,54 @@
+//-----------------------------------------------------------------------------
+// Check implicit functional unit template creation, and check references to
+// those units.
+//-----------------------------------------------------------------------------
+// RUN: llvm-mdl --warnings %s 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { F1, E[1..20] };
+
+cpu cpu {
+   reorder_buffer<42>;
+   issue(F1) s1, s2, s3;
+
+   func_unit FU1<> fu_1();               // Unreserved
+   func_unit FU2<0> fu_2();              // Unbuffered
+   func_unit FU3 fu_3();                 // Single-entry buffer
+   func_unit FU3 fu_3a();                // Single buffer - pooled
+   func_unit FU4<4>:FU6<6> fu_4();
+   func_unit FU5:FU6 fu_5();
+}
+
+// Reference a single functional unit for a single cycle.
+subunit a() {{ def(E3, $op);  fus(FU1, 1); }}
+
+// Reference a single functional unit for 10 cycles.
+subunit b() {{ def(E3, $op);  fus(FU1<10>, 2); }}
+
+// Reference two functional units (one buffered, one not) for various cycles
+subunit c() {{ def(E3, $op);  fus(FU1<10>&FU2<2>, 3); }}
+
+// Reference a pool of two functional units.
+subunit d() {{ def(E3, $op);  fus(FU3, 4); }}
+
+// Reference a parent functional unit with a BeginGroup attribute.
+subunit e() {{ def(E3, $op);  fus(FU4, 5, BeginGroup); }}
+
+// Reference a child functional unit.
+subunit f() {{ def(E3, $op);  fus(FU6, 6); }}
+
+// Reference functional units with start cycles.
+subunit g() {{ def(E3, $op);  fus(FU1<10>&FU2<E10:2>, 3); }}
+
+// Reference functional unit pool with start cycles.
+subunit h() {{ def(E3, $op);  fus(FU1<10>&FU2<E10:2>&FU3<E12:1>, 3); }}
+
+// Reference a child and parent functional units with start cycles
+subunit i() {{ def(E3, $op);  fus(FU4<E2:2>&FU6<E10:2>, 3); }}
+
+register r[0..16];
+register_class GPR { r[0..16] };
+instruction abc(GPR op) { subunit(a, b, c, d, e, f, g, h, i); }
+
+// CHECK: test_fus_1.mdl:20:14 Warning: Undefined functional unit "FU5"

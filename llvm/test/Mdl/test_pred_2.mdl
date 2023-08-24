@@ -1,0 +1,140 @@
+//-----------------------------------------------------------------------------
+// Check predicate definitions. This file check semantic errors on predicate
+// definitions, which happens when the predicate is actually used.
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test_predicates;
+
+protected phases test { E[1..40] }
+
+cpu cpu { func_unit unit unit(); }
+
+func_unit unit() { subunit sub(); }
+
+subunit sub() { latency lat(); }
+
+latency lat() {
+    if p1a { def(E2, $op1); }
+    if p2a { def(E5, $op1); }
+    if p3a { def(E7, $op1); }
+    if p3b { def(E8, $op1); }
+    if p3c { def(E9, $op1); }
+    if p3d { def(E10, $op1); }
+    if p4a { def(E12, $op1); }
+    if p5a { def(E14, $op1); }
+    if p6a { def(E16, $op1); }
+    if p7a { def(E14, $op1); }
+    if p8a { def(E21, $op1); }
+    if p8b { def(E22, $op1); }
+    if p8c { def(E23, $op1); }
+    if p11a { def(E25, $op1); }
+    if p11b { def(E26, $op1); }
+    if p12a { def(E28, $op1); }
+    if p12b { def(E29, $op1); }
+    if p13a { def(E31, $op1); }
+    if p13c { def(E33, $op1); }
+    if p13d { def(E33, $op1); }
+    if p14a { def(E34, $op1); }
+    if p14b { def(E35, $op1); }
+    if p14c { def(E36, $op1); }
+    if p15a { def(E37, $op1); }
+    if p15b { def(E37, $op1); }
+    if p15c { def(E37, $op1); }
+    if p15d { def(E37, $op1); }
+    if p16  { def(E38, $op1); }
+    if p17a { def(E39, $op1); }
+    if p17b { def(E40, $op1); }
+}
+
+register R[0..15];
+register_class GPR { r[0..15] }
+operand IMM() {}
+instruction add(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction sub(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction xor(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+
+//-----------------------------------------------------------------------------
+// Minimal checking is performed when a predicate is parsed.  More semantic
+// checking is lazily done when a predicate is used.
+//-----------------------------------------------------------------------------
+// CheckNumOperands<int OperandId>;
+predicate p1a : CheckNumOperands<3>;              // ok
+
+// CheckIsImmOperand<int OperandId>
+predicate p2a : CheckIsImmOperand<3>;             // ok
+
+// CheckImmOperand<int OperandId>;
+predicate p3a : CheckImmOperand<3>;
+// CheckImmOperand<int OperandId, int value>;
+predicate p3b : CheckImmOperand<3, 4>;
+// CheckImmOperand<int OperandId, int value, string func>;
+predicate p3c : CheckImmOperand<3, 4, "Func">;
+// CheckImmOperand<int OperandId, string value, string func>;
+predicate p3d : CheckImmOperand<3, "symbolic-value", "Func">;
+
+// CheckZeroOperand<int OperandId>;
+predicate p4a : CheckZeroOperand<4>;
+
+// CheckInvalidRegOperand<int OperandId>;
+predicate p5a : CheckInvalidRegOperand<2>;
+
+// CheckIsRegOperand<int OperandId>;
+predicate p6a : CheckIsRegOperand<1>;
+
+// CheckSameRegOperand<int OperandId, int OperandId>
+predicate p7a : CheckSameRegOperand<1, 2>;
+
+// CheckRegOperand<int OperandId, name Register>
+predicate p8a : CheckRegOperand<1, R5>;
+predicate p8b : CheckRegOperand<1, RRRRR>;           // invalid register
+// CheckRegOperand<int OperandId, name Register, string func>;
+predicate p8c : CheckRegOperand<1, R5, "func">;
+
+predicate p9 : TruePred;
+predicate p10 : FalsePred;
+
+// CheckAny<predicate Pred*>;
+predicate p11a : CheckAny<p1a>;
+predicate p11b : CheckAny<p1a, p2a, p3a>;
+
+// CheckAll<predicate Pred*>;
+predicate p12a : CheckAll<p1a>;
+predicate p12b : CheckAll<p1a, p2a, p3a>;
+
+// CheckNot<predicate Pred>;
+predicate p13a : CheckNot<p1a>;
+predicate p13c : CheckNot<p13a>;
+predicate p13d : CheckNot<error>;                    // undefined predicate
+
+// CheckOpcode<opcode+>;
+predicate p14a: CheckOpcode<add>;
+predicate p14b: CheckOpcode<add, sub, xor>;
+predicate p14c : CheckOpcode<error>;                 // undefined opcode
+
+// OpcodeSwitchStatement<ReturnOrCase+>;
+// OpcodeSwitchCase<[instrs], ReturnOrCase+>;
+// ReturnStatement<Pred>
+predicate r15: ReturnStatement<p7a>;
+predicate c15: OpcodeSwitchCase<[add, sub], p7a>;
+
+predicate p15a: OpcodeSwitchStatement<
+                    OpcodeSwitchCase<[add, xor], ReturnStatement<p1a>>,
+                    OpcodeSwitchCase<[sub], ReturnStatement<p2a>>,
+                    ReturnStatement<p3a>>;
+predicate p15b: OpcodeSwitchStatement<c15, c15, r15>;      // ok
+predicate p15c: OpcodeSwitchStatement<c15, r15, c15>;      // weird, but ok
+predicate p15d: OpcodeSwitchStatement<p4a, p4a, r15>;      // malformed
+
+// CheckFunctionPredicate<string MCFunc, string MIFunc>
+predicate p16 : CheckFunctionPredicate<"MCFunc", "MIFunc">;
+
+// CheckFunctionPredicateWithTII<string MCFunc, string MIFunc [, string TII]>
+predicate p17a : CheckFunctionPredicateWithTII<"MCFunc", "MIFunc", "TII">;
+predicate p17b : CheckFunctionPredicateWithTII<"MCFunc", "MIFunc">;  // OK
+
+// CHECK: test_pred_2.mdl:90:36 Invalid register name: RRRRR
+// CHECK: test_pred_2.mdl:108:27 Undefined predicate: error
+// CHECK: test_pred_2.mdl:113:30 Invalid instruction name: error
+// CHECK: test_pred_2.mdl:127:17 Malformed switch predicate
+// CHECK: Errors found, aborting

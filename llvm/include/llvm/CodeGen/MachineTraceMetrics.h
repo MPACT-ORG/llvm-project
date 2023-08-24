@@ -306,6 +306,11 @@ public:
         ArrayRef<const MCSchedClassDesc *> ExtraInstrs = {},
         ArrayRef<const MCSchedClassDesc *> RemoveInstrs = {}) const;
 
+    unsigned getInstrResourceLength(
+        ArrayRef<const MachineBasicBlock *> Extrablocks = std::nullopt,
+        SmallVectorImpl<MachineInstr *> *ExtraInstrs = nullptr,
+        SmallVectorImpl<MachineInstr *> *RemoveInstrs = nullptr) const;
+
     /// Return the length of the (data dependency) critical path through the
     /// trace.
     unsigned getCriticalPath() const { return TBI.CriticalPath; }

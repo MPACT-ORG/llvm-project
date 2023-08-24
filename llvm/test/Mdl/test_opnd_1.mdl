@@ -1,0 +1,70 @@
+//----------------------------------------------------------------------------
+// Test error checking on operand references.
+//----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { E1, E2 };
+
+register_class GPR { s[0..31] };
+register_class PPR { p[0..31] };
+
+operand i32imm() { type(int32); }
+
+operand deep2(GPR z) { type(int32); }
+operand deep1(deep2 y) { type(int32); }
+operand deep(deep1 x) { type(int32); }
+
+operand deep_imm2(i32imm z) { type(int32); }
+operand deep_imm1(deep2 y) { type(int32); }
+operand deep_imm(deep1 x) { type(int32); }
+
+operand pred(PPR reg, i32imm invert) { type(int32); }
+instruction ADDrr(GPR d, i32imm x, deep deep, deep_imm dimm, pred pred) {
+  subunit(xyz);
+}
+
+subunit xyz() {{
+    use(E1, pred:$pred);             // under-qualified
+    use(E1, pred:$pred.xxxx);        // undefined
+    use(E1, pred:$pred.reg);         // correct
+    use(E1, pred:$pred.reg.blah);    // over-qualified
+
+    use(E1, GPR:$d);                 // correct
+    use(E1, GPR:$d.err);             // over-qualified
+    use(E1, i32imm:$x);              // correct
+    use(E1, i32imm:$x.err);          // over-qualified
+
+    use(E1, deep:$deep);             // under-qualified register
+    use(E1, deep:$deep.x);           // under-qualified register
+    use(E1, deep:$deep.x.y);         // under-qualified register
+    use(E1, deep:$deep.x.y.z);       // correct
+
+    use(E1, deep:$deep.x.x);         // undefined register
+    use(E1, deep:$deep.x.y.x);       // undefined register
+
+    use(E1, deep_imm:$dimm);         // under-qualified immediate
+    use(E1, deep_imm:$dimm.x);       // under-qualified immediate
+    use(E1, deep_imm:$dimm.x.y);     // under-qualified immediate
+    use(E1, deep_imm:$dimm.x.y.z);   // correct
+
+    use(E1, deep_imm:$dimm.x.x);     // undefined immediate
+    use(E1, deep_imm:$dimm.x.y.x);   // undefined immediate
+}}
+
+// CHECK: test_opnd_1.mdl:29:13 Under-qualified operand reference: pred:$pred
+// CHECK: test_opnd_1.mdl:30:13 Undefined operand type: pred:$pred.xxxx
+// CHECK: test_opnd_1.mdl:32:13 Over-qualified operand reference: pred:$pred.reg.blah
+// CHECK: test_opnd_1.mdl:35:13 Over-qualified operand reference: GPR:$d.err
+// CHECK: test_opnd_1.mdl:37:13 Over-qualified operand reference: i32imm:$x.err
+// CHECK: test_opnd_1.mdl:39:13 Under-qualified operand reference: deep:$deep
+// CHECK: test_opnd_1.mdl:40:13 Under-qualified operand reference: deep1:$deep.x
+// CHECK: test_opnd_1.mdl:41:13 Under-qualified operand reference: deep2:$deep.x.y
+// CHECK: test_opnd_1.mdl:44:13 Undefined operand type: deep1:$deep.x.x
+// CHECK: test_opnd_1.mdl:45:13 Undefined operand type: deep2:$deep.x.y.x
+// CHECK: test_opnd_1.mdl:47:13 Under-qualified operand reference: deep_imm:$dimm
+// CHECK: test_opnd_1.mdl:48:13 Under-qualified operand reference: deep1:$dimm.x
+// CHECK: test_opnd_1.mdl:49:13 Under-qualified operand reference: deep2:$dimm.x.y
+// CHECK: test_opnd_1.mdl:52:13 Undefined operand type: deep1:$dimm.x.x
+// CHECK: test_opnd_1.mdl:53:13 Undefined operand type: deep2:$dimm.x.y.x

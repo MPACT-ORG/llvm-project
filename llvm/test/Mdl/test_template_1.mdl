@@ -1,0 +1,71 @@
+//-----------------------------------------------------------------------------
+// Check template instantiations.
+// - Check error generated when visiting parse tree.
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test_predicates;
+
+phases x { E1, E2, E3 };
+
+cpu cpu {
+   resource a:4;                                        // inconsistent group
+   resource b[10];                                      // invalid group
+   resource (E1) c;
+   resource group { a, b, c };                     // Check promotions of these
+   resource array[10];
+   resource array2:2[10];
+   func_unit unit good(GPR, group, array);
+   func_unit unit too_many(GPR, group, group, array);  // Too many arguments
+   func_unit unit too_few(GPR);                        // Too few arguments
+}
+
+func_unit unit(class regs; resource group, array) {
+   resource x, y, z;
+   port port<regs>(group);
+   subunit sub(port, group, array);
+   subunit sub(port, x | y | z, array);                // implicit group (ok)
+   subunit sub(port);                                  // too few arguments
+   subunit sub2(x, y, z);
+}
+subunit sub(port port; resource group, array) {
+   latency lat(port, array);
+   latency lat(port);                                  // too few arguments
+}
+
+latency lat(port port; resource whatevs) { def(E1, $op1); }
+
+subunit sub2(resource a, b, c) {
+   latency lat2(a & b & c);                     // Invalid implicit group
+}
+latency lat2(resource group) { def(E2, $op1); }
+
+register R[0..15];
+register_class GPR { r[0..15] }
+operand IMM() {}
+operand BUG(GPR op1, ...) { type(int32); type(int6); }  // Ellipsis not allowed
+operand IMM2 : IMM { type(int3); type(int4); }
+operand IMM3 : IMM {
+   attribute xyz = 1 if lit;
+   attribute xyz = 2 if blahblah;                     // Invalid predicate type
+   attribute xyz = 3 if lit[9..2];                    // Invalid range
+}
+
+instruction add(GPR op1, GPR op2, IMM op3) { subunit(sub, sub2); }
+instruction sub(GPR op1, GPR op2, IMM op3) { subunit(sub, sub2); }
+instruction xor(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+
+instruction xxx(GPR op1, ..., GPR op2) { subunit(sub); }    // Bad ellipsis
+
+// CHECK: test_template_1.mdl:39:17 Implicit group definition not allowed
+// CHECK: test_template_1.mdl:46:22 Ellipsis not allowed in operand definitions
+// CHECK: test_template_1.mdl:46:1 Only one type specification allowed
+// CHECK: test_template_1.mdl:47:1 Only one type specification allowed
+// CHECK: test_template_1.mdl:50:4 Invalid predicate type: blahblah
+// CHECK: test_template_1.mdl:51:29 Invalid value range: 9..2
+// CHECK: test_template_1.mdl:58:26 Ellipsis must be last declared operand
+// CHECK: test_template_1.mdl:17:13 Shared resource pools must have a pipeline phase: Resource array2:2[10]
+// CHECK: test_template_1.mdl:15:21 Inconsistent group definition: a
+// CHECK: test_template_1.mdl:15:24 Invalid group member: b
+// CHECK: test_template_1.mdl:15:27 Inconsistent group definition: c
+// CHECK: Errors found, aborting

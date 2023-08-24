@@ -1,0 +1,26 @@
+//-----------------------------------------------------------------------------
+// Check for undefined template references.
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { F1, E[1..20] };
+
+cpu cpu {
+   func_unit XYZZY fu1();
+}
+
+func_unit XYZZY() { subunit a(); subunit NONE(); }     // Undefined subunit
+subunit a() { latency a(); }
+subunit b() { latency b(); }                           // Undefined latency
+latency a() { def(E3, $op); }
+
+register r[0..16];
+register_class GPR { r[0..16] };
+instruction abc(GPR op) { subunit(a); }
+
+
+// CHECK: test_fus_5.mdl:14:34 Undefined subunit reference: NONE
+// CHECK: test_fus_5.mdl:16:15 Undefined latency reference: b
+// CHECK: Errors found, aborting
