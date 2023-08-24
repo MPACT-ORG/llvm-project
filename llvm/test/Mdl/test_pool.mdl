@@ -1,0 +1,195 @@
+//---------------------------------------------------------------------------
+// Test handling of pool references and port references.
+//---------------------------------------------------------------------------
+// RUN: llvm-mdl --dump_instr %s --output_dir /tmp/ 2>&1 | FileCheck %s
+
+family test;
+
+phases x { E1, E2, E3, E4 };
+
+cpu cpu {
+   resource cpu_pool[6];
+   func_unit fu fu_a(cpu_pool);              // Pass entire pool
+   func_unit fu fu_b(cpu_pool[1]);           // Pass single entry from pool
+   func_unit fu fu_c(cpu_pool[1..3]);        // Pass a subpool
+   forward fu -> fu_b;
+   forward fu -> fu_c;
+}
+
+func_unit fu(resource pool) {
+   port xyz<GPR>;
+   port abc<LOW>(pool);
+   subunit a(xyz);
+   subunit b(abc);
+   subunit a(abc);
+   subunit b(xyz);
+}
+
+subunit a(port p) { latency a(p); }
+subunit b:a(port p) { latency b(p); }
+
+latency a(port p) {
+  use(E2, $op, p:1);        // Allocate one entry from pool
+}
+
+latency b(port p) {
+  use(E4, $op, p[1]);       // Allocate specific member of pool
+}
+
+register r[0..16];
+register_class GPR { r[0..16] };
+register_class LOW { r[0..7] };
+instruction abc(GPR op) { subunit(a); }
+
+// CHECK:  Instruction info
+// CHECK: ---------------------------------------------------------
+// CHECK: Instruction: abc(GPR op)
+// CHECK:   flat(GPR op)
+// CHECK:   { subunit(a,b); }
+// CHECK:     Subunit: cpu.fu_a
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E2, GPR:$op[0], port xyz<GPR>)
+// CHECK:       Resources:
+// CHECK:             use.p(E1,fu_a{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 0: GPR
+
+// CHECK: Instruction: abc(GPR op)
+// CHECK:   flat(GPR op)
+// CHECK:   { subunit(a,b); }
+// CHECK:     Subunit: cpu.fu_a
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E2, GPR:$op[0], <cpu_pool{4}[0..5]:1-->0>, port abc<LOW>)
+// CHECK:       Resources:
+// CHECK:             use.p(E1,fu_a{1})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E2,cpu_pool{4}[0..5]:1-->0)  subpool id: 2 size requests: 1
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 0: LOW
+
+// CHECK: Instruction: abc(GPR op)
+// CHECK:   flat(GPR op)
+// CHECK:   { subunit(a,b); }
+// CHECK:     Subunit: cpu.fu_b
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E2, GPR:$op[0], port xyz<GPR>)
+// CHECK:       Resources:
+// CHECK:             use.p(E1,fu_b{2})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 0: GPR
+
+// CHECK: Instruction: abc(GPR op)
+// CHECK:   flat(GPR op)
+// CHECK:   { subunit(a,b); }
+// CHECK:     Subunit: cpu.fu_b
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E2, GPR:$op[0], <cpu_pool{4}[1]:1-->0>, port abc<LOW>)
+// CHECK:       Resources:
+// CHECK:             use.p(E1,fu_b{2})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E2,cpu_pool{4}[1]:1-->0)  subpool id: 0 size requests: 1
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 0: LOW
+
+// CHECK: Instruction: abc(GPR op)
+// CHECK:   flat(GPR op)
+// CHECK:   { subunit(a,b); }
+// CHECK:     Subunit: cpu.fu_c
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E2, GPR:$op[0], port xyz<GPR>)
+// CHECK:       Resources:
+// CHECK:             use.p(E1,fu_c{3})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 0: GPR
+
+// CHECK: Instruction: abc(GPR op)
+// CHECK:   flat(GPR op)
+// CHECK:   { subunit(a,b); }
+// CHECK:     Subunit: cpu.fu_c
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E2, GPR:$op[0], <cpu_pool{4}[1..3]:1-->0>, port abc<LOW>)
+// CHECK:       Resources:
+// CHECK:             use.p(E1,fu_c{3})
+// CHECK:       Pool Resources:
+// CHECK:             use.p(E2,cpu_pool{4}[1..3]:1-->0)  subpool id: 1 size requests: 1
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 0: LOW
+
+// CHECK: Instruction: abc(GPR op)
+// CHECK:   flat(GPR op)
+// CHECK:   { subunit(a,b); }
+// CHECK:     Subunit: cpu.fu_a
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E4, GPR:$op[0], <cpu_pool{4}[1]-->0>, port abc<LOW>)
+// CHECK:       Resources:
+// CHECK-DAG:             use.p(E4,cpu_pool{4}[1]-->0)
+// CHECK-DAG:             use.p(E1,fu_a{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 0: LOW
+
+// CHECK: Instruction: abc(GPR op)
+// CHECK:   flat(GPR op)
+// CHECK:   { subunit(a,b); }
+// CHECK:     Subunit: cpu.fu_a
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E4, GPR:$op[0], port xyz<GPR>)
+// CHECK:       Resources:
+// CHECK:             use.p(E1,fu_a{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 0: GPR
+
+// CHECK: Instruction: abc(GPR op)
+// CHECK:   flat(GPR op)
+// CHECK:   { subunit(a,b); }
+// CHECK:     Subunit: cpu.fu_b
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E4, GPR:$op[0], <cpu_pool{4}[1]-->0>, port abc<LOW>)
+// CHECK:       Resources:
+// CHECK:             use.p(E4,cpu_pool{4}[1]-->0)
+// CHECK:             use.p(E1,fu_b{2})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 0: LOW
+
+// CHECK: Instruction: abc(GPR op)
+// CHECK:   flat(GPR op)
+// CHECK:   { subunit(a,b); }
+// CHECK:     Subunit: cpu.fu_b
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E4, GPR:$op[0], port xyz<GPR>)
+// CHECK:       Resources:
+// CHECK:             use.p(E1,fu_b{2})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 0: GPR
+
+// CHECK: Instruction: abc(GPR op)
+// CHECK:   flat(GPR op)
+// CHECK:   { subunit(a,b); }
+// CHECK:     Subunit: cpu.fu_c
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E4, GPR:$op[0], <cpu_pool{4}[1]-->0>, port abc<LOW>)
+// CHECK:       Resources:
+// CHECK:             use.p(E4,cpu_pool{4}[1]-->0)
+// CHECK:             use.p(E1,fu_c{3})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 0: LOW
+
+// CHECK: Instruction: abc(GPR op)
+// CHECK:   flat(GPR op)
+// CHECK:   { subunit(a,b); }
+// CHECK:     Subunit: cpu.fu_c
+// CHECK:       Operand references:
+// CHECK:       ===>  use.p(E4, GPR:$op[0], port xyz<GPR>)
+// CHECK:       Resources:
+// CHECK:             use.p(E1,fu_c{3})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+// CHECK:             operand 0: GPR
+

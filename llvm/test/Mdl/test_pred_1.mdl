@@ -1,0 +1,177 @@
+//-----------------------------------------------------------------------------
+// Check predicate definitions. This file just checks the errors that are
+// detected during parsing.  Semantic errors are only checked when the
+// predicate is actually used, so we do that in a separate test.
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test_predicates;
+
+cpu cpu { func_unit unit unit(); }
+func_unit unit() { subunit sub(); }
+subunit sub() { latency lat(); }
+latency lat() { if pany { def(E1, $op1); } }
+
+register R[0..15];
+register_class GPR { r[0..15] }
+operand IMM() {}
+instruction add(GPR op1, GPR op2, IMM op3) {}
+instruction sub(GPR op1, GPR op2, IMM op3) {}
+instruction xor(GPR op1, GPR op2, IMM op3) {}
+
+//-----------------------------------------------------------------------------
+// Minimal checking is performed when a predicate is parsed.  More semantic
+// checking is lazily done when a predicate is used.  So define a predicate
+// that includes ALL the others.
+//-----------------------------------------------------------------------------
+predicate pany : CheckAny<p1a, p1b, p1c, p1d, p2a, p2b, p3a, p3b, p3c, p3d,
+                          p3e, p3f, p3g, p4, p5, p6, p7, p8a, p8b,
+			  p11a, p11b, p12a, p12b, 
+			  p13a, p13b, p14a, p14b, p14c, p15,
+			  p16a, p16b, p16c, p17a, p17b, p17c>;
+
+
+// CheckNumOperands<int OperandId>;
+predicate p1a : CheckNumOperands<3>;              // ok
+predicate p1b : CheckNumOperands< >;              // no operands
+predicate p1c : CheckNumOperands<>;               // no operands
+predicate p1d : CheckNumOperands<"xxx">;          // Operand count expected
+predicate p1e : CheckNumOperands<XXX>;            // Operand count expected
+predicate p1f : CheckNumOperands<3, 4>;           // Too many operands
+predicate p1f : CheckNumOperands<4>;              // Redefinition
+
+// CheckIsImmOperand<int OperandId>
+predicate p2a : CheckIsImmOperand<3>;             // ok
+predicate p2b : CheckIsImmOperand<3, 4>;          // Too many operands
+predicate p2c : CheckIsImmOperand<xxx>;           // Operand index expected
+predicate p2d : CheckIsImmOperand<"xxx">;         // Operand index expected
+
+// CheckImmOperand<int OperandId>;
+predicate p3a : CheckImmOperand<3>;                 // ok
+predicate p3b : CheckImmOperand<xxx, 4>;            // Operand index expected
+
+// CheckImmOperand<int OperandId, int value>;
+predicate p3c : CheckImmOperand<3, 4>;              // ok
+
+// CheckImmOperand<int OperandId, int value, string func>;
+predicate p3d : CheckImmOperand<3, 4, "Func">;      // ok
+predicate p3e : CheckImmOperand<3, 4, 2>;           // Invalid function
+predicate p3f : CheckImmOperand<3, 4, "Func", 2>;   // Too many operands
+
+// CheckImmOperand<int OperandId, string value, string func>;
+predicate p3g : CheckImmOperand<3, "symbolic-value", "Func">;   // ok
+
+// CheckZeroOperand<int OperandId>;
+predicate p4a : CheckZeroOperand<4>;
+predicate p4b : CheckZeroOperand<xxx>;              // Operand index expected
+predicate p4c : CheckZeroOperand<"xxx">;            // Operand index expected
+predicate p4d : CheckZeroOperand<3, 0>;             // Too many operands
+
+// CheckInvalidRegOperand<int OperandId>;
+predicate p5a : CheckInvalidRegOperand<2>;
+predicate p5b : CheckInvalidRegOperand<xxx>;        // Operand index expected
+predicate p5c : CheckInvalidRegOperand<"xxx">;      // Operand index expected
+
+// CheckIsRegOperand<int OperandId>;
+predicate p6a : CheckIsRegOperand<1>;
+predicate p6b : CheckIsRegOperand<xxx>;             // Operand index expected
+
+// CheckSameRegOperand<int OperandId, int OperandId>
+predicate p7a : CheckSameRegOperand<1, 2>;
+predicate p7b : CheckSameRegOperand<xxx, 2>;         // Operand index expected
+predicate p7c : CheckSameRegOperand<2, xxx>;         // Operand index expected
+predicate p7d : CheckSameRegOperand<xxx, xxx>;       // Operand index expected
+predicate p7e : CheckSameRegOperand<1>;              // Missing argument
+
+// CheckRegOperand<int OperandId, name Register>
+predicate p8a : CheckRegOperand<1, R5>;
+predicate p8b : CheckRegOperand<xxx, R5>;            // Operand index expected
+predicate p8c : CheckRegOperand<1>;                  // Missing argument
+predicate p8d : CheckRegOperand<1, 4>;               // Register name expected
+// CheckRegOperand<int OperandId, name Register, string func>;
+predicate p8e : CheckRegOperand<1, R5, "func">;
+predicate p8f : CheckRegOperand<1, R5, 1>;           // Function expected
+
+predicate p9 : TruePred;
+predicate p10 : FalsePred;
+
+// CheckAny<predicate Pred*>;
+predicate p11a : CheckAny<p1a>;
+predicate p11b : CheckAny<p1a, p2a, p3a>;
+predicate p11b : CheckAny<p1a, 1, p3a>;              // predicate expected
+
+// CheckAll<predicate Pred*>;
+predicate p12a : CheckAll<p1a>;
+predicate p12b : CheckAll<p1a, p2a, p3a>;
+
+// CheckNot<predicate Pred>;
+predicate p13a : CheckNot<p1a>;
+predicate p13b : CheckNot<1>;                        // predicate expected
+predicate p13d : CheckNot<error>;                    // undefined predicate
+
+// CheckOpcode<opcode+>;
+predicate p14a: CheckOpcode<add>;
+predicate p14b: CheckOpcode<add, sub, xor>;
+predicate p14c : CheckOpcode<error>;                 // undefined opcode
+
+// OpcodeSwitchStatement<ReturnOrCase+>;
+// OpcodeSwitchCase<ReturnOrCase+>;
+// ReturnStatement<Pred>
+predicate p15: OpcodeSwitchStatement<
+                    OpcodeSwitchCase<[add, xor], ReturnStatement<p1>>,
+                    OpcodeSwitchCase<[sub], ReturnStatement<p2>>,
+                    ReturnStatement<p3a>>;
+
+// CheckFunctionPredicate<string MCFunc, string MIFunc>
+predicate p16a : CheckFunctionPredicate<"MCFunc", "MIFunc">;
+predicate p16b : CheckFunctionPredicate<"MCFunc">;                  // Error
+predicate p16c : CheckFunctionPredicate<"MCFunc", "x", "y">;        // Error
+predicate p16d : CheckFunctionPredicate<xxx, "x", "y">;             // Error
+predicate p16e : CheckFunctionPredicate<1, "x">;                    // Error
+predicate p16f : CheckFunctionPredicate<"MCFunc", xxx>;             // Error
+predicate p16g : CheckFunctionPredicate<"MCFunc", 1>;               // Error
+
+// CheckFunctionPredicateWithTII<string MCFunc, string MIFunc [, string TII]>
+predicate p17a : CheckFunctionPredicateWithTII<"MCFunc", "MIFunc", "TII">;
+predicate p17b : CheckFunctionPredicateWithTII<"MCFunc", "MIFunc">;  // OK
+predicate p17c : CheckFunctionPredicateWithTII<"MCFunc">;            // Error
+
+// CHECK: test_pred_1.mdl:36:17 Missing operands (1 expected)
+// CHECK: test_pred_1.mdl:37:17 Missing operands (1 expected)
+// CHECK: test_pred_1.mdl:38:34 Operand count expected
+// CHECK: test_pred_1.mdl:39:34 Operand count expected
+// CHECK: test_pred_1.mdl:40:17 Extra operands (1 expected)
+// CHECK: test_pred_1.mdl:41:17 Redefinition of predicate: p1f
+// CHECK: test_pred_1.mdl:45:17 Extra operands (1 expected)
+// CHECK: test_pred_1.mdl:46:35 Operand index expected
+// CHECK: test_pred_1.mdl:47:35 Operand index expected
+// CHECK: test_pred_1.mdl:51:33 Operand index expected
+// CHECK: test_pred_1.mdl:58:39 Predicate function name expected
+// CHECK: test_pred_1.mdl:59:17 Extra operands (3 expected)
+// CHECK: test_pred_1.mdl:66:34 Operand index expected
+// CHECK: test_pred_1.mdl:67:34 Operand index expected
+// CHECK: test_pred_1.mdl:68:17 Extra operands (1 expected)
+// CHECK: test_pred_1.mdl:72:40 Operand index expected
+// CHECK: test_pred_1.mdl:73:40 Operand index expected
+// CHECK: test_pred_1.mdl:77:35 Operand index expected
+// CHECK: test_pred_1.mdl:81:37 Operand index expected
+// CHECK: test_pred_1.mdl:82:40 Operand index expected
+// CHECK: test_pred_1.mdl:83:37 Operand index expected
+// CHECK: test_pred_1.mdl:83:42 Operand index expected
+// CHECK: test_pred_1.mdl:84:17 Missing operands (2 expected)
+// CHECK: test_pred_1.mdl:88:33 Operand index expected
+// CHECK: test_pred_1.mdl:89:17 Missing operands (2 expected)
+// CHECK: test_pred_1.mdl:90:36 Register name expected
+// CHECK: test_pred_1.mdl:93:40 Predicate function name expected
+// CHECK: test_pred_1.mdl:101:32 Predicate expression expected
+// CHECK: test_pred_1.mdl:101:18 Redefinition of predicate: p11b
+// CHECK: test_pred_1.mdl:109:27 Predicate expression expected
+// CHECK: test_pred_1.mdl:127:18 Missing operands (2 expected)
+// CHECK: test_pred_1.mdl:128:18 Extra operands (2 expected)
+// CHECK: test_pred_1.mdl:129:41 MC function expected
+// CHECK: test_pred_1.mdl:129:18 Extra operands (2 expected)
+// CHECK: test_pred_1.mdl:130:41 MC function expected
+// CHECK: test_pred_1.mdl:131:51 MI function expected
+// CHECK: test_pred_1.mdl:132:51 MI function expected
+// CHECK: test_pred_1.mdl:137:18 Missing operands (2 expected)
+// CHECK: Errors found, aborting

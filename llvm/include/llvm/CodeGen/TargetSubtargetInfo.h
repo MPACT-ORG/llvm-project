@@ -21,6 +21,7 @@
 #include "llvm/CodeGen/SchedulerRegistry.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MDLInfo.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/Compiler.h"
 #include <memory>
@@ -70,7 +71,8 @@ protected: // Can only create subclasses...
                       const MCWriteProcResEntry *WPR,
                       const MCWriteLatencyEntry *WL,
                       const MCReadAdvanceEntry *RA, const InstrStage *IS,
-                      const unsigned *OC, const unsigned *FP);
+                      const unsigned *OC, const unsigned *FP,
+                      const mdl::CpuTableDef *MDL = nullptr);
 
 public:
   // AntiDepBreakMode - Type of anti-dependence breaking that should

@@ -12,8 +12,12 @@ tablegen(LLVM LanaiGenMCCodeEmitter.inc -gen-emitter)
 tablegen(LLVM LanaiGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM LanaiGenSDNodeInfo.inc -gen-sd-node-info)
 tablegen(LLVM LanaiGenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM Lanai.txt -print-records)
 
 add_public_tablegen_target(LanaiCommonTableGen)
+
+##### Build the MDL components for this processor (if selected)
+buildmdl(Lanai Lanai Lanai)
 
 add_llvm_target(LanaiCodeGen
   LanaiAsmPrinter.cpp

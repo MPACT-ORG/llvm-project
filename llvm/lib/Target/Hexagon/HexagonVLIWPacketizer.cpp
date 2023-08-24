@@ -42,6 +42,7 @@
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/MC/MCInstrDesc.h"
+#include "llvm/MC/MDLInfo.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -284,9 +285,15 @@ bool HexagonPacketizerList::canReserveResourcesForConstExt() {
 // return true, otherwise, return false.
 bool HexagonPacketizerList::tryAllocateResourcesForConstExt(bool Reserve) {
   auto *ExtMI = MF.CreateMachineInstr(HII->get(Hexagon::A4_ext), DebugLoc());
-  bool Avail = ResourceTracker->canReserveResources(*ExtMI);
+  bool Avail = canReserveResources(*ExtMI);
   if (Reserve && Avail)
-    ResourceTracker->reserveResources(*ExtMI);
+    reserveResources(*ExtMI);
+  // TODO-MDL: In the MDL context, the bundle object maintains a pointer to
+  // each object in the bundle, so we can't delete the instruction!  This will
+  // leak some of these, so it might be a good idea to reuse a single copy of
+  // the A4_ext instruction.
+  if (Reserve && Avail && MF.getSubtarget().hasMdlModel())
+    return Avail;
   MF.deleteMachineInstr(ExtMI);
   return Avail;
 }
@@ -883,7 +890,7 @@ bool HexagonPacketizerList::canPromoteToDotNew(const MachineInstr &MI,
     HII->getDotNewPredOp(MI, MBPI);
   const MCInstrDesc &D = HII->get(NewOpcode);
   MachineInstr *NewMI = MF.CreateMachineInstr(D, DebugLoc());
-  bool ResourcesAvailable = ResourceTracker->canReserveResources(*NewMI);
+  bool ResourcesAvailable = canReserveResources(*NewMI);
   MF.deleteMachineInstr(NewMI);
   if (!ResourcesAvailable)
     return false;
@@ -1048,7 +1055,10 @@ bool HexagonPacketizerList::ignorePseudoInstruction(const MachineInstr &MI,
     return false;
 
   // We check if MI has any functional units mapped to it. If it doesn't,
-  // we ignore the instruction.
+  // we ignore the instruction. For MDL, this is effectively having a subunit.
+  if (HazardRec && MF.getSubtarget().hasInstrMdlModel())
+    return !MF.getSubtarget().hasInstrMdlModel(MI.getOpcode());
+
   const MCInstrDesc& TID = MI.getDesc();
   auto *IS = ResourceTracker->getInstrItins()->beginStage(TID.getSchedClass());
   return !IS->getUnits();
@@ -1715,7 +1725,7 @@ HexagonPacketizerList::addToPacket(MachineInstr &MI) {
     CurrentPacketMIs.push_back(&MI);
     return MII;
   }
-  assert(ResourceTracker->canReserveResources(MI));
+  assert(canReserveResources(MI));
 
   bool ExtMI = HII->isExtended(MI) || HII->isConstExtended(MI);
   bool Good = true;
@@ -1726,14 +1736,14 @@ HexagonPacketizerList::addToPacket(MachineInstr &MI) {
     // Either of them can require a constant extender. Try to add both to
     // the current packet, and if that fails, end the packet and start a
     // new one.
-    ResourceTracker->reserveResources(MI);
+    reserveResources(MI);
     if (ExtMI)
       Good = tryAllocateResourcesForConstExt(true);
 
     bool ExtNvjMI = HII->isExtended(NvjMI) || HII->isConstExtended(NvjMI);
     if (Good) {
-      if (ResourceTracker->canReserveResources(NvjMI))
-        ResourceTracker->reserveResources(NvjMI);
+      if (canReserveResources(NvjMI))
+        reserveResources(NvjMI);
       else
         Good = false;
     }
@@ -1742,14 +1752,14 @@ HexagonPacketizerList::addToPacket(MachineInstr &MI) {
 
     if (!Good) {
       endPacket(MBB, MI);
-      assert(ResourceTracker->canReserveResources(MI));
-      ResourceTracker->reserveResources(MI);
+      assert(canReserveResources(MI));
+      reserveResources(MI);
       if (ExtMI) {
         assert(canReserveResourcesForConstExt());
         tryAllocateResourcesForConstExt(true);
       }
-      assert(ResourceTracker->canReserveResources(NvjMI));
-      ResourceTracker->reserveResources(NvjMI);
+      assert(canReserveResources(NvjMI));
+      reserveResources(NvjMI);
       if (ExtNvjMI) {
         assert(canReserveResourcesForConstExt());
         reserveResourcesForConstExt();
@@ -1760,7 +1770,7 @@ HexagonPacketizerList::addToPacket(MachineInstr &MI) {
     return MII;
   }
 
-  ResourceTracker->reserveResources(MI);
+  reserveResources(MI);
   if (ExtMI && !tryAllocateResourcesForConstExt(true)) {
     endPacket(MBB, MI);
     if (PromotedToDotNew)
@@ -1769,7 +1779,7 @@ HexagonPacketizerList::addToPacket(MachineInstr &MI) {
       useCalleesSP(MI);
       GlueAllocframeStore = false;
     }
-    ResourceTracker->reserveResources(MI);
+    reserveResources(MI);
     reserveResourcesForConstExt();
   }
 
@@ -1781,12 +1791,18 @@ void HexagonPacketizerList::endPacket(MachineBasicBlock *MBB,
                                       MachineBasicBlock::iterator EndMI) {
   // Replace VLIWPacketizerList::endPacket(MBB, EndMI).
   LLVM_DEBUG({
-    if (!CurrentPacketMIs.empty()) {
+    if (!CurrentPacketMIs.empty() && !HazardRec) {
       dbgs() << "Finalizing packet:\n";
       unsigned Idx = 0;
       for (MachineInstr *MI : CurrentPacketMIs) {
         unsigned R = ResourceTracker->getUsedResources(Idx++);
         dbgs() << " * [res:0x" << utohexstr(R) << "] " << *MI;
+      }
+    }
+    if (!CurrentPacketMIs.empty() && HazardRec) {
+      dbgs() << "Finalizing packet:\n";
+      for (MachineInstr *MI : CurrentPacketMIs) {
+        dbgs() << " * [res:0x] " << *MI;
       }
     }
   });
@@ -1819,7 +1835,7 @@ void HexagonPacketizerList::endPacket(MachineBasicBlock *MBB,
 
   PacketHasDuplex = false;
   PacketHasSLOT0OnlyInsn = false;
-  ResourceTracker->clearResources();
+  clearResources();
   LLVM_DEBUG(dbgs() << "End packet\n");
 }
 
@@ -1859,7 +1875,7 @@ bool HexagonPacketizerList::shouldAddToPacket(const MachineInstr &MI) {
       // with the original opcode.
       MachineInstr &MIRef = const_cast<MachineInstr &>(MI);
       MIRef.setDesc(HII->get(Opcode));
-      return ResourceTracker->canReserveResources(MIRef);
+      return canReserveResources(MIRef);
     }
   }
 

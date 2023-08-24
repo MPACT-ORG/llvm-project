@@ -25,6 +25,7 @@
 #include "llvm/CodeGen/DFAPacketizer.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/CodeGen/MDLHazardRecognizer.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
@@ -117,15 +118,22 @@ void DefaultVLIWScheduler::schedule() {
 
 VLIWPacketizerList::VLIWPacketizerList(MachineFunction &mf,
                                        MachineLoopInfo &mli, AAResults *aa)
-    : MF(mf), TII(mf.getSubtarget().getInstrInfo()), AA(aa) {
+    : MF(mf), TII(mf.getSubtarget().getInstrInfo()), AA(aa),
+      HazardRec(nullptr) {
   ResourceTracker = TII->CreateTargetScheduleState(MF.getSubtarget());
   ResourceTracker->setTrackResources(true);
   VLIWScheduler = new DefaultVLIWScheduler(MF, mli, AA);
+
+  auto &STI = MF.getSubtarget();
+  if (STI.hasMdlModel())
+    HazardRec = new MDLHazardRecognizer(&STI, true, "machine-scheduler-mdl");
 }
 
 VLIWPacketizerList::~VLIWPacketizerList() {
   delete VLIWScheduler;
   delete ResourceTracker;
+  if (HazardRec)
+    delete HazardRec;
 }
 
 // End the current packet, bundle packet instructions and reset DFA state.
@@ -134,10 +142,16 @@ void VLIWPacketizerList::endPacket(MachineBasicBlock *MBB,
   LLVM_DEBUG({
     if (!CurrentPacketMIs.empty()) {
       dbgs() << "Finalizing packet:\n";
-      unsigned Idx = 0;
-      for (MachineInstr *MI : CurrentPacketMIs) {
-        unsigned R = ResourceTracker->getUsedResources(Idx++);
-        dbgs() << " * [res:0x" << utohexstr(R) << "] " << *MI;
+      if (HazardRec) {
+        for (MachineInstr *MI : CurrentPacketMIs)
+          dbgs() << " * " << *MI;
+        HazardRec->getResSet()->dump();
+      } else {
+        unsigned Idx = 0;
+        for (MachineInstr *MI : CurrentPacketMIs) {
+          unsigned R = ResourceTracker->getUsedResources(Idx++);
+          dbgs() << " * [res:0x" << utohexstr(R) << "] " << *MI;
+        }
       }
     }
   });
@@ -146,7 +160,10 @@ void VLIWPacketizerList::endPacket(MachineBasicBlock *MBB,
     finalizeBundle(*MBB, MIFirst.getIterator(), MI.getInstrIterator());
   }
   CurrentPacketMIs.clear();
-  ResourceTracker->clearResources();
+  if (HazardRec)
+    HazardRec->clearResources();
+  else
+    ResourceTracker->clearResources();
   LLVM_DEBUG(dbgs() << "End packet\n");
 }
 
@@ -199,8 +216,8 @@ void VLIWPacketizerList::PacketizeMIs(MachineBasicBlock *MBB,
 
     // Ask DFA if machine resource is available for MI.
     LLVM_DEBUG(dbgs() << "Checking resources for adding MI to packet " << MI);
+    bool ResourceAvail = canReserveResources(MI);
 
-    bool ResourceAvail = ResourceTracker->canReserveResources(MI);
     LLVM_DEBUG({
       if (ResourceAvail)
         dbgs() << "  Resources are available for adding MI to packet\n";

@@ -1,0 +1,45 @@
+//---------------------------------------------------------------------------
+// Check that we generate error messages for recursive template bases.
+//---------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+family recursive_template_base_test;
+
+phases x { E1, E2, E3, E4 };
+
+cpu cpu { }
+
+// These are all recursive.
+func_unit f0:f0() { }        // self-recursive
+func_unit f1:f2() { }
+func_unit f2:f3() { }
+func_unit f3:f4() { }
+func_unit f4:f1() { }
+
+subunit s0:s0() { }          // self-recursive
+subunit s1:s2() { }
+subunit s2:s3() { }
+subunit s3:s4() { }
+subunit s4:s1() { }
+subunit s5:s1() { }          // not recursive!  (although s1 is recursive)
+
+// Recursive latency templates are harmless, but we still check for them.
+latency l0:l0() { }
+latency l1:l2() { }
+latency l2:l3() { }
+latency l3:l1:l2() { }
+
+// CHECK: test_base_1.mdl:12:1 Recursively defined functional unit template: f0
+// CHECK: test_base_1.mdl:13:1 Recursively defined functional unit template: f1
+// CHECK: test_base_1.mdl:14:1 Recursively defined functional unit template: f2
+// CHECK: test_base_1.mdl:15:1 Recursively defined functional unit template: f3
+// CHECK: test_base_1.mdl:16:1 Recursively defined functional unit template: f4
+// CHECK: test_base_1.mdl:18:1 Recursively defined subunit template: s0
+// CHECK: test_base_1.mdl:19:1 Recursively defined subunit template: s1
+// CHECK: test_base_1.mdl:20:1 Recursively defined subunit template: s2
+// CHECK: test_base_1.mdl:21:1 Recursively defined subunit template: s3
+// CHECK: test_base_1.mdl:22:1 Recursively defined subunit template: s4
+// CHECK: test_base_1.mdl:26:1 Recursively defined latency template: l0
+// CHECK: test_base_1.mdl:27:1 Recursively defined latency template: l1
+// CHECK: test_base_1.mdl:28:1 Recursively defined latency template: l2
+// CHECK: test_base_1.mdl:29:1 Recursively defined latency template: l3
+// CHECK: Errors found, aborting

@@ -14,7 +14,9 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/MachineScheduler.h"
+#include "llvm/CodeGen/ScheduleHazardRecognizer.h"
 #include "llvm/CodeGen/TargetSchedule.h"
+#include "llvm/MC/MDLInfo.h"
 #include <limits>
 #include <memory>
 #include <utility>
@@ -36,6 +38,7 @@ protected:
   /// Not limited to VLIW targets per se, but assumes definition of resource
   /// model by a target.
   DFAPacketizer *ResourcesModel;
+  ScheduleHazardRecognizer *HazardRec;
 
   const TargetSchedModel *SchedModel;
 
@@ -46,8 +49,12 @@ protected:
   /// Total packets created.
   unsigned TotalPackets = 0;
 
+  // Information for using MDL-based bundling.
+  mdl::CpuInfo *Cpu; // MDL-based CPU descriptor (or null)
+
 public:
-  VLIWResourceModel(const TargetSubtargetInfo &STI, const TargetSchedModel *SM);
+  VLIWResourceModel(const TargetSubtargetInfo &STI, const TargetSchedModel *SM,
+                    ScheduleHazardRecognizer *HazardRec);
   VLIWResourceModel &operator=(const VLIWResourceModel &other) = delete;
   VLIWResourceModel(const VLIWResourceModel &other) = delete;
   virtual ~VLIWResourceModel();
@@ -58,6 +65,7 @@ public:
   virtual bool isResourceAvailable(SUnit *SU, bool IsTop);
   virtual bool reserveResources(SUnit *SU, bool IsTop);
   unsigned getTotalPackets() const { return TotalPackets; }
+
   size_t getPacketInstCount() const { return Packet.size(); }
   bool isInPacket(SUnit *SU) const { return is_contained(Packet, SU); }
 
@@ -243,7 +251,8 @@ public:
 protected:
   virtual VLIWResourceModel *
   createVLIWResourceModel(const TargetSubtargetInfo &STI,
-                          const TargetSchedModel *SchedModel) const;
+                          const TargetSchedModel *SchedModel,
+                          ScheduleHazardRecognizer *HazardRec) const;
 
   SUnit *pickNodeBidrectional(bool &IsTopNode);
 

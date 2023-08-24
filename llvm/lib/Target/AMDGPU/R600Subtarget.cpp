@@ -14,6 +14,7 @@
 #include "R600Subtarget.h"
 #include "AMDGPUSelectionDAGInfo.h"
 #include "MCTargetDesc/R600MCTargetDesc.h"
+#include "llvm/Config/config.h"
 
 using namespace llvm;
 
@@ -23,10 +24,18 @@ using namespace llvm;
 #define GET_SUBTARGETINFO_CTOR
 #include "R600GenSubtargetInfo.inc"
 
+// Include definitions associated with the MDL description.
+#if ENABLE_MDL_USE
+#include "R600GenMdlInfo.h"
+#define R600CpuTable &R600::CpuTable
+#else
+#define R600CpuTable nullptr
+#endif
+
 R600Subtarget::R600Subtarget(const Triple &TT, StringRef GPU, StringRef FS,
                              const TargetMachine &TM)
-    : R600GenSubtargetInfo(TT, GPU, /*TuneCPU*/ GPU, FS), AMDGPUSubtarget(TT),
-      InstrInfo(*this),
+    : R600GenSubtargetInfo(TT, GPU, /*TuneCPU*/ GPU, FS, R600CpuTable),
+      AMDGPUSubtarget(TT), InstrInfo(*this),
       FrameLowering(TargetFrameLowering::StackGrowsUp, getStackAlignment(), 0),
       TLInfo(TM, initializeSubtargetDependencies(TT, GPU, FS)),
       InstrItins(getInstrItineraryForCPU(GPU)) {

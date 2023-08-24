@@ -91,6 +91,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/MC/MDLInfo.h"
 #include <algorithm>
 #include <cassert>
 #include <llvm/Support/raw_ostream.h>
@@ -99,6 +100,9 @@
 #include <vector>
 
 namespace llvm {
+
+using namespace mdl;
+
 namespace impl_detail {
 // FIXME: Remove these declarations once RegisterClassInfo is queryable as an
 // analysis.
@@ -1018,9 +1022,14 @@ public:
                                                    unsigned ReleaseAtCycle,
                                                    unsigned AcquireAtCycle);
 
-  LLVM_ABI std::pair<unsigned, unsigned>
-  getNextResourceCycle(const MCSchedClassDesc *SC, unsigned PIdx,
-                       unsigned ReleaseAtCycle, unsigned AcquireAtCycle);
+  std::pair<unsigned, unsigned> getNextResourceCycle(const MCSchedClassDesc *SC,
+                                                     unsigned PIdx,
+                                                     unsigned ReleaseAtCycle,
+                                                     unsigned AcquireAtCycle);
+  std::tuple<unsigned, unsigned, unsigned>
+     getNextResourceCycle(const PooledResourceRef *Ref,
+                          unsigned ReleaseAtCycle,
+                          unsigned AcquireAtCycle);
 
   bool isUnbufferedGroup(unsigned PIdx) const {
     return SchedModel->getProcResource(PIdx)->SubUnitsIdxBegin &&
@@ -1048,11 +1057,12 @@ public:
 
   LLVM_ABI void incExecutedResources(unsigned PIdx, unsigned Count);
 
-  LLVM_ABI unsigned countResource(const MCSchedClassDesc *SC, unsigned PIdx,
-                                  unsigned Cycles, unsigned ReadyCycle,
-                                  unsigned StartAtCycle);
-
-  LLVM_ABI void bumpNode(SUnit *SU);
+  unsigned countResource(const MCSchedClassDesc *SC, unsigned PIdx,
+                         unsigned Cycles, unsigned Factor,
+                         unsigned StartAtCycle);
+  unsigned countResource(const PooledResourceRef *Ref, unsigned Cycles,
+                         unsigned Factor, unsigned StartAtCycle);
+  void bumpNode(SUnit *SU);
 
   LLVM_ABI void releasePending();
 

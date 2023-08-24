@@ -1,0 +1,76 @@
+//----------------------------------------------------------------------------
+// Test derived operands.
+//----------------------------------------------------------------------------
+// RUN: llvm-mdl --dump_instr %s --output_dir /tmp/ 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { E1, E2 };
+
+register_class GPR { s[0..3] };
+register_class PPR { p[0..3] };
+
+operand i32imm() { type(int32); }
+operand f32imm() { type(float32); }
+
+operand imm : i32imm : f32imm { }       // dual inheritance
+operand immi : i32imm { }               // single inheritance
+operand imm2 : immi  { }                // two-level inheritance
+
+instruction ADD1(GPR d, i32imm x) { subunit(xyz); }
+instruction ADD2(GPR d, f32imm x) { subunit(xyz); }
+
+subunit xyz(resource fun1, fun2, fun3, fun4, fun5) {{
+    use(E1, GPR:$d);
+    use(E1, i32imm:$x, fun1);   // applies to ADD1
+    use(E1, imm2:$x, fun2);     // applies to ADD1
+    use(E1, immi:$x, fun3);     // applies to ADD1
+
+    use(E1, f32imm:$x, fun4);   // applies to ADD2
+    use(E1, imm:$x, fun5);      // applies to ADD1, ADD2
+}}
+
+func_unit func() {
+   resource imm1, imm2, imm3, imm4, imm5;
+   subunit xyz(imm1, imm2, imm3, imm4, imm5);
+}
+
+cpu xyz {
+   func_unit func whatever();
+}
+
+// CHECK:  Instruction info
+// CHECK: ---------------------------------------------------------
+// CHECK: Instruction: ADD1(GPR d, i32imm x)
+// CHECK: 		flat(GPR d, i32imm x)
+// CHECK: 		{ subunit(xyz); }
+// CHECK:     Subunit: xyz.whatever
+// CHECK:       Operand references:
+// CHECK-DAG:       ===>  use.p(E1, GPR:$d[0])
+// CHECK-DAG:       ===>  use.p(E1, i32imm:$x[1], <imm1{2}-->1>)
+// CHECK-DAG:       ===>  use.p(E1, i32imm:$x[1], <imm2{3}-->1>)
+// CHECK-DAG:       ===>  use.p(E1, i32imm:$x[1], <imm3{4}-->1>)
+// CHECK-DAG:       ===>  use.p(E1, i32imm:$x[1], <imm5{6}-->1>)
+// CHECK:       Resources:
+// CHECK-DAG:             use.p(E1,imm2{3}-->1)
+// CHECK-DAG:             use.p(E1,imm5{6}-->1)
+// CHECK-DAG:             use.p(E1,imm3{4}-->1)
+// CHECK-DAG:             use.p(E1,imm1{2}-->1)
+// CHECK-DAG:             use.p(E1,whatever{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
+
+// CHECK: Instruction: ADD2(GPR d, f32imm x)
+// CHECK: 		flat(GPR d, f32imm x)
+// CHECK: 		{ subunit(xyz); }
+// CHECK:     Subunit: xyz.whatever
+// CHECK-DAG:       Operand references:
+// CHECK-DAG:       ===>  use.p(E1, f32imm:$x[1], <imm5{6}-->1>)
+// CHECK-DAG:       ===>  use.p(E1, GPR:$d[0])
+// CHECK-DAG:       ===>  use.p(E1, f32imm:$x[1], <imm4{5}-->1>)
+// CHECK:       Resources:
+// CHECK-DAG:             use.p(E1,imm5{6}-->1)
+// CHECK-DAG:             use.p(E1,imm4{5}-->1)
+// CHECK-DAG:             use.p(E1,whatever{1})
+// CHECK:       Pool Resources:
+// CHECK:       Architectural Register Constraints:
