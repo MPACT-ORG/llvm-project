@@ -1,0 +1,42 @@
+//----------------------------------------------------------------------------
+// Test derived operands.
+//----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { E1, E2 };
+
+register_class GPR { s[0..31] };
+register_class PPR { p[0..31] };
+
+operand i32imm() { type(int32); }
+operand f32imm() { type(float32); }
+
+operand imm : i32imm : f32imm { }       // dual inheritance
+operand immi : i32imm { }               // single inheritance
+operand imm2 : immi  { }                // two-level inheritance
+
+operand recur1 : recur2 { }             // pair of recurrent operands
+operand recur2 : recur1 { }
+
+operand op1 : op2 : op3 { }             // ambiguous derivations
+operand op2 : immi { }
+operand op3 : immi { }
+
+instruction ADD1(GPR d, i32imm x) { subunit(xyz); }
+instruction ADD2(GPR d, f32imm x) { subunit(xyz); }
+
+subunit xyz(resource fun1, fun2, fun3, fun4) {{
+    use(E1, GPR:$d);
+    use(E1, i32imm:$x, fun1);   // applies to ADD1
+    use(E1, imm2:$x, fun2);     // applies to ADD1
+    use(E1, immi:$x, fun3);     // applies to ADD1
+
+    use(E1, f32imm:$x, fun3);   // applies to ADD2
+    use(E1, imm:$x, fun4);      // applies to ADD1, ADD2
+}}
+
+// CHECK: test_opnd_6.mdl:20:1 Recursively defined operand: recur1
+// CHECK: test_opnd_6.mdl:21:1 Recursively defined operand: recur2
+// CHECK: test_opnd_6.mdl:23:1 Ambiguous operand derivation: op1->i32imm

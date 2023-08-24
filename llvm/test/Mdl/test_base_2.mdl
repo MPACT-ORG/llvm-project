@@ -1,0 +1,39 @@
+//---------------------------------------------------------------------------
+// Check that we generate error messages for duplicate template bases.
+//---------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family duplicate_template_base_test;
+
+phases x { E1, E2, E3, E4 };
+
+cpu cpu {
+}
+
+func_unit f1:fb1:fb2:fb3:fb2() { }    // fb2 is a duplicate base
+func_unit f2:fb1:fb4:fb5() { }        // fb4 is a duplicate base
+func_unit f3:fb5:fb6() { }            // fb4 is a duplicate base
+
+func_unit fb1() { }
+func_unit fb2() { }
+func_unit fb3() { }
+func_unit fb4() { }
+func_unit fb5:fb4() { }
+func_unit fb6:fb4() { }
+
+// Duplicate subunit bases are harmless, but we check for them anyway.
+// There may be a reason to allow these.
+subunit s1:sb1:sb2:sb3:sb2() { }      // sb2 is a duplicate base
+subunit s2:sb4:sb5() { }              // sb6 is a duplicate base
+
+subunit sb1() {}
+subunit sb2() {}
+subunit sb3() {}
+subunit sb4:sb6() {}
+subunit sb5:sb6() {}
+subunit sb6() {}
+
+
+// CHECK: test_base_2.mdl:26:1 Subunit template s1 has duplicate bases: sb2
+// CHECK: test_base_2.mdl:27:1 Subunit template s2 has duplicate bases: sb6
+// CHECK: Errors found, aborting

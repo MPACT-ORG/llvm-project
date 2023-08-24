@@ -1,0 +1,44 @@
+//-----------------------------------------------------------------------------
+// Check template instantiations.
+// - Check for undefined ports/resources/register classes
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test_predicates;
+
+phases x { E1, E2, E3 };
+
+cpu cpu {
+   issue(E1) s1, s2;
+   resource group { a, b, c };
+   resource scalar, array[10];
+   func_unit unit good(GPR, group, array, group.b);
+   func_unit unit bad(GPR2, foo, bar, scalar);   // Ports & resources not found
+   func_unit unit slot(GPR, group, array, scalar) -> s3;
+}
+
+func_unit unit(class regs; resource group, array, scalar) {
+   port port<regs>(group);
+   subunit sub(port, group, array, scalar);
+   subunit sub(port, group, array, group.a);
+}
+subunit sub(port port; resource group, array, scalar) {
+   latency lat(port, array, group, scalar);
+   latency lat(badport, array, group, scalar);     // badport not found
+   latency lat(port, badresource, group, scalar);  // badresource not found
+}
+latency lat(port port; resource array, group, scalar) { }
+
+register R[0..15];
+register_class GPR { r[0..15] }
+operand IMM() {}
+
+instruction add(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction sub(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction xor(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+
+// CHECK: test_template_4.mdl:27:16 Port argument not found: badport
+// CHECK: test_template_4.mdl:16:23 Register class argument not found: GPR2
+// CHECK: test_template_4.mdl:16:29 Resource argument not found: foo
+// CHECK: test_template_4.mdl:16:34 Resource argument not found: bar
+// CHECK: Errors found, aborting

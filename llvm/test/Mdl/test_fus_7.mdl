@@ -1,0 +1,28 @@
+//-----------------------------------------------------------------------------
+// Check for undefined functional units in forward statements.
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test;
+
+protected phases test { F1, E[1..20] };
+
+cpu cpu {
+   func_unit XYZZY fu1();
+   forward F1 -> F2;                       // LHS is invalid FU
+   forward XYZZY -> F2;                    // RHS is invalid FU
+}
+
+func_unit XYZZY() { subunit a(); }
+subunit a() { latency a(); }
+latency a() { def(E3/(10-100/10), $op); }      // division by 0
+
+register r[0..16];
+register_class GPR { r[0..16] };
+instruction abc(GPR op) { subunit(a); }
+
+
+// CHECK: test_fus_7.mdl:18:19 Invalid phase: divide by zero
+// CHECK: test_fus_7.mdl:12:12 Invalid functional unit: F1
+// CHECK: test_fus_7.mdl:13:21 Invalid functional unit: F2
+// CHECK: Errors found, aborting

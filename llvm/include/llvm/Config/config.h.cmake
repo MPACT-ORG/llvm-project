@@ -16,6 +16,9 @@
 /* Define to 1 to enable crash overrides, and to 0 otherwise. */
 #cmakedefine01 ENABLE_CRASH_OVERRIDES
 
+/* Define to 1 to enable usage of MDL infrastructure, and to 0 otherwise. */
+#cmakedefine01 ENABLE_MDL_USE
+
 /* Define to 1 to enable crash memory dumps, and to 0 otherwise. */
 #cmakedefine01 LLVM_ENABLE_CRASH_DUMPS
 

@@ -1,0 +1,40 @@
+//-----------------------------------------------------------------------------
+// Check template instantiations.
+// - Check types of template arguments
+//-----------------------------------------------------------------------------
+// RUN: not llvm-mdl %s 2>&1 | FileCheck %s
+
+family test_predicates;
+
+phases x { E1, E2, E3 };
+
+cpu cpu {
+   resource group { a, b, c };
+   resource array[10];
+   func_unit unit good(GPR, group, array);
+   func_unit unit wrong(group, GPR, GPR);              // Wrong arguments
+}
+
+func_unit unit(class regs; resource group, array) {
+   port port<regs>(group);
+   subunit sub(port, group, array);
+}
+subunit sub(port port; resource group, array) {
+   latency lat(port, array);
+   latency lat(badport, array);              // badport not found
+   latency lat(port, badresource);           // badresource not found
+}
+latency lat(port port; resource whatevs) { def(E1, $op1); }
+
+register R[0..15];
+register_class GPR { r[0..15] }
+operand IMM() {}
+instruction add(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction sub(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+instruction xor(GPR op1, GPR op2, IMM op3) { subunit(sub); }
+
+// CHECK: test_template_3.mdl:24:16 Port argument not found: badport
+// CHECK: test_template_3.mdl:15:25 Register class argument not found: group
+// CHECK: test_template_3.mdl:15:32 Resource argument not found: GPR
+// CHECK: test_template_3.mdl:15:37 Resource argument not found: GPR
+// CHECK: Errors found, aborting

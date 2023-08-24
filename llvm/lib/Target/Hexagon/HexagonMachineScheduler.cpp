@@ -38,8 +38,9 @@ bool HexagonVLIWResourceModel::hasDependence(const SUnit *SUd,
 }
 
 VLIWResourceModel *HexagonConvergingVLIWScheduler::createVLIWResourceModel(
-    const TargetSubtargetInfo &STI, const TargetSchedModel *SchedModel) const {
-  return new HexagonVLIWResourceModel(STI, SchedModel);
+    const TargetSubtargetInfo &STI, const TargetSchedModel *SchedModel,
+    ScheduleHazardRecognizer *HazardRec) const {
+  return new HexagonVLIWResourceModel(STI, SchedModel, HazardRec);
 }
 
 int HexagonConvergingVLIWScheduler::SchedulingCost(ReadyQueue &Q, SUnit *SU,
