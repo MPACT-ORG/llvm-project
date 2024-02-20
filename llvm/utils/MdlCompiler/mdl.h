@@ -28,7 +28,6 @@
 #include <utility>
 #include <vector>
 
-#include "antlr4-runtime.h"
 #include "llvm/MC/MCSchedule.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/Errc.h"
@@ -257,30 +256,29 @@ inline std::string based_fu_instance(const IdList *bases) {
 //----------------------------------------------------------------------------
 class MdlItem {
 public:
-  explicit MdlItem(antlr4::ParserRuleContext *ctx)
-      : line_(ctx->getStart()->getLine()),
-        column_(ctx->getStart()->getCharPositionInLine()) {}
-  explicit MdlItem(antlr4::ParserRuleContext *ctx, std::string &file_name)
-      : line_(ctx->getStart()->getLine()),
-        column_(ctx->getStart()->getCharPositionInLine()),
-        file_name_(file_name) {}
-  MdlItem(const MdlItem &item)
-      : line_(item.line()), column_(item.column()),
-        file_name_(item.file_name_) {}
+  MdlItem(std::string *file_name, int line, int column) :
+    file_name_(file_name), line_(line), column_(column) {}
+  // MdlItem(const MdlItem &item)
+  //   : file_name_(item.file_name_), line_(item.line_), column_(item.column_) {}
   MdlItem() : line_(0), column_(0) {}
 
+  const std::string file_name() const { return *file_name_; }
   int line() const { return line_; }
   int column() const { return column_; }
-  const std::string &file_name() const { return file_name_; }
   std::string Location() const {
-    return llvm::formatv("{0}:{1}:{2}", file_name_, std::to_string(line_),
+    return llvm::formatv("{0}:{1}:{2}", *file_name_, std::to_string(line_),
                          std::to_string(column_ + 1));
+  }
+  void SetLocation(std::string *file_name, int line, int column) {
+    file_name_ = file_name;
+    line_ = line;
+    column_ = column;
   }
 
 private:
-  int line_;   // Lexical line number of this item.
-  int column_; // Lexical column number of this item.
-  std::string file_name_;
+  std::string *file_name_ = nullptr;
+  int line_ = 0;                       // Lexical line number of this item.
+  int column_ = 0;                     // Lexical column number of this item.
 };
 
 //----------------------------------------------------------------------------
@@ -554,7 +552,7 @@ private:
 // For each pooled reference, keep track of how many resources were requested.
 using SubPools = std::map<SubPool, SubPoolInfo>;
 
-enum class GroupType { kUseAll, kUseSingle };
+enum class GroupType { kUseAll, kUseSingle, kUseNull };
 
 //----------------------------------------------------------------------------
 // Definition of a single resource object defined in the MDL.
@@ -1703,7 +1701,7 @@ private:
 //----------------------------------------------------------------------------
 class Reference : public MdlItem {
 public:
-  // This constructor is used by visitors to create a new basic reference.
+  // This constructor is used by the parser to create a new basic reference.
   Reference(const MdlItem &item, IdList *predicates, RefType ref_type,
             PhaseExpr *phase_expr, int repeat, int delay, int use_cycles,
             OperandRef *operand, ResourceRefList *resources)
@@ -1798,7 +1796,9 @@ public:
   int repeat() const { return repeat_; }
   int delay() const { return delay_; }
   int micro_ops() const { return micro_ops_; }
+  void set_micro_ops(int micro_ops) { micro_ops_ = micro_ops; }
   int fu_flags() const { return fu_flags_; }
+  void set_fu_flags(RefFlags::Item fu_flags) { fu_flags_ = fu_flags; }
   bool is_unbuffered() const { return buffer_size_ == 0; }
   bool is_in_order() const { return buffer_size_ == 1; }
   bool is_out_of_order() const { return buffer_size_ > 1; }
@@ -2782,7 +2782,7 @@ public:
   // If the predicate maps to a name, recur on that name.
   PredExpr *LookupPredicate(PredExpr *pred);
 
-  void EnterPredicate(std::string &name, PredExpr *pred) {
+  void EnterPredicate(const std::string &name, PredExpr *pred) {
     if (!IsValidInstructionPredicate(name)) {
       predicate_table_[name] = pred;
       return;
