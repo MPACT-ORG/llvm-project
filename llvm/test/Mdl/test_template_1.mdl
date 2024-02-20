@@ -59,8 +59,8 @@ instruction xxx(GPR op1, ..., GPR op2) { subunit(sub); }    // Bad ellipsis
 
 // CHECK: test_template_1.mdl:39:17 Implicit group definition not allowed
 // CHECK: test_template_1.mdl:46:22 Ellipsis not allowed in operand definitions
-// CHECK: test_template_1.mdl:46:1 Only one type specification allowed
-// CHECK: test_template_1.mdl:47:1 Only one type specification allowed
+// CHECK: test_template_1.mdl:46:42 Only one type specification allowed
+// CHECK: test_template_1.mdl:47:34 Only one type specification allowed
 // CHECK: test_template_1.mdl:50:4 Invalid predicate type: blahblah
 // CHECK: test_template_1.mdl:51:29 Invalid value range: 9..2
 // CHECK: test_template_1.mdl:58:26 Ellipsis must be last declared operand

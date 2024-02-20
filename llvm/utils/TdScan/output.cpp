@@ -501,7 +501,7 @@ std::string cycle_name(int cycle) {
 //    subunit sub_name(resource r0, r1,...) {{      // resources optional
 //       use(E1, r0, r1,...);                       // use any resources
 //       def(...); use(...); ...
-//    }}
+//    }};
 //----------------------------------------------------------------------------
 std::string MachineDescription::FormatItinSubunit(Instruction *inst,
                                                   InstrItineraryData *itin) {
@@ -568,7 +568,7 @@ std::string MachineDescription::FormatItinSubunit(Instruction *inst,
   // subunits between instructions on different models, since a single subunit
   // implicitly describes a model-specific behavior for some set of
   // instructions.
-  out += "}}   // ";
+  out += "}};   // ";
   for (auto model : itin->models())
     out += model + ",";
   out.pop_back();
@@ -688,7 +688,7 @@ std::string SchedMachineModel::Format(MachineDescription *md) {
       out += formatv("  forward {0} -> {1};\n", from, to);
   }
 
-  return out + "}\n\n";
+  return out + "};\n\n";
 }
 
 //----------------------------------------------------------------------------
@@ -853,7 +853,7 @@ std::string ItineraryFuncUnit::FormatTemplate(MachineDescription *md) {
 
   // Write out subunit instances.
   out += FormatSubunitInstances(md, subunits_, res_set);
-  return out + "}\n\n";
+  return out + "};\n\n";
 }
 
 //----------------------------------------------------------------------------
@@ -891,8 +891,8 @@ std::string ProcResource::Format(MachineDescription *md) const {
     return "";
 
   if (!subs.empty())
-    return formatv("func_unit {0}{1}() {{\n{2}\n}\n\n", name_, bases, subs);
-  return formatv("{0}{1}() {{}\n", out, bases);
+    return formatv("func_unit {0}{1}() {{\n{2}\n};\n\n", name_, bases, subs);
+  return formatv("{0}{1}() {{};\n", out, bases);
 }
 
 //---------------------------------------------------------------------------
@@ -945,7 +945,7 @@ std::string Operand::Format() const {
       out += ", ";
     out += opnd;
   }
-  return formatv("operand {0}({1}) {{ type({2}); }\n", name_, out, type_);
+  return formatv("operand {0}({1}) {{ type({2}); };\n", name_, out, type_);
 }
 
 //----------------------------------------------------------------------------
@@ -1026,7 +1026,7 @@ std::string Instruction::Format(bool full_definition) const {
 
   if (!assembly_.empty())
     out += formatv("     // {0}\n", assembly_);
-  return out + "}\n";
+  return out + "};\n";
 }
 
 //----------------------------------------------------------------------------
@@ -1157,7 +1157,7 @@ void MachineDescription::WriteSubunits() {
 
 #ifndef WRITE_SUBUNITS_FOR_EACH_SCHED_MODEL
   for (const auto &[subunit, index] : subunits_)
-    output_arch() << formatv("subunit sub{0}{1}\n", index, subunit);
+    output_arch() << formatv("subunit sub{0}{1};\n", index, subunit);
   output_arch() << "\n";
 #else
   for (auto &[model_name, model] : sched_models_) {
@@ -1169,7 +1169,7 @@ void MachineDescription::WriteSubunits() {
 #endif
 
   for (const auto &[base, index] : subunit_bases_)
-    output_arch() << formatv("subunit base{0}{1}() {{}\n", index, base);
+    output_arch() << formatv("subunit base{0}{1}() {{};\n", index, base);
 }
 
 //----------------------------------------------------------------------------
@@ -1178,7 +1178,7 @@ void MachineDescription::WriteSubunits() {
 void MachineDescription::WriteLatencies() {
   WriteArchHeader("Latency Definitions", latencies_.size());
   for (const auto &[latency, idx] : latencies_)
-    output_arch() << formatv("latency lat{0}() {{{1}}\n", idx, latency);
+    output_arch() << formatv("latency lat{0}() {{{1}};\n", idx, latency);
 }
 
 static std::string PredIndent(int indent) {

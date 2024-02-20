@@ -65,8 +65,8 @@ instruction xor(GPR op1, GPR op2, IMM op3) { subunit(sub); }
 // CHECK: test_refs_1.mdl:35:17 Resource undefined: undefined
 // CHECK: test_refs_1.mdl:36:17 Invalid resource pool index: 12; expected [0..9]
 // CHECK: test_refs_1.mdl:37:17 Invalid resource pool subrange
-// CHECK: test_refs_1.mdl:38:17 Invalid member reference: b
-// CHECK: test_refs_1.mdl:39:17 Resource member not found: x
+// CHECK: test_refs_1.mdl:38:23 Invalid member reference: b
+// CHECK: test_refs_1.mdl:39:23 Resource member not found: x
 // CHECK: test_refs_1.mdl:40:17 Invalid resource allocation size: 5
 // CHECK: test_refs_1.mdl:43:17 Invalid resource allocation size: 2
 // CHECK: test_refs_1.mdl:44:17 Invalid resource allocation size: 2
