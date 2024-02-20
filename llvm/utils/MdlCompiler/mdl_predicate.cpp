@@ -702,8 +702,6 @@ std::string PredExpr::RegOperand(const std::string &family) const {
   PredExpr *index = operands_[0];
   PredExpr *reg = operands_[1];
   auto func = (operands_.size() == 3) ? operands_[2]->value() : "";
-  if (!func.empty())
-    func = func.substr(1, func.length() - 2);
 
   auto getReg = GetOperand(index);
   if (!func.empty())
@@ -727,15 +725,11 @@ std::string PredExpr::ImmOperand() const {
   PredExpr *index = operands_[0];
   PredExpr *value = operands_[1];
   auto func = (operands_.size() == 3) ? operands_[2]->value() : "";
-  if (!func.empty())
-    func = func.substr(1, func.length() - 2);
 
   auto getImm = GetOperand(index);
   if (!func.empty())
     getImm = formatv("{0}({1})", func, getImm);
   auto val = value->value();
-  if (val[0] == '\"')
-    val = val.substr(1, val.length() - 2);
   if (val.empty())
     return formatv("{0}{1}", negate() ? "!" : "", getImm);
 
@@ -856,9 +850,8 @@ std::string PredExpr::FunctionPredicate(bool withTII, OutputState *spec) const {
   std::string mcii = withTII ? ", MI->getMCII())" : ")";
 
   if (withTII) {
-    if (operands_.size() == 3 && operands_[2]->value() != "\"TII\"") {
+    if (operands_.size() == 3 && operands_[2]->value() != "TII") {
       tii = operands_[2]->value();
-      tii = tii.substr(1, tii.length() - 2); // Strip quotes
       tii += "->";
     } else {
       // Fetch the target's InstrInfo name (from the PredicateProlog record).
@@ -871,13 +864,9 @@ std::string PredExpr::FunctionPredicate(bool withTII, OutputState *spec) const {
 
   auto MCfunc = operands_[0]->value(); // MCInst function
   if (!MCfunc.empty())
-    MCfunc = MCfunc.substr(1, MCfunc.length() - 2);
-  if (!MCfunc.empty())
     MCfunc = MCfunc + "(*MI->getMC()" + mcii;
 
-  auto MIfunc = operands_[1]->value(); // MachineInstr function
-  if (!MIfunc.empty())
-    MIfunc = MIfunc.substr(1, MIfunc.length() - 2);
+  auto MIfunc = operands_[1]->value();        // MachineInstr function
   if (!MIfunc.empty())
     MIfunc = tii + MIfunc + "(*MI->getMI())";
 
