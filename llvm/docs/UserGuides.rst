@@ -50,6 +50,7 @@ intermediate LLVM representation.
    LinkTimeOptimization
    LoopTerminology
    MarkdownQuickstartTemplate
+   Mdl/index
    MemorySSA
    MergeFunctions
    MCJITDesignAndImplementation
@@ -215,6 +216,10 @@ Code Generation
 :doc:`TableGen <TableGen/index>`
    Describes the TableGen tool, which is used heavily by the LLVM code
    generator.
+
+:doc:`Mdl <Mdl/index>`
+   Describes the Machine Description Language compiler optionally used to
+   describe a target's microarchitecture.
 
 ==========
 GlobalISel

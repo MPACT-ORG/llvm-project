@@ -17,8 +17,8 @@
 #include <string>
 #include <vector>
 
+#include "mdl_parser.h"
 #include "mdl_generate.h"
-#include "mdl_visitor.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 
@@ -115,8 +115,7 @@ int main(int argc, char **argv) {
   // First Pass: Parse the input file, and build a representation of the
   // entire machine description. Abort if syntax errors found.
   //--------------------------------------------------------------------------
-  mpact::mdl::MdlVisitor visitor(spec, import_dir);
-  if (!visitor.ProcessInputFile(input_file))
+  if (!ProcessInputFile(spec, import_dir, input_file))
     mpact::mdl::Abort();
 
   //--------------------------------------------------------------------------
