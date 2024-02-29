@@ -33,10 +33,10 @@ namespace mdl {
 // Read the next line from the input file.  Return true if you find one.
 //-----------------------------------------------------------------------------
 bool MdlLexer::getLine() {
-  if (stream) {
-    std::getline(stream, current_line);
-    line_number++;
-    column_number = 0;
+  if (Stream) {
+    std::getline(Stream, CurrentLine);
+    LineNumber++;
+    ColumnNumber = 0;
     return true;
   }
   return false;
@@ -47,97 +47,97 @@ bool MdlLexer::getLine() {
 // If there are items in the lookahead queue, pop and use the first entry.
 // Return the type of the token.
 //-----------------------------------------------------------------------------
-void MdlLexer::getNext(Token &token, bool peeking /* = false */) {
+void MdlLexer::getNext(TokenType &Token, bool Peeking /* = false */) {
   // Return first item from the lookahead queue, if not empty.
-  if (!peeking && !tokens.empty()) {
-    token = tokens.front();
-    tokens.pop();
+  if (!Peeking && !Tokens.empty()) {
+    Token = Tokens.front();
+    Tokens.pop();
     return;
   }
 
   // Skip over any blank spaces.
-  if (!stream || !skipSpace()) {
-    token.type = TK_ENDOFFILE;
+  if (!Stream || !skipSpace()) {
+    Token.Type = TK_ENDOFFILE;
     return;
   }
 
   // Initialize a new token.
-  token.SetLocation(file_name, line_number, column_number);
-  auto *line_ptr = current_line.c_str();
-  token.text = std::string(1, line_ptr[column_number]);
+  Token.setLocation(FileName, LineNumber, ColumnNumber);
+  auto *LinePtr = CurrentLine.c_str();
+  Token.Text = std::string(1, LinePtr[ColumnNumber]);
 
-  char ch = line_ptr[column_number++];
+  char ch = LinePtr[ColumnNumber++];
   switch (ch) {
-    case ';': token.type = TK_SEMI;  return;
-    case ',': token.type = TK_COMMA; return;
-    case ':': token.type = TK_COLON; return;
-    case '(': token.type = TK_LPAREN; return;
-    case ')': token.type = TK_RPAREN; return;
-    case '[': token.type = TK_LBRACKET; return;
-    case ']': token.type = TK_RBRACKET; return;
-    case '<': token.type = TK_LT; return;
-    case '>': token.type = TK_GT; return;
-    case '=': token.type = TK_EQUAL; return;
-    case '&': token.type = TK_AND; return;
-    case '|': token.type = TK_OR; return;
-    case '*': token.type = TK_MUL; return;
-    case '+': token.type = TK_PLUS; return;
-    case '-': token.type = TK_MINUS;
-              if (line_ptr[column_number] == '>') {
-                token.type = TK_ARROW; column_number++;
+    case ';': Token.Type = TK_SEMI;  return;
+    case ',': Token.Type = TK_COMMA; return;
+    case ':': Token.Type = TK_COLON; return;
+    case '(': Token.Type = TK_LPAREN; return;
+    case ')': Token.Type = TK_RPAREN; return;
+    case '[': Token.Type = TK_LBRACKET; return;
+    case ']': Token.Type = TK_RBRACKET; return;
+    case '<': Token.Type = TK_LT; return;
+    case '>': Token.Type = TK_GT; return;
+    case '=': Token.Type = TK_EQUAL; return;
+    case '&': Token.Type = TK_AND; return;
+    case '|': Token.Type = TK_OR; return;
+    case '*': Token.Type = TK_MUL; return;
+    case '+': Token.Type = TK_PLUS; return;
+    case '-': Token.Type = TK_MINUS;
+              if (LinePtr[ColumnNumber] == '>') {
+                Token.Type = TK_ARROW;
+                ColumnNumber++;
               }
               return;
-    case '/': token.type = TK_DIV;
+    case '/': Token.Type = TK_DIV;
+              if (LinePtr[ColumnNumber] != '/')
+                 return;
               // Handle comments (like this one)
-              if (line_ptr[column_number] == '/') {
-                if (!getLine()) break;
-                return getNext(token, peeking);
+              if (!getLine()) break;
+              return getNext(Token, Peeking);
+    case '$': Token.Type = TK_DOLLAR;
+              if (LinePtr[ColumnNumber] == '$') {
+                Token.Type = TK_2DOLLAR; ColumnNumber++;
               }
               return;
-    case '$': token.type = TK_DOLLAR;
-              if (line_ptr[column_number] == '$') {
-                token.type = TK_2DOLLAR; column_number++;
+    case '.': Token.Type = TK_DOT;
+              if (LinePtr[ColumnNumber] == '.') {
+                Token.Type = TK_DOTDOT; ColumnNumber++;
+              }
+              if (auto ch = LinePtr[ColumnNumber]; ch == '.') {
+                Token.Type = TK_ELLIPSIS; ColumnNumber++;
               }
               return;
-    case '.': token.type = TK_DOT;
-              if (line_ptr[column_number] == '.') {
-                token.type = TK_DOTDOT; column_number++;
-              }
-              if (auto ch = line_ptr[column_number]; ch == '.') {
-                token.type = TK_ELLIPSIS; column_number++;
+    case '{': Token.Type = TK_LBRACE;
+              if (LinePtr[ColumnNumber] == '{') {
+                Token.Type = TK_2LBRACE; ColumnNumber++;
               }
               return;
-    case '{': token.type = TK_LBRACE;
-              if (line_ptr[column_number] == '{') {
-                token.type = TK_2LBRACE; column_number++;
-              }
-              return;
-    case '}': token.type = TK_RBRACE;
-              if (line_ptr[column_number] == '}') {
-                token.type = TK_2RBRACE; column_number++;
+    case '}': Token.Type = TK_RBRACE;
+              if (LinePtr[ColumnNumber] == '}') {
+                Token.Type = TK_2RBRACE; ColumnNumber++;
               }
               return;
 
-    case '"': return getString(token);
+    case '"': return getString(Token);
 
     default: break;
   }
 
   // Parse decimal numbers
-  if (std::isdigit(ch)) return getNumber(token);
+  if (std::isdigit(ch)) return getNumber(Token);
 
   // Parse Identifiers and look up keywords.
-  if (std::isalpha(ch) || ch == '_') return getIdent(token); 
+  if (std::isalpha(ch) || ch == '_') return getIdent(Token);
 }
 
 //-----------------------------------------------------------------------------
-// Skip over any blank space until you find a token or EOF.
+// Skip over any blank space until you find a Token or EOF.
 //-----------------------------------------------------------------------------
 bool MdlLexer::skipSpace() {
-  auto *line_ptr = current_line.c_str() + column_number;
-  while (std::isspace(*line_ptr)) { line_ptr++; column_number++; }
+  auto *LinePtr = CurrentLine.c_str() + ColumnNumber;
+  while (std::isspace(*LinePtr)) { LinePtr++; ColumnNumber++; }
 
-  if (*line_ptr == 0) {
+  if (*LinePtr == 0) {
     if (!getLine()) return false;
     return skipSpace();
   }
@@ -147,41 +147,41 @@ bool MdlLexer::skipSpace() {
 //-----------------------------------------------------------------------------
 // Scan in Decimal, Hex, Octal or Binary numbers.
 //-----------------------------------------------------------------------------
-void MdlLexer::getNumber(Token &token) {
-  auto *line_ptr = current_line.c_str() + column_number - 1;
-  char *end_ptr = nullptr;
+void MdlLexer::getNumber(TokenType &Token) {
+  auto *LinePtr = CurrentLine.c_str() + ColumnNumber - 1;
+  char *EndPtr = nullptr;
 
-  token.type = TK_NUMBER;
+  Token.Type = TK_NUMBER;
 
   // Look for radix prefixes (0x, 0b, 0)
-  int base = 10;
-  if (line_ptr[0] == '0') {
-    if (line_ptr[1] == 'x') base = 16;
-    else if (line_ptr[1] == '0' && line_ptr[1] <= '7') base = 8;
-    else if (line_ptr[1] == 'b') { base = 2; line_ptr += 2; }
+  int Base = 10;
+  if (LinePtr[0] == '0') {
+    if (LinePtr[1] == 'x') Base = 16;
+    else if (LinePtr[1] == '0' && LinePtr[1] <= '7') Base = 8;
+    else if (LinePtr[1] == 'b') { Base = 2; LinePtr += 2; }
   }
 
   // Convert the number in the appropriate radix.
-  token.value = strtoul(line_ptr, &end_ptr, base);
-  if (end_ptr == line_ptr || errno == ERANGE)
+  Token.Value = strtoul(LinePtr, &EndPtr, Base);
+  if (EndPtr == LinePtr || errno == ERANGE)
     Error("Invalid number");
 
   // Copy the text of the number to the token
-  token.text = current_line.substr(
-                  column_number - 1, column_number + (end_ptr - line_ptr));
-  column_number += end_ptr - line_ptr - 1;
+  Token.Text = CurrentLine.substr(
+                  ColumnNumber - 1, ColumnNumber + (EndPtr - LinePtr));
+  ColumnNumber += EndPtr - LinePtr - 1;
 }
 
 //-----------------------------------------------------------------------------
 // Scan in an identifier.
 //-----------------------------------------------------------------------------
-void MdlLexer::getIdent(Token &token) {
-  token.type = TK_IDENT;
+void MdlLexer::getIdent(TokenType &Token) {
+  Token.Type = TK_IDENT;
 
-  auto *line_ptr = current_line.c_str() + column_number;
-  for (; std::isalnum(*line_ptr) || *line_ptr == '_'; column_number++)
-    token.text += std::string(1, *line_ptr++);
-  checkKeywords(token);
+  auto *LinePtr = CurrentLine.c_str() + ColumnNumber;
+  for (; std::isalnum(*LinePtr) || *LinePtr == '_'; ColumnNumber++)
+    Token.Text += std::string(1, *LinePtr++);
+  checkKeywords(Token);
 }
 
 //-----------------------------------------------------------------------------
@@ -189,16 +189,16 @@ void MdlLexer::getIdent(Token &token) {
 // This is a pretty limited string - no escape characters, no newlines.
 // We strip the quotes here (rather than everywhere else).
 //-----------------------------------------------------------------------------
-void MdlLexer::getString(Token &token) {
-  token.type = TK_STRING;
-  auto *line_ptr = current_line.c_str();
-  token.text = "";
-  while (auto ch = line_ptr[column_number++]) {
+void MdlLexer::getString(TokenType &Token) {
+  Token.Type = TK_STRING;
+  auto *LinePtr = CurrentLine.c_str();
+  Token.Text = "";
+  while (auto ch = LinePtr[ColumnNumber++]) {
     if (ch == '\n' || ch == '"') break;
-    token.text += std::string(1, ch);
+    Token.Text += std::string(1, ch);
   }
-  if (line_ptr[column_number - 1] != '"')
-    Error(token, "Missing end quote");
+  if (LinePtr[ColumnNumber - 1] != '"')
+    Error(Token, "Missing end quote");
 }
 
 //-----------------------------------------------------------------------------
@@ -210,32 +210,32 @@ void MdlLexer::getString(Token &token) {
 //-----------------------------------------------------------------------------
 bool MdlLexer::getCodeEscape() {
   // First make sure the leading brackets/braces are adjacent.
-  if (token.line() != tokens.front().line() ||
-      token.column() != tokens.front().column() - 1 ||
-      token.file_name() != tokens.front().file_name())
+  if (Token.getLine() != Tokens.front().getLine() ||
+      Token.getColumn() != Tokens.front().getColumn() - 1 ||
+      Token.getFileName() != Tokens.front().getFileName())
     return false;
 
   // Scan current line until we find an '}]'.
   std::string code;
-  auto *line_ptr = current_line.c_str();
-  while (auto ch = line_ptr[column_number++]) {
-    if (ch == '}' && line_ptr[column_number] == ']') {
-      tokens.pop();         // discard the peeked-at '}'
-      column_number++;      // Skip the ']'
-      token.text = code;    // replace the current token
+  auto *LinePtr = CurrentLine.c_str();
+  while (auto ch = LinePtr[ColumnNumber++]) {
+    if (ch == '}' && LinePtr[ColumnNumber] == ']') {
+      Tokens.pop();         // discard the peeked-at '}'
+      ColumnNumber++;      // Skip the ']'
+      Token.Text = code;    // replace the current token
       return true;
       break;
     }
     code += std::string(1, ch);
   }
-  if (line_ptr[column_number] != ']') return false;
+  if (LinePtr[ColumnNumber] != ']') return false;
 
-  tokens.pop();         // discard the peeked-at '}'
-  token.text = code;    // replace the current token
+  Tokens.pop();         // discard the peeked-at '}'
+  Token.Text = code;    // replace the current token
   return true;
 }
 
-std::map<TokenType, std::string> TokenNames = {
+std::map<TokenKind, std::string> TokenNames = {
   { TK_FAMILY, "family" },
   { TK_PIPE_PHASES, "phases" },
   { TK_PROTECTED, "protected" },
@@ -319,7 +319,7 @@ std::map<TokenType, std::string> TokenNames = {
 //-----------------------------------------------------------------------------
 // Check an identifier to see if its a keyword.
 //-----------------------------------------------------------------------------
-std::map<std::string, TokenType> Keywords = {
+std::map<std::string, TokenKind> Keywords = {
   { "family", TK_FAMILY },
   { "phases", TK_PIPE_PHASES },
   { "protected", TK_PROTECTED },
@@ -369,7 +369,7 @@ std::map<std::string, TokenType> Keywords = {
 //-----------------------------------------------------------------------------
 // Return the printable name of a token type.
 //-----------------------------------------------------------------------------
-std::string MdlLexer::TokenString(TokenType t) {
+std::string MdlLexer::TokenString(TokenKind t) {
   if (auto item = TokenNames.find(t); item != TokenNames.end())
     return item->second;
   return "Invalid token";
@@ -378,10 +378,10 @@ std::string MdlLexer::TokenString(TokenType t) {
 //-----------------------------------------------------------------------------
 // Check an identifier to see if its a keyword.
 //-----------------------------------------------------------------------------
-void MdlLexer::checkKeywords(Token &token) {
+void MdlLexer::checkKeywords(TokenType &Token) {
   // If we find the name in the table, change the token type to the keyword.
-  if (auto item = Keywords.find(token.text); item != Keywords.end())
-    token.type = item->second;
+  if (auto item = Keywords.find(Token.Text); item != Keywords.end())
+    Token.Type = item->second;
 }
 
 } // namespace mdl
