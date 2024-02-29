@@ -48,94 +48,94 @@ void Abort() {
   exit(EXIT_FAILURE);
 }
 
-void MdlSpec::WriteMessage(const MdlItem *item, const std::string &msg) {
-  if (item == nullptr) {
-    llvm::errs() << formatv("Error: {0}\n", msg);
+void MdlSpec::writeMessage(const MdlItem *Item, const std::string &Msg) {
+  if (Item == nullptr) {
+    llvm::errs() << formatv("Error: {0}\n", Msg);
     return;
   }
-  std::string message = formatv("{0} {1}", item->Location(), msg);
+  std::string message = formatv("{0} {1}", Item->getLocation(), Msg);
   // If we've already see this exact message, don't print it out again!
   // This is fairly common, since latencies and subunits are potentially
   // instantiated many times.
-  if (!error_messages_.count(message)) {
-    error_messages_.insert(message);
+  if (!ErrorMessages.count(message)) {
+    ErrorMessages.insert(message);
     llvm::errs() << message << "\n";
   }
 }
 
-int SubUnitInstantiation::ErrorsSeen() const { return spec()->ErrorsSeen(); }
-int FuncUnitInstantiation::ErrorsSeen() const { return spec()->ErrorsSeen(); }
+int SubUnitInstantiation::ErrorsSeen() const { return Spec->ErrorsSeen(); }
+int FuncUnitInstantiation::ErrorsSeen() const { return Spec->ErrorsSeen(); }
 
 //----------------------------------------------------------------------------
 // Pipeline Phase expression methods.
 //----------------------------------------------------------------------------
 // Find the phase reference in an expression and return it.
-PhaseName *PhaseExpr::GetPhaseName() const {
-  PhaseName *name;
-  if (operation() == kPhase)
-    return phase_name_;
-  if (left() && (name = left()->GetPhaseName()))
-    return name;
-  if (right() && (name = right()->GetPhaseName()))
-    return name;
+PhaseName *PhaseExpr::getPhaseName() const {
+  PhaseName *Name;
+  if (getOperation() == kPhase)
+    return Phase;
+  if (getLeft() && (Name = getLeft()->getPhaseName()))
+    return Name;
+  if (getRight() && (Name = getRight()->getPhaseName()))
+    return Name;
   return nullptr;
 }
 
 // Early check to see if there's at least one symbolic name in a phase expr.
-bool PhaseExpr::HasPhaseName() const {
-  if (operation() == kPhase)
+bool PhaseExpr::hasPhaseName() const {
+  if (getOperation() == kPhase)
     return true;
-  if (left() && left()->HasPhaseName())
+  if (getLeft() && getLeft()->hasPhaseName())
     return true;
-  if (right() && right()->HasPhaseName())
+  if (getRight() && getRight()->hasPhaseName())
     return true;
   return false;
 }
 
 // Return true if an expression doesn't contain any operand references.
-bool PhaseExpr::IsExpressionConstant() const {
-  if (left() && !left()->IsExpressionConstant())
+bool PhaseExpr::isExpressionConstant() const {
+  if (getLeft() && !getLeft()->isExpressionConstant())
     return false;
-  if (right() && !right()->IsExpressionConstant())
+  if (getRight() && !getRight()->isExpressionConstant())
     return false;
-  return operation() != kOpnd;
+  return getOperation() != kOpnd;
 }
 
 // Evaluate a constant expression.
-llvm::ErrorOr<int> PhaseExpr::EvaluateConstantExpression() const {
+llvm::ErrorOr<int> PhaseExpr::evaluateConstantExpression() const {
   // Recur on children, return error if either has errors.
-  llvm::ErrorOr<int> left_value = 0, right_value = 0;
-  if (left()) {
-    left_value = left()->EvaluateConstantExpression();
-    if (!left_value)
-      return left_value;
+  llvm::ErrorOr<int> LeftValue = 0, RightValue = 0;
+  if (getLeft()) {
+    LeftValue = getLeft()->evaluateConstantExpression();
+    if (!LeftValue)
+      return LeftValue;
   }
-  if (right()) {
-    right_value = right()->EvaluateConstantExpression();
-    if (!right_value)
-      return right_value;
+  if (getRight()) {
+    RightValue = getRight()->evaluateConstantExpression();
+    if (!RightValue)
+      return RightValue;
   }
 
-  if (operation() == kPlus)
-    return *left_value + *right_value;
-  if (operation() == kMinus)
-    return *left_value - *right_value;
-  if (operation() == kMult)
-    return *left_value * *right_value;
+  if (getOperation() == kPlus)
+    return *LeftValue + *RightValue;
+  if (getOperation() == kMinus)
+    return *LeftValue - *RightValue;
+  if (getOperation() == kMult)
+    return *LeftValue * *RightValue;
   // Return an error for division by zero.
-  if (operation() == kDiv) {
-    if (*right_value == 0)
+  if (getOperation() == kDiv) {
+    if (*RightValue == 0)
       return llvm::errc::invalid_argument;
-    return *left_value / *right_value;
+    return *LeftValue / *RightValue;
   }
-  if (operation() == kNeg)
-    return -*left_value;
-  if (operation() == kPositive)
-    return std::max(0, *left_value);
-  if (operation() == kInt)
-    return number();
-  if (operation() == kPhase)
-    return phase_id();
+  if (getOperation() == kNeg)
+    return -*LeftValue;
+  if (getOperation() == kPositive)
+    return std::max(0, *LeftValue);
+  if (getOperation() == kInt)
+    return getNumber();
+  if (getOperation() == kPhase)
+    return getPhaseId();
   return llvm::errc::invalid_argument;  // Cannot reach here
 }
 
@@ -144,20 +144,20 @@ llvm::ErrorOr<int> PhaseExpr::EvaluateConstantExpression() const {
 // We do this rather late in the semantic checking phase, because some of
 // the components are auto-generated during semantic checking.
 //----------------------------------------------------------------------------
-void MdlSpec::CheckInputStructure() {
-  if (family_name_.empty())
+void MdlSpec::checkInputStructure() {
+  if (FamilyName.empty())
     ErrorLog(nullptr, "Specify a processor family name");
-  if (cpus_.empty())
+  if (Cpus.empty())
     ErrorLog(nullptr, "Specify at least one cpu definition");
-  if (pipe_phases_.empty())
+  if (PipeDefs.empty())
     ErrorLog(nullptr, "Specify at least one pipeline definition.");
-  if (func_units_.empty())
+  if (FuncUnits.empty())
     ErrorLog(nullptr, "Specify at least one functional unit definition.");
-  if (subunits_.empty())
+  if (Subunits.empty())
     ErrorLog(nullptr, "Specify at least one subunit definition.");
-  if (latencies_.empty())
+  if (Latencies.empty())
     ErrorLog(nullptr, "Specify at least one latency definition.");
-  if (instructions_.empty())
+  if (Instructions.empty())
     ErrorLog(nullptr, "Specify at least one instruction definition.");
 
   if (ErrorsSeen())
@@ -171,45 +171,45 @@ void MdlSpec::CheckInputStructure() {
 // - Build instantiation objects for subunits.
 // - Initialize some global null object descriptors.
 //----------------------------------------------------------------------------
-void MdlSpec::BuildDictionaries() {
-  for (auto *fu : func_units())
-    if (!fu_map().emplace(fu->name(), fu).second)
-      ErrorLog(fu, "Duplicate functional unit definition: {0}", fu->name());
+void MdlSpec::buildDictionaries() {
+  for (auto *Fu : FuncUnits)
+    if (!FuMap.emplace(Fu->getName(), Fu).second)
+      ErrorLog(Fu, "Duplicate functional unit definition: {0}", Fu->getName());
 
   // Group names cannot conflict with themselves or functional unit names.
-  for (auto *group : func_unit_groups()) {
-    if (!fu_group_map().emplace(group->name(), group).second)
-      ErrorLog(group, "Duplicate functional unit group definition: {0}",
-               group->name());
-    if (FindItem(fu_map(), group->name()) != nullptr)
-      ErrorLog(group, "Group name conflicts with functional unit name: {0}",
-               group->name());
+  for (auto *Group : FuncUnitGroups) {
+    if (!FuGroupMap.emplace(Group->getName(), Group).second)
+      ErrorLog(Group, "Duplicate functional unit group definition: {0}",
+               Group->getName());
+    if (FindItem(FuMap, Group->getName()) != nullptr)
+      ErrorLog(Group, "Group name conflicts with functional unit name: {0}",
+               Group->getName());
   }
 
-  for (auto *su : subunits())
-    if (!su_map().emplace(su->name(), su).second)
-      ErrorLog(su, "Duplicate subunit definition: {0}", su->name());
+  for (auto *Su : Subunits)
+    if (!SuMap.emplace(Su->getName(), Su).second)
+      ErrorLog(Su, "Duplicate subunit definition: {0}", Su->getName());
 
-  for (auto *lat : latencies())
-    if (!lat_map().emplace(lat->name(), lat).second)
-      ErrorLog(lat, "Duplicate latency definition: {0}", lat->name());
+  for (auto *Lat : Latencies)
+    if (!LatMap.emplace(Lat->getName(), Lat).second)
+      ErrorLog(Lat, "Duplicate latency definition: {0}", Lat->getName());
 
-  for (auto *opnd : operands())
-    if (!operand_map().emplace(opnd->name(), opnd).second)
-      ErrorLog(opnd, "Duplicate operand definition: {0}", opnd->name());
+  for (auto *Opnd : Operands)
+    if (!OperandMap.emplace(Opnd->getName(), Opnd).second)
+      ErrorLog(Opnd, "Duplicate operand definition: {0}", Opnd->getName());
 
-  for (auto *instr : instructions())
-    if (!instruction_map().emplace(instr->name(), instr).second)
-      ErrorLog(instr, "Duplicate instruction definition: {0}", instr->name());
+  for (auto *Instr : Instructions)
+    if (!InstructionMap.emplace(Instr->getName(), Instr).second)
+      ErrorLog(Instr, "Duplicate instruction definition: {0}", Instr->getName());
 
-  for (auto *rclass : reg_classes())
-    if (!reg_class_map().emplace(rclass->name(), rclass).second)
-      ErrorLog(rclass, "Duplicate register class definition: {0}",
-               rclass->name());
+  for (auto *Rclass : RegClasses)
+    if (!RegisterClassMap.emplace(Rclass->getName(), Rclass).second)
+      ErrorLog(Rclass, "Duplicate register class definition: {0}",
+               Rclass->getName());
 
   // Initialize a vector of instantiations for every subunit template.
-  for (auto *su : subunits())
-    su_instantiations()[su->name()] = new std::vector<SubUnitInstantiation *>;
+  for (auto *Su : Subunits)
+    SuInstantiations[Su->getName()] = new std::vector<SubUnitInstantiation *>;
 
   // Create some "Null" resource definitions.
   NullResourceRef = new ResourceRef("__");
@@ -217,7 +217,7 @@ void MdlSpec::BuildDictionaries() {
   NullPortDef = new ResourceDef("__");
 
   // Scan over all CPU specs, collect feasible predicate names.
-  FindValidPredicateNames();
+  findValidPredicateNames();
 }
 
 //---------------------------------------------------------------------------
@@ -229,43 +229,43 @@ void MdlSpec::BuildDictionaries() {
 // Also note that we will check if these are ever associated with any
 // subunits - if they are not, its probably an error.
 //---------------------------------------------------------------------------
-void MdlSpec::FindImplicitFuncUnitTemplates() {
+void MdlSpec::findImplicitFuncUnitTemplates() {
   // Check each functional unit instance in each CPU definition.
-  for (auto *cpu : cpus())
-    for (auto *cluster : *cpu->clusters())
-      for (auto *unit : *cluster->func_units()) {
-        auto *type = unit->type();
-        if (FindItem(fu_map_, type->name()) == nullptr) {
-          auto *fu = new FuncUnitTemplate(type);
-          fu_map_.emplace(type->name(), fu);
-          func_units_.push_back(fu);
+  for (auto *Cpu : Cpus)
+    for (auto *Cluster : *Cpu->getClusters())
+      for (auto *Unit : *Cluster->getFuncUnits()) {
+        auto *Type = Unit->getType();
+        if (FindItem(FuMap, Type->getName()) == nullptr) {
+          auto *Fu = new FuncUnitTemplate(Type);
+          FuMap.emplace(Type->getName(), Fu);
+          FuncUnits.push_back(Fu);
         }
         // If there's a group defined with this name, generate an error.
-        if (auto *group = FindItem(fu_group_map_, type->name()))
-           ErrorLog(group,
+        if (auto *Group = FindItem(FuGroupMap, Type->getName()))
+           ErrorLog(Group,
                     "Group name conflicts with functional unit name: {0}",
-                    group->name());
+                    Group->getName());
       }
 
   // Check that each base of an implicitly defined functional unit template
   // is defined. If its not, then define it as an implicitly defined
   // functional unit.
-  for (auto [name, unit] : fu_map_)
-    if (unit->is_implicitly_defined())
-      for (auto *base : *unit->bases())
-        if (FindItem(fu_map_, base->name()) == nullptr) {
-          auto *fu = new FuncUnitTemplate(base);
-          func_units_.push_back(fu);
-          fu_map_.emplace(base->name(), fu);
+  for (auto [Name, Unit] : FuMap)
+    if (Unit->isImplicitlyDefined())
+      for (auto *Base : *Unit->getBases())
+        if (FindItem(FuMap, Base->getName()) == nullptr) {
+          auto *Fu = new FuncUnitTemplate(Base);
+          FuncUnits.push_back(Fu);
+          FuMap.emplace(Base->getName(), Fu);
         }
 
   // Check all the names in an FU group.  They should either refer to a group,
   // or a functional unit.  If they are undefined, report an error.
-  for (auto [name, group] : fu_group_map())
-    for (auto *id : *group->members())
-      if (FindItem(fu_map_, id->name()) == nullptr  &&
-          FindItem(fu_group_map_, id->name()) == nullptr)
-        ErrorLog(id, "Undefined functional unit reference: {0}", id->name());
+  for (auto [Name, Group] : FuGroupMap)
+    for (auto *Id : *Group->getMembers())
+      if (FindItem(FuMap, Id->getName()) == nullptr  &&
+          FindItem(FuGroupMap, Id->getName()) == nullptr)
+        ErrorLog(Id, "Undefined functional unit reference: {0}", Id->getName());
 }
 
 //---------------------------------------------------------------------------
@@ -279,26 +279,26 @@ void MdlSpec::FindImplicitFuncUnitTemplates() {
 //   - Instantiated functional unit names
 //   - Functional unit template names.
 //---------------------------------------------------------------------------
-void MdlSpec::FindValidPredicateNames() {
-  for (auto *cpu : cpus()) {
-    valid_predicate_names_.emplace(cpu->name());
-    for (auto *cluster : *cpu->clusters())
-      for (auto *fu_inst : *cluster->func_units())
-        if (fu_inst->id())
-          valid_predicate_names_.emplace(fu_inst->name());
+void MdlSpec::findValidPredicateNames() {
+  for (auto *Cpu : Cpus) {
+    ValidPredicateNames.emplace(Cpu->getName());
+    for (auto *Cluster : *Cpu->getClusters())
+      for (auto *FuInst : *Cluster->getFuncUnits())
+        if (FuInst->getId())
+          ValidPredicateNames.emplace(FuInst->getName());
   }
 
-  for (auto *func_template : func_units())
-    valid_predicate_names_.emplace(func_template->name());
+  for (auto *FuTemplate : FuncUnits)
+    ValidPredicateNames.emplace(FuTemplate->getName());
 }
 
 //---------------------------------------------------------------------------
 // Check that a predicate name is at least feasible.  If it is not, generate
 // a warning.
 //---------------------------------------------------------------------------
-void MdlSpec::IsValidPredicateName(const Identifier *name) {
-  if (!valid_predicate_names_.count(name->name()))
-    WarningLog(name, "Predicate is invalid: {0}", name->name());
+void MdlSpec::isValidPredicateName(const Identifier *Name) {
+  if (!ValidPredicateNames.count(Name->getName()))
+    WarningLog(Name, "Predicate is invalid: {0}", Name->getName());
 }
 
 //---------------------------------------------------------------------------
@@ -316,95 +316,95 @@ void MdlSpec::IsValidPredicateName(const Identifier *name) {
 //  - Resource member lists have their own namespaces, but names must be
 //    unique within that space.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckForDuplicateDefs() {
+void MdlSpec::checkForDuplicateDefs() {
   // Check that phase names groups and phase names are unique.
-  CheckPhaseDefinitions(&pipe_phases());
+  checkPhaseDefinitions(&PipeDefs);
 
   // Check that globally defined resources, registers and classes are unique.
-  FindDuplicates(resources());
-  FindDuplicates(registers());
-  FindDuplicates(registers(), resources());
-  FindDuplicates(resources(), reg_classes());
-  FindDuplicates(registers(), reg_classes());
-  FindDuplicateMembers(resources());
+  findDuplicates(Resources);
+  findDuplicates(Registers);
+  findDuplicates(Registers, Resources);
+  findDuplicates(Resources, RegClasses);
+  findDuplicates(Registers, RegClasses);
+  findDuplicateMembers(Resources);
 
   // Operand names cannot conflict with registers or register class names.
-  FindDuplicates(reg_classes(), operands());
-  FindDuplicates(registers(), operands());
+  findDuplicates(RegClasses, Operands);
+  findDuplicates(Registers, Operands);
 
   // For functional unit templates, look for redefinitions of parameters,
   // registers, resources, or ports. We do allow locally defined resources and
   // ports to hide globally defined objects.
-  for (auto *funit : func_units()) {
-    FindDuplicates(*funit->params());
-    FindDuplicates(*funit->resources());
-    FindDuplicates(*funit->ports());
-    FindDuplicateMembers(*funit->resources());
+  for (auto *Fu : FuncUnits) {
+    findDuplicates(*Fu->getParams());
+    findDuplicates(*Fu->getResources());
+    findDuplicates(*Fu->getPorts());
+    findDuplicateMembers(*Fu->getResources());
 
     // Don't allow redefinitions across object types (ports, resources).
-    FindDuplicates(*funit->ports(), *funit->resources());
+    findDuplicates(*Fu->getPorts(), *Fu->getResources());
 
     // Don't allow shadowing of template parameters.
-    FindDuplicates(*funit->resources(), *funit->params());
-    FindDuplicates(*funit->ports(), *funit->params());
+    findDuplicates(*Fu->getResources(), *Fu->getParams());
+    findDuplicates(*Fu->getPorts(), *Fu->getParams());
   }
 
   // For subunit and latency templates, check for unique parameters.
-  for (auto *sunit : subunits())
-    FindDuplicates(*sunit->params());
-  for (auto *lat : latencies())
-    FindDuplicates(*lat->params());
+  for (auto *Su : Subunits)
+    findDuplicates(*Su->getParams());
+  for (auto *Lat : Latencies)
+    findDuplicates(*Lat->getParams());
 
   // CPU's have a separate namespace, but redefinitions aren't allowed.
   // For each cpu definition, check for redefinitions of registers,
   // resources, and functional unit instance names.
   // For each cluster, check cluster names, register/resource names, and
   // functional unit instances.
-  FindDuplicates(cpus());
-  for (auto *cpu : cpus()) {
+  findDuplicates(Cpus);
+  for (auto *Cpu : Cpus) {
     // Check that phase names groups and phase names are unique.
     // Note that these can mask globally defined phase definitions.
-    CheckPhaseDefinitions(cpu->pipe_phases());
+    checkPhaseDefinitions(Cpu->getPipePhases());
 
     // Make sure CPU definitions aren't masking globally defined things.
-    FindDuplicates(*cpu->resources());
-    FindDuplicates(*cpu->resources(), resources());
-    FindDuplicates(*cpu->resources(), registers());
-    FindDuplicates(*cpu->resources(), reg_classes());
-    FindDuplicates(*cpu->clusters());
-    FindDuplicateMembers(*cpu->resources());
+    findDuplicates(*Cpu->getResources());
+    findDuplicates(*Cpu->getResources(), Resources);
+    findDuplicates(*Cpu->getResources(), Registers);
+    findDuplicates(*Cpu->getResources(), RegClasses);
+    findDuplicates(*Cpu->getClusters());
+    findDuplicateMembers(*Cpu->getResources());
 
-    for (auto *cluster : *cpu->clusters()) {
-      FindDuplicates(*cluster->resources());
-      FindDuplicates(*cluster->func_units());
-      FindDuplicates(*cluster->issues());
-      FindDuplicates(*cluster->issues(), *cluster->func_units());
-      FindDuplicates(*cluster->issues(), *cluster->resources());
-      FindDuplicates(*cluster->resources(), *cpu->resources());
-      FindDuplicates(*cluster->resources(), resources());
-      FindDuplicates(*cluster->resources(), registers());
-      FindDuplicates(*cluster->resources(), reg_classes());
-      FindDuplicateMembers(*cluster->resources());
+    for (auto *Cluster : *Cpu->getClusters()) {
+      findDuplicates(*Cluster->getResources());
+      findDuplicates(*Cluster->getFuncUnits());
+      findDuplicates(*Cluster->getIssues());
+      findDuplicates(*Cluster->getIssues(), *Cluster->getFuncUnits());
+      findDuplicates(*Cluster->getIssues(), *Cluster->getResources());
+      findDuplicates(*Cluster->getResources(), *Cpu->getResources());
+      findDuplicates(*Cluster->getResources(), Resources);
+      findDuplicates(*Cluster->getResources(), Registers);
+      findDuplicates(*Cluster->getResources(), RegClasses);
+      findDuplicateMembers(*Cluster->getResources());
 
       // If this is a generated (promoted) cluster, we also check this
       // cluster's definitions against CPU-level definitions.
-      if (cluster->IsNull()) {
-        FindDuplicates(*cluster->issues(), *cpu->resources());
-        FindDuplicates(*cluster->issues(), *cpu->clusters());
-        FindDuplicates(*cluster->func_units(), *cpu->resources());
-        FindDuplicates(*cluster->func_units(), *cpu->clusters());
+      if (Cluster->isNull()) {
+        findDuplicates(*Cluster->getIssues(), *Cpu->getResources());
+        findDuplicates(*Cluster->getIssues(), *Cpu->getClusters());
+        findDuplicates(*Cluster->getFuncUnits(), *Cpu->getResources());
+        findDuplicates(*Cluster->getFuncUnits(), *Cpu->getClusters());
       }
     }
   }
 
   // For each instruction definition, check for duplicate operand names.
-  for (auto *instruct : instructions())
-    FindDuplicates(*instruct->operands());
+  for (auto *Instr : Instructions)
+    findDuplicates(*Instr->getOperands());
 
   // For each operand definition, check for duplicate (sub)operand names and
   // duplicate attribute definitions.
-  for (auto *operand : operands())
-    FindDuplicates(*operand->operands());
+  for (auto *Opnd : Operands)
+    findDuplicates(*Opnd->getOperands());
 }
 
 //---------------------------------------------------------------------------
@@ -412,15 +412,15 @@ void MdlSpec::CheckForDuplicateDefs() {
 // CPU-specific phases, and if not found look for a global definition.
 // Return null if it's not found anywhere.
 //---------------------------------------------------------------------------
-PhaseName *MdlSpec::SearchPipeReference(Identifier *phase, CpuInstance *cpu) {
-  if (cpu)
-    for (auto *p1 : *cpu->pipe_phases())
-      if (auto *item = FindItem(*p1->phase_names(), phase->name()))
-        return item;
+PhaseName *MdlSpec::searchPipeReference(Identifier *Phase, CpuInstance *Cpu) {
+  if (Cpu)
+    for (auto *PipeDef : *Cpu->getPipePhases())
+      if (auto *Item = FindItem(*PipeDef->getPhaseNames(), Phase->getName()))
+        return Item;
 
-  for (auto *p1 : pipe_phases())
-    if (auto *item = FindItem(*p1->phase_names(), phase->name()))
-      return item;
+  for (auto *PipeDef : PipeDefs)
+    if (auto *Item = FindItem(*PipeDef->getPhaseNames(), Phase->getName()))
+      return Item;
 
   return nullptr;
 }
@@ -430,27 +430,27 @@ PhaseName *MdlSpec::SearchPipeReference(Identifier *phase, CpuInstance *cpu) {
 // Print an error message if not found.
 // Return a pointer to the object if found, or a fake object if not found.
 //---------------------------------------------------------------------------
-PhaseName *MdlSpec::FindPipeReference(Identifier *phase, CpuInstance *cpu) {
-  if (auto *item = SearchPipeReference(phase, cpu))
-    return item;
+PhaseName *MdlSpec::findPipeReference(Identifier *PipeDef, CpuInstance *Cpu) {
+  if (auto *Item = searchPipeReference(PipeDef, Cpu))
+    return Item;
 
   // This is ultimately a fatal error.  Return a fake object.
-  ErrorLog(phase, "Pipeline phase \"{0}\" not found for cpu: {1}",
-           phase->name(), cpu->name());
-  return new PhaseName(*phase, "", false, false);
+  ErrorLog(PipeDef, "Pipeline phase \"{0}\" not found for cpu: {1}",
+           PipeDef->getName(), Cpu->getName());
+  return new PhaseName(*PipeDef, "", false, false);
 }
 
 //---------------------------------------------------------------------------
 // Check that phase names groups and phase names are unique.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckPhaseDefinitions(PipeDefList *pipes) {
-  FindDuplicates(*pipes);
+void MdlSpec::checkPhaseDefinitions(PipeDefList *Pipes) {
+  findDuplicates(*Pipes);
 
-  for (auto *p1 : *pipes) {
-    FindDuplicates(*p1->phase_names());
-    for (auto *p2 : *pipes)
-      if (p1 != p2)
-        FindDuplicates(*p1->phase_names(), *p2->phase_names());
+  for (auto *P1 : *Pipes) {
+    findDuplicates(*P1->getPhaseNames());
+    for (auto *P2 : *Pipes)
+      if (P1 != P2)
+        findDuplicates(*P1->getPhaseNames(), *P2->getPhaseNames());
   }
 }
 
@@ -458,10 +458,10 @@ void MdlSpec::CheckPhaseDefinitions(PipeDefList *pipes) {
 // Specialize a phase expression for the context its instantiated in.
 // Return true if at least one valid pipeline phase is found.
 //---------------------------------------------------------------------------
-void MdlSpec::SpecializePhaseExpr(PhaseExpr *expr, CpuInstance *cpu) {
-  if (expr->operation() == kPhase) {
-    auto *phase = FindPipeReference(expr->phase(), cpu);
-    expr->set_phase_name(phase);
+void MdlSpec::specializePhaseExpr(PhaseExpr *Expr, CpuInstance *Cpu) {
+  if (Expr->getOperation() == kPhase) {
+    auto *Phase = findPipeReference(Expr->getPhase(), Cpu);
+    Expr->setPhaseName(Phase);
   }
 }
 
@@ -469,33 +469,33 @@ void MdlSpec::SpecializePhaseExpr(PhaseExpr *expr, CpuInstance *cpu) {
 // If a resource definition has a start_phase or end_phase specified,
 // look them up in the pipe phase definitions.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckPipeReference(ResourceDef *def, CpuInstance *cpu) {
-  if (def->start_phase() != nullptr)
-    FindPipeReference(def->start_phase(), cpu);
-  if (def->end_phase() != nullptr)
-    FindPipeReference(def->end_phase(), cpu);
+void MdlSpec::checkPipeReference(ResourceDef *Def, CpuInstance *Cpu) {
+  if (Def->getStartPhase() != nullptr)
+    findPipeReference(Def->getStartPhase(), Cpu);
+  if (Def->getEndPhase() != nullptr)
+    findPipeReference(Def->getEndPhase(), Cpu);
 }
 
 //---------------------------------------------------------------------------
 // Quick check that reference phases contain at least one phase name.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckReferencePhases(ReferenceList *refs) {
-  if (refs == nullptr)
+void MdlSpec::checkReferencePhases(ReferenceList *Refs) {
+  if (Refs == nullptr)
     return;
-  for (auto *ref : *refs) {
+  for (auto *Ref : *Refs) {
     // Functional unit refs don't always have an explicit phase expression.
     // We need to add one, but must do it later when we instantiate it.
-    if (ref->IsFuncUnitRef() && ref->phase_expr() == nullptr)
+    if (Ref->isFuncUnitRef() && Ref->getPhaseExpr() == nullptr)
       continue;
     // For conditional refs, recur on the then/else clauses.
-    if (ref->IsConditionalRef()) {
-      for (auto *cc = ref->conditional_ref(); cc; cc = cc->else_clause())
-        CheckReferencePhases(&cc->refs());
+    if (Ref->isConditionalRef()) {
+      for (auto *Cr = Ref->getConditionalRef(); Cr; Cr = Cr->getElseClause())
+        checkReferencePhases(&Cr->getRefs());
       continue;
     }
     // Normal case - make sure there's a phase name mentioned somewhere.
-    if (!ref->phase_expr()->HasPhaseName())
-      ErrorLog(ref->phase_expr(), "Invalid phase: missing phase name");
+    if (!Ref->getPhaseExpr()->hasPhaseName())
+      ErrorLog(Ref->getPhaseExpr(), "Invalid phase: missing phase name");
   }
 }
 
@@ -504,22 +504,22 @@ void MdlSpec::CheckReferencePhases(ReferenceList *refs) {
 // These occur in resource definitions, issue definitions, and references.
 // Any errors found here aren't immediately fatal, so we always return.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckPipeReferences() {
+void MdlSpec::checkPipeReferences() {
   // Check resources defined globally.
-  for (auto *res : resources())
-    CheckPipeReference(res, nullptr);
+  for (auto *Res : Resources)
+    checkPipeReference(Res, nullptr);
 
   // Check resources defined in CPUs and CPU clusters.
-  for (auto *cpu : cpus()) {
-    for (auto *issue : *cpu->issues())
-      CheckPipeReference(issue, cpu);
-    for (auto *res : *cpu->resources())
-      CheckPipeReference(res, cpu);
-    for (auto *cluster : *cpu->clusters()) {
-      for (auto *issue : *cluster->issues())
-        CheckPipeReference(issue, cpu);
-      for (auto *res : *cluster->resources())
-        CheckPipeReference(res, cpu);
+  for (auto *Cpu : Cpus) {
+    for (auto *Issue : *Cpu->getIssues())
+      checkPipeReference(Issue, Cpu);
+    for (auto *Res : *Cpu->getResources())
+      checkPipeReference(Res, Cpu);
+    for (auto *Cluster : *Cpu->getClusters()) {
+      for (auto *Issue : *Cluster->getIssues())
+        checkPipeReference(Issue, Cpu);
+      for (auto *Res : *Cluster->getResources())
+        checkPipeReference(Res, Cpu);
     }
   }
 
@@ -530,8 +530,8 @@ void MdlSpec::CheckPipeReferences() {
 
   // That said, we -can- check that phase expressions contain at least ONE
   // phase name.  We do this to disallow references to phase indexes.
-  for (const auto *latency : latencies())
-    CheckReferencePhases(latency->references());
+  for (const auto *Latency : Latencies)
+    checkReferencePhases(Latency->getReferences());
 }
 
 //---------------------------------------------------------------------------
@@ -546,25 +546,25 @@ void MdlSpec::CheckPipeReferences() {
 //  - missing base parameters are passed null (not supported).
 //  - order of parameters doesn't matter, just match on name (not supported).
 //---------------------------------------------------------------------------
-void MdlSpec::SameParams(const ParamsList *params,
-                         const ParamsList *base_params, MdlItem *item) {
-  const bool base_can_have_extra_params = false; // not supported downstream.
-  const bool base_can_have_fewer_params = true;
+void MdlSpec::sameParams(const ParamsList *TempParams,
+                         const ParamsList *BaseParams, MdlItem *Item) {
+  const bool BaseCanHaveExtraParams = false; // not supported downstream.
+  const bool BaseCanHaveFewerParams = true;
 
   // Check that the number of parameters is compatible.
-  if ((!base_can_have_extra_params && (params->size() < base_params->size())) ||
-      (!base_can_have_fewer_params && (params->size() > base_params->size()))) {
-    ErrorLog(item, "Incompatible parameters for template and base");
+  if ((!BaseCanHaveExtraParams && (TempParams->size() < BaseParams->size())) ||
+      (!BaseCanHaveFewerParams && (TempParams->size() > BaseParams->size()))) {
+    ErrorLog(Item, "Incompatible parameters for template and base");
     return;
   }
 
-  int min_params = std::min(params->size(), base_params->size());
+  int MinParams = std::min(TempParams->size(), BaseParams->size());
 
-  for (int idx = 0; idx < min_params; idx++) {
-    if ((*params)[idx]->type() != (*base_params)[idx]->type())
-      ErrorLog(item, "Unmatched parameter types for template and base");
-    if ((*params)[idx]->name() != (*base_params)[idx]->name())
-      ErrorLog(item, "Unmatched parameter names for template and base");
+  for (int Idx = 0; Idx < MinParams; Idx++) {
+    if ((*TempParams)[Idx]->getType() != (*BaseParams)[Idx]->getType())
+      ErrorLog(Item, "Unmatched parameter types for template and base");
+    if ((*TempParams)[Idx]->getName() != (*BaseParams)[Idx]->getName())
+      ErrorLog(Item, "Unmatched parameter names for template and base");
   }
 }
 
@@ -573,25 +573,25 @@ void MdlSpec::SameParams(const ParamsList *params,
 // definitions.  Recursive template definitions are not allowed.
 //---------------------------------------------------------------------------
 template <class T>
-bool FindCycle(T *root, T *unit, std::set<std::string> &visited) {
-  visited.insert(unit->name());
+bool findCycle(T *Root, T *Unit, std::set<std::string> &Visited) {
+  Visited.insert(Unit->getName());
 
-  for (auto *child : unit->unit_bases()) {
-    if (child == root)
+  for (auto *Child : Unit->getUnitBases()) {
+    if (Child == Root)
       return true;
-    if (visited.count(child->name()) == 0 &&
-        FindCycle(root, child, visited))
+    if (Visited.count(Child->getName()) == 0 &&
+        findCycle(Root, Child, Visited))
       return true;
   }
   return false;
 }
 
-template <class T> void FindCycles(T &item, MdlSpec *md, std::string type) {
-  for (auto *unit : item) {
-    std::set<std::string> visited;
-    if (FindCycle(unit, unit, visited))
-      md->ErrorLog(unit, "Recursively defined {0} template: {1}", type,
-                   unit->name());
+template <class T> void findCycles(T &Item, MdlSpec *md, std::string Type) {
+  for (auto *Unit : Item) {
+    std::set<std::string> Visited;
+    if (findCycle(Unit, Unit, Visited))
+      md->ErrorLog(Unit, "Recursively defined {0} template: {1}", Type,
+                   Unit->getName());
   }
 }
 
@@ -602,24 +602,24 @@ template <class T> void FindCycles(T &item, MdlSpec *md, std::string type) {
 // needs to be particularly efficient.
 //---------------------------------------------------------------------------
 template <class T>
-void FindAllBases(T *top_unit, T *unit, MdlSpec *md, std::string &type,
-                  std::set<std::string> &seen) {
-  for (auto *base : unit->unit_bases()) {
-    if (seen.count(base->name()))
-      md->ErrorLog(top_unit, "{0} template {1} has duplicate bases: {2}", type,
-                   top_unit->name(), base->name());
-    seen.insert(base->name());
-    FindAllBases(top_unit, base, md, type, seen);
+void findAllBases(T *TopUnit, T *Unit, MdlSpec *Spec, std::string &Type,
+                  std::set<std::string> &Seen) {
+  for (auto *Base : Unit->getUnitBases()) {
+    if (Seen.count(Base->getName()))
+      Spec->ErrorLog(TopUnit, "{0} template {1} has duplicate bases: {2}", Type,
+                   TopUnit->getName(), Base->getName());
+    Seen.insert(Base->getName());
+    findAllBases(TopUnit, Base, Spec, Type, Seen);
   }
 }
 
 // Ensure that a template doesn't have duplicate bases. Note that this
 // assumes we've already checked for recursively defined templates.
 template <class T>
-void FindDuplicateBases(T &item, MdlSpec *md, std::string type) {
-  for (auto *unit : item) {
-    std::set<std::string> seen;
-    FindAllBases(unit, unit, md, type, seen);
+void findDuplicateBases(T &Item, MdlSpec *Spec, std::string Type) {
+  for (auto *Unit : Item) {
+    std::set<std::string> Seen;
+    findAllBases(Unit, Unit, Spec, Type, Seen);
   }
 }
 
@@ -630,15 +630,15 @@ void FindDuplicateBases(T &item, MdlSpec *md, std::string type) {
 // compatible with the base. We also explicitly check for recursively
 // defined templates. Any errors found here are considered fatal, so just abort.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckTemplateBases() {
-  for (auto fu : func_units())
-    if (auto *bases = fu->bases()) {
-      for (auto *base : *bases) {
-        if (auto *fu_base = FindItem(fu_map(), base->name())) {
-          fu->add_base(fu_base);
-          SameParams(fu->params(), fu_base->params(), fu);
+void MdlSpec::checkTemplateBases() {
+  for (auto Fu : FuncUnits)
+    if (auto *Bases = Fu->getBases()) {
+      for (auto *Base : *Bases) {
+        if (auto *FuBase = FindItem(FuMap, Base->getName())) {
+          Fu->addBase(FuBase);
+          sameParams(Fu->getParams(), FuBase->getParams(), Fu);
         } else {
-          ErrorLog(fu, "Undefined functional unit base: {0}", base->name());
+          ErrorLog(Fu, "Undefined functional unit base: {0}", Base->getName());
         }
       }
     }
@@ -649,41 +649,41 @@ void MdlSpec::CheckTemplateBases() {
   // Unlike other template bases, subunit templates can have different
   // parameters than their bases (by design), so we don't check for parameter
   // compatibility.
-  for (auto *su : subunits()) {
-    if (auto *bases = su->bases()) {
-      for (auto *base : *bases) {
-        if (auto *su_base = FindItem(su_map(), base->name())) {
-          su->add_base(su_base);
-          su_base->add_derived_subunit(su);
+  for (auto *Su : Subunits) {
+    if (auto *Bases = Su->getBases()) {
+      for (auto *Base : *Bases) {
+        if (auto *SuBase = FindItem(SuMap, Base->getName())) {
+          Su->addBase(SuBase);
+          SuBase->addDerivedSubunit(Su);
         } else {
-          ErrorLog(su, "Undefined subunit base: {0}", base->name());
+          ErrorLog(Su, "Undefined subunit base: {0}", Base->getName());
         }
       }
     }
-    TieSubUnitToInstructions(su, su->regex_bases());
+    tieSubUnitToInstructions(Su, Su->getRegexBases());
   }
 
-  for (auto *latency : latencies())
-    if (auto *bases = latency->base_ids()) {
-      for (auto *base : *bases)
-        if (auto *lat_base = FindItem(lat_map(), base->name())) {
-          latency->add_base(lat_base);
-          SameParams(latency->params(), lat_base->params(), latency);
+  for (auto *Latency : Latencies)
+    if (auto *Bases = Latency->getBaseIds()) {
+      for (auto *Base : *Bases)
+        if (auto *LatBase = FindItem(LatMap, Base->getName())) {
+          Latency->addBase(LatBase);
+          sameParams(Latency->getParams(), LatBase->getParams(), Latency);
         } else {
-          ErrorLog(latency, "Undefined latency base: {0}", base->name());
+          ErrorLog(Latency, "Undefined latency base: {0}", Base->getName());
         }
     }
 
   // If a functional unit group includes an FU group, expand that group into
   // the parent group.
-  for (auto *group : func_unit_groups())
-    if (!ExpandGroup(group, group->members(), 0))
+  for (auto *Group : FuncUnitGroups)
+    if (!expandGroup(Group, Group->getMembers(), 0))
       break;
 
   // Check that we don't have recursive derivations for templates.
-  FindCycles(func_units(), this, "functional unit");
-  FindCycles(subunits(), this, "subunit");
-  FindCycles(latencies(), this, "latency");
+  findCycles(FuncUnits, this, "functional unit");
+  findCycles(Subunits, this, "subunit");
+  findCycles(Latencies, this, "latency");
 
   if (ErrorsSeen())
     Abort();
@@ -691,7 +691,7 @@ void MdlSpec::CheckTemplateBases() {
   // Check for duplicate bases.  Functional units *can* have duplicate bases,
   // and duplicate bases for latencies are relatively common and harmless.
   // But subunits cannot have duplicate bases.
-  FindDuplicateBases(subunits(), this, "Subunit");
+  findDuplicateBases(Subunits, this, "Subunit");
 
   if (ErrorsSeen())
     Abort(); // If any errors found, abort.
@@ -702,20 +702,20 @@ void MdlSpec::CheckTemplateBases() {
 // are allowed, but we need to check for recursion.
 // This function returns true if no errors were found, else returns false.
 //---------------------------------------------------------------------------
-bool MdlSpec::ExpandGroup(FuncUnitGroup *group, IdList *members,
-                          unsigned depth) {
-  if (depth >= fu_group_map().size()) {
-    ErrorLog(group, "Group is recursively defined: {0}", group->name());
+bool MdlSpec::expandGroup(FuncUnitGroup *Group, IdList *Members,
+                          unsigned Depth) {
+  if (Depth >= FuGroupMap.size()) {
+    ErrorLog(Group, "Group is recursively defined: {0}", Group->getName());
     return false;
   }
 
-  for (auto *member : *group->members()) {
-    if (auto *func_unit = FindItem(fu_map(), member->name())) {
-      group->add_unit(func_unit);
+  for (auto *Member : *Members) {
+    if (auto *Fu = FindItem(FuMap, Member->getName())) {
+      Group->addUnit(Fu);
       continue;
     }
-    if (auto *subgroup = FindItem(fu_group_map(), member->name()))
-      if (!ExpandGroup(group, subgroup->members(), depth + 1))
+    if (auto *Subgroup = FindItem(FuGroupMap, Member->getName()))
+      if (!expandGroup(Group, Subgroup->getMembers(), Depth + 1))
         return false;
   }
   return true;
@@ -727,14 +727,14 @@ bool MdlSpec::ExpandGroup(FuncUnitGroup *group, IdList *members,
 // Explicitly link argument objects to their associated template parameters.
 // Return true if any errors are found.
 //---------------------------------------------------------------------------
-void MdlSpec::ValidateArgs(const ParamsList *params,
-                           const ResourceRefList *instance, MdlItem *item) {
-  if (params->size() != instance->size()) {
-    ErrorLog(item, "Instance has wrong number of parameters");
+void MdlSpec::validateArgs(const ParamsList *Args,
+                           const ResourceRefList *Instance, MdlItem *Item) {
+  if (Args->size() != Instance->size()) {
+    ErrorLog(Item, "Instance has wrong number of parameters");
     return;
   }
-  for (unsigned idx = 0; idx < params->size(); idx++)
-    (*instance)[idx]->set_parameter((*params)[idx]);
+  for (unsigned Idx = 0; Idx < Args->size(); Idx++)
+    (*Instance)[Idx]->setParameter((*Args)[Idx]);
 }
 
 //---------------------------------------------------------------------------
@@ -744,18 +744,18 @@ void MdlSpec::ValidateArgs(const ParamsList *params,
 // the associated template parameter.
 // Any errors found here are considered fatal, so just abort.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckInstantiations() {
+void MdlSpec::checkInstantiations() {
   // For every CPU and cluster, find each functional unit instantiation and
   // check its parameters against its functional unit template definition.
-  for (auto *cpu : cpus()) {
-    for (auto *cluster : *cpu->clusters()) {
-      for (auto *fu_inst : *cluster->func_units()) {
-        if (auto *fu_temp = FindItem(fu_map(), fu_inst->type()->name())) {
-          ValidateArgs(fu_temp->params(), fu_inst->args(), fu_inst);
-          fu_inst->set_template(fu_temp);
+  for (auto *Cpu : Cpus) {
+    for (auto *Cluster : *Cpu->getClusters()) {
+      for (auto *FuInst : *Cluster->getFuncUnits()) {
+        if (auto *FuTemp = FindItem(FuMap, FuInst->getType()->getName())) {
+          validateArgs(FuTemp->getParams(), FuInst->getArgs(), FuInst);
+          FuInst->setTemplate(FuTemp);
         } else {
-          ErrorLog(fu_inst, "Undefined functional unit reference: {0}",
-                   fu_inst->type()->name());
+          ErrorLog(FuInst, "Undefined functional unit reference: {0}",
+                   FuInst->getType()->getName());
         }
       }
     }
@@ -764,28 +764,28 @@ void MdlSpec::CheckInstantiations() {
   // For every functional unit template definition, find each subunit
   // instantiation and check its parameters against its subunit template
   // definition.
-  for (auto *fu_template : func_units()) {
-    for (auto *instance : *fu_template->subunits()) {
-      if (auto *su_temp = FindItem(su_map(), instance->name())) {
-        ValidateArgs(su_temp->params(), instance->args(), instance);
-        instance->set_template(su_temp);
+  for (auto *FuTemp : FuncUnits) {
+    for (auto *Instance : *FuTemp->getSubunits()) {
+      if (auto *SuTemp = FindItem(SuMap, Instance->getName())) {
+        validateArgs(SuTemp->getParams(), Instance->getArgs(), Instance);
+        Instance->setTemplate(SuTemp);
       } else {
-        ErrorLog(instance, "Undefined subunit reference: {0}",
-                 instance->name());
+        ErrorLog(Instance, "Undefined subunit reference: {0}",
+                 Instance->getName());
       }
     }
   }
 
   // For every subunit template base definition, find each latency instantiation
   // and check its parameters against its latency template definition.
-  for (auto *su_template : subunits()) {
-    for (auto *lat_inst : *su_template->latencies()) {
-      if (auto *lat_temp = FindItem(lat_map(), lat_inst->name())) {
-        ValidateArgs(lat_temp->params(), lat_inst->args(), lat_inst);
-        lat_inst->set_template(lat_temp);
+  for (auto *SuTemp : Subunits) {
+    for (auto *LatInst : *SuTemp->getLatencies()) {
+      if (auto *LatTemp = FindItem(LatMap, LatInst->getName())) {
+        validateArgs(LatTemp->getParams(), LatInst->getArgs(), LatInst);
+        LatInst->setTemplate(LatTemp);
       } else {
-        ErrorLog(lat_inst, "Undefined latency reference: {0}",
-                 lat_inst->name());
+        ErrorLog(LatInst, "Undefined latency reference: {0}",
+                 LatInst->getName());
       }
     }
   }
@@ -797,16 +797,16 @@ void MdlSpec::CheckInstantiations() {
 // For each CPU, determine if we need to explicitly manage issue slots.
 // - If there's more than one cluster, we conservatively decide to manage them.
 // - If any functional unit instance pins issue slots, we must manage them.
-void MdlSpec::CheckIssueSlots() {
-  for (auto *cpu : cpus()) {
-    if (cpu->clusters()->size() > 1) {
-      cpu->set_needs_slot_resources(true);
+void MdlSpec::checkIssueSlots() {
+  for (auto *Cpu : Cpus) {
+    if (Cpu->getClusters()->size() > 1) {
+      Cpu->setNeedsSlotResources(true);
       continue;
     }
-    for (auto *cluster : *cpu->clusters())
-      for (auto *fu_inst : *cluster->func_units())
-        if (fu_inst->pin_any() || fu_inst->pin_all()) {
-          cpu->set_needs_slot_resources(true);
+    for (auto *Cluster : *Cpu->getClusters())
+      for (auto *FuInst : *Cluster->getFuncUnits())
+        if (FuInst->getPinAny() || FuInst->getPinAll()) {
+          Cpu->setNeedsSlotResources(true);
           break;
         }
   }
@@ -816,31 +816,31 @@ void MdlSpec::CheckIssueSlots() {
 // Check instruction definitions for valid subunits.
 // Any errors found here are considered fatal, so just abort.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckInstructions() {
-  for (auto *instruct : instructions())
-    for (auto *subunit : *instruct->subunits())
-      if (!su_map().count(subunit->name()))
-        ErrorLog(subunit, "Undefined subunit reference: {0}", subunit->name());
+void MdlSpec::checkInstructions() {
+  for (auto *Instruct : Instructions)
+    for (auto *Subunit : *Instruct->getSubunits())
+      if (!SuMap.count(Subunit->getName()))
+        ErrorLog(Subunit, "Undefined subunit reference: {0}", Subunit->getName());
 }
 
 //---------------------------------------------------------------------------
 // Flatten a single operand - push an operand for each component onto the
 // operand list.
 //---------------------------------------------------------------------------
-void MdlSpec::FlattenOperand(OperandDecl *opnd, OperandDeclList *flat_ops) {
+void MdlSpec::flattenOperand(OperandDecl *Opnd, OperandDeclList *FlatOps) {
   // If this is not a reference to another operand, just add it to the list.
-  if (opnd->is_implied_register() || opnd->reg_class() ||
-      opnd->operand()->operands()->empty()) {
-    flat_ops->push_back(opnd);
+  if (Opnd->isImpliedRegister() || Opnd->getRegClass() ||
+      Opnd->getOperand()->getOperands()->empty()) {
+    FlatOps->push_back(Opnd);
     return;
   }
 
   // Recursively handle operands that reference other operands.
-  for (auto *sub_opnd : *opnd->operand()->operands()) {
-    auto *new_sub_opnd = new OperandDecl(sub_opnd, opnd);
-    new_sub_opnd->add_type(sub_opnd->type());
-    new_sub_opnd->add_name(sub_opnd->op_name());
-    FlattenOperand(new_sub_opnd, flat_ops);
+  for (auto *SubOpnd : *Opnd->getOperand()->getOperands()) {
+    auto *NewSubOpnd = new OperandDecl(SubOpnd, Opnd);
+    NewSubOpnd->addType(SubOpnd->getType());
+    NewSubOpnd->addName(SubOpnd->getOpName());
+    flattenOperand(NewSubOpnd, FlatOps);
   }
 }
 
@@ -853,52 +853,53 @@ void MdlSpec::FlattenOperand(OperandDecl *opnd, OperandDeclList *flat_ops) {
 // Note: Since we've already checked the validity of the operands, there
 // will not be any errors encountered here.
 //---------------------------------------------------------------------------
-void MdlSpec::FlattenInstructionOperands() {
-  for (auto *instruct : instructions())
-    if (instruct->operands()) {
-      auto *flat_ops = new OperandDeclList();
-      for (auto *opnd : *instruct->operands())
-        FlattenOperand(new OperandDecl(opnd, opnd), flat_ops);
+void MdlSpec::flattenInstructionOperands() {
+  for (auto *Instruct : Instructions)
+    if (Instruct->getOperands()) {
+      auto *FlatOps = new OperandDeclList();
+      for (auto *Opnd : *Instruct->getOperands())
+        flattenOperand(new OperandDecl(Opnd, Opnd), FlatOps);
 
-      instruct->set_flat_operands(flat_ops);
+      Instruct->setFlatOperands(FlatOps);
     }
 }
 
 // Determine if a derived operand definition is based on the specified operand.
 // Return true if it does.
-bool MdlSpec::FindOperandDerivation(const OperandDef *derived,
-                                    const OperandDef *operand) const {
-  if (derived == operand)
+bool MdlSpec::findOperandDerivation(const OperandDef *Derived,
+                                    const OperandDef *Operand) const {
+  if (Derived == Operand)
     return true;
 
-  for (auto *base : *derived->base_operands())
-    if (FindOperandDerivation(base, operand))
+  for (auto *Base : *Derived->getBaseOperands())
+    if (findOperandDerivation(Base, Operand))
       return true;
   return false;
 }
 
 // Check a qualified operand name list with an instruction's flattened
 // operand list.
-bool MdlSpec::CompareOpndNames(const OperandDecl *opnd, const IdList &names) {
-  int opnd_size = opnd->op_names()->size();
-  int names_size = names.size();
+bool MdlSpec::compareOpndNames(const OperandDecl *Opnd, const IdList &Names) {
+  int OpndSize = Opnd->getOpNames()->size();
+  int NamesSize = Names.size();
 
   // If the operand reference isn't fully qualified, we allow you to skip
   // the last name if the underlying operand type is a register or register
   // class.  If you don't like this behavior, provide all the names!
-  if (opnd_size != names_size) {
-    if (opnd_size != names_size + 1)
+  if (OpndSize != NamesSize) {
+    if (OpndSize != NamesSize + 1)
       return false;
 
     // Make sure the missing operand type is a register or register class.
-    std::string opnd_type = opnd->types()->back()->name();
-    if (!FindItem(registers(), opnd_type) && !reg_class_map().count(opnd_type))
+    std::string OpndType = Opnd->getTypes()->back()->getName();
+    if (!FindItem(Registers, OpndType) &&
+        !RegisterClassMap.count(OpndType))
       return false;
   }
 
   // All the leading names need to match.
-  for (int index = 0; index < names_size; index++)
-    if ((*opnd->op_names())[index]->name() != names[index]->name())
+  for (int Index = 0; Index < NamesSize; Index++)
+    if ((*Opnd->getOpNames())[Index]->getName() != Names[Index]->getName())
       return false;
   return true;
 }
@@ -907,89 +908,90 @@ bool MdlSpec::CompareOpndNames(const OperandDecl *opnd, const IdList &names) {
 // list, and return its index in the list, or -1 if not found.
 // Implied operands may show up several times in the operand list, and
 // we need to differentiate defs from uses.
-int MdlSpec::FindOperandName(const InstructionDef *instruct,
-                             const IdList &names, RefType type) {
-  int index = 0;
-  int itype = static_cast<int>(type);
-  for (auto *op_decl : *instruct->flat_operands()) {
+int MdlSpec::findOperandName(const InstructionDef *Instruct,
+                             const IdList &Names, RefType Type) {
+  int Index = 0;
+  int Itype = static_cast<int>(Type);
+  for (auto *OpDecl : *Instruct->getFlatOperands()) {
     // Check for references to implied register operands.
-    if (op_decl->is_implied_register() && (itype & RefTypes::kAnyUseDef)) {
-      if (names[0]->name() == op_decl->type()->name()) {
-        if (op_decl->is_input() && (itype & RefTypes::kAnyUse))
-          return index;
-        if (op_decl->is_output() && (itype & RefTypes::kAnyDef))
-          return index;
+    if (OpDecl->isImpliedRegister() && (Itype & RefTypes::kAnyUseDef)) {
+      if (Names[0]->getName() == OpDecl->getType()->getName()) {
+        if (OpDecl->isInput() && (Itype & RefTypes::kAnyUse))
+          return Index;
+        if (OpDecl->isOutput() && (Itype & RefTypes::kAnyDef))
+          return Index;
       }
       continue;
     }
     // Handle "normal" operands.
-    if (CompareOpndNames(op_decl, names))
-      return index;
-    index++;
+    if (compareOpndNames(OpDecl, Names))
+      return Index;
+    Index++;
   }
-  return -1;
+  return -1;     // Not found
 }
 
 // Look up an operand by name and optional type, and return the index or
 // -1 if not found.  If a non-empty type is provided, it must match the
 // operand definition type.
-int MdlSpec::FindOperand(const InstructionDef *instr, const IdList &name,
-                         const std::string &type, RefType ref_type) {
+int MdlSpec::findOperand(const InstructionDef *Instr, const IdList &Name,
+                         const std::string &OpndType, RefType Type) {
   // First check to see if it's a variant operand ($$<number>). Note that these
   // never have a declared operand type.
-  if (name[0]->is_vararg())
-    return name[0]->vararg_index() + instr->num_flat_operands() - 1;
+  if (Name[0]->isVararg())
+    return Name[0]->getVarargIndex() + Instr->getNumFlatOperands() - 1;
 
   // If the operand is simply an operand index ($<number>) use that as the
   // operand id, otherwise look up the operand name(s).
-  int opnd_id;
-  if (name[0]->is_number()) {
-    opnd_id = name[0]->get_number();
-    if (opnd_id >= instr->num_flat_operands())
+  int OpndId;
+  if (Name[0]->isNumber()) {
+    OpndId = Name[0]->getNumber();
+    if (OpndId >= Instr->getNumFlatOperands())
       return -1;
   } else {
-    opnd_id = FindOperandName(instr, name, ref_type);
+    OpndId = findOperandName(Instr, Name, Type);
   }
-  if (opnd_id == -1)
+  if (OpndId == -1)
     return -1;
 
   // See if the operand types match.  If either is empty, we match.
-  auto opnd_decl = instr->GetOperandDecl(opnd_id);
-  if (opnd_decl == nullptr)
-    return opnd_id;
+  auto OpndDecl = Instr->getOperandDecl(OpndId);
+  if (OpndDecl == nullptr)
+    return OpndId;
 
-  std::string decl_type = opnd_decl->type_name();
-  if (type.empty() || decl_type.empty() || decl_type == type)
-    return opnd_id;
+  std::string decl_type = OpndDecl->getTypeName();
+  if (OpndType.empty() || decl_type.empty() || decl_type == OpndType)
+    return OpndId;
 
   // If the operand match type is a derived operand, check if its derived
   // from the declared operand type.
-  if (!type.empty() && !decl_type.empty()) {
-    auto *ins_opnd_type = FindItem(operands(), decl_type);
-    auto *ref_opnd_type = FindItem(operands(), type);
-    if (ins_opnd_type && ref_opnd_type && ref_opnd_type->IsDerivedOperand())
-      if (FindOperandDerivation(ref_opnd_type, ins_opnd_type))
-        return opnd_id;
+  if (!OpndType.empty() && !decl_type.empty()) {
+    auto *InsOpndType = FindItem(Operands, decl_type);
+    auto *RefOpndType = FindItem(Operands, OpndType);
+    if (InsOpndType && RefOpndType && RefOpndType->isDerivedOperand())
+      if (findOperandDerivation(RefOpndType, InsOpndType))
+        return OpndId;
   }
 
   // If the operand names don't match, and they are both register classes,
   // and if the reference class is a strict superset of the declared class,
   // it's a match.
-  auto *decl_class = FindItem(reg_classes(), decl_type);
-  auto *ref_class = FindItem(reg_classes(), type);
-  if (decl_class && ref_class && ref_class->IsSupersetOf(decl_class))
-    return opnd_id;
+  auto *DeclClass = FindItem(RegClasses, decl_type);
+  auto *RefClass = FindItem(RegClasses, OpndType);
+  if (DeclClass && RefClass && RefClass->isSupersetOf(DeclClass))
+    return OpndId;
   return -1; // Not found.
 }
 
 // Given an operand reference, determine its index in this instruction.
 // Return the index, or -1 if not found.
-int MdlSpec::GetOperandIndex(const InstructionDef *instr,
-                             const OperandRef *operand, RefType ref_type) {
-  if (operand == nullptr)
+int MdlSpec::getOperandIndex(const InstructionDef *Instr,
+                             const OperandRef *Operand, RefType Type) {
+  if (Operand == nullptr)
     return -1;
-  std::string type = operand->op_type() ? operand->op_type()->name() : "";
-  return FindOperand(instr, *operand->op_names(), type, ref_type);
+  std::string TypeName = Operand->getOpType() ?
+                     Operand->getOpType()->getName() : "";
+  return findOperand(Instr, *Operand->getOpNames(), TypeName, Type);
 }
 
 //---------------------------------------------------------------------------
@@ -997,35 +999,33 @@ int MdlSpec::GetOperandIndex(const InstructionDef *instr,
 // This can happen with suboperands or operand bases.
 // Return true if recursion found.
 //---------------------------------------------------------------------------
-bool MdlSpec::CheckRecursiveOperands(OperandDef *opnd, OperandDefList &seen) {
-  seen.push_back(opnd);
+bool MdlSpec::checkRecursiveOperands(OperandDef *Opnd, OperandDefList &Seen) {
+  Seen.push_back(Opnd);
 
   // Check suboperands.
-  if (auto *sub_operands = opnd->operands()) {
-    for (auto *opnd_decl : *sub_operands) {
-      if (opnd_decl->operand()) {
-        if (FindItem(seen, opnd_decl->operand()->name())) {
-          ErrorLog(seen[0], "Recursively defined operand: {0}",
-                   seen[0]->name());
+  if (auto *SubOpnds = Opnd->getOperands()) {
+    for (auto *OpndDecl : *SubOpnds) {
+      if (OpndDecl->getOperand()) {
+        if (FindItem(Seen, OpndDecl->getOperand()->getName())) {
+          ErrorLog(Seen[0], "Recursively defined operand: {0}",
+                   Seen[0]->getName());
           return true;
         }
-        if (CheckRecursiveOperands(opnd_decl->operand(), seen))
+        if (checkRecursiveOperands(OpndDecl->getOperand(), Seen))
           return true;
       }
     }
   }
-
   // Check base operands.
-  for (auto *base : *opnd->base_operands()) {
-    if (FindItem(seen, base->name())) {
-      ErrorLog(seen[0], "Recursively defined operand: {0}", seen[0]->name());
+  for (auto *Base : *Opnd->getBaseOperands()) {
+    if (FindItem(Seen, Base->getName())) {
+      ErrorLog(Seen[0], "Recursively defined operand: {0}", Seen[0]->getName());
       return true;
     }
-    if (CheckRecursiveOperands(base, seen))
+    if (checkRecursiveOperands(Base, Seen))
       return true;
   }
-
-  seen.pop_back();
+  Seen.pop_back();
   return false;
 }
 
@@ -1038,33 +1038,33 @@ using OperandDefSet = std::unordered_set<OperandDef *>;
 // is ambiguous, and we can't always generate meaningful code for it.
 // Return nullptr if the derivation is ambiguous.
 //---------------------------------------------------------------------------
-static OperandDef *CheckOperandDerivation(OperandDef *opnd,
-                                          OperandDefSet &seen) {
+static OperandDef *checkOperandDerivation(OperandDef *Opnd,
+                                          OperandDefSet &Seen) {
   // If we've already seen this operand, its either recursive (already
   // checked) or ambiguously defined.  We've already checked for recursion,
   // so have to abort if we see it, but we don't want to report it as
   // an ambiguous derivation.
-  if (seen.count(opnd))
-    return (opnd->IsDerivedOperand()) ? nullptr : opnd;
+  if (Seen.count(Opnd))
+    return (Opnd->isDerivedOperand()) ? nullptr : Opnd;
 
-  seen.insert(opnd);
-  for (auto *base : *opnd->base_operands())
-    if (auto *item = CheckOperandDerivation(base, seen))
-      return item;
+  Seen.insert(Opnd);
+  for (auto *Base : *Opnd->getBaseOperands())
+    if (auto *Item = checkOperandDerivation(Base, Seen))
+      return Item;
 
-  if (opnd->IsDerivedOperand())
-    seen.erase(opnd);
+  if (Opnd->isDerivedOperand())
+    Seen.erase(Opnd);
   return nullptr;
 }
 
 //---------------------------------------------------------------------------
 // Check that derived operands have only one derivation to any base operand.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckOperandDerivations(OperandDef *opnd) {
-  OperandDefSet seen;
-  if (auto *base = CheckOperandDerivation(opnd, seen))
-    ErrorLog(opnd, "Ambiguous operand derivation: {0}->{1}", opnd->name(),
-             base->name());
+void MdlSpec::checkOperandDerivations(OperandDef *Opnd) {
+  OperandDefSet Seen;
+  if (auto *Base = checkOperandDerivation(Opnd, Seen))
+    ErrorLog(Opnd, "Ambiguous operand derivation: {0}->{1}", Opnd->getName(),
+             Base->getName());
 }
 
 //---------------------------------------------------------------------------
@@ -1075,23 +1075,23 @@ void MdlSpec::CheckOperandDerivations(OperandDef *opnd) {
 // directly reference derived operands, so we explicitly check for this here.
 // Derived operands exist to qualify regular operand types in reference rules.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckOperand(OperandDecl *operand_decl) {
-  const std::string &name = operand_decl->type()->name();
-  if (operand_map().count(name)) {
-    operand_decl->set_operand(operand_map()[name]);
-    if (operand_decl->operand()->bases())
-      ErrorLog(operand_decl, "Invalid use of a derived operand: {0}", name);
-  } else if (reg_class_map().count(name)) {
-    operand_decl->set_regclass(reg_class_map()[name]);
-  } else if (FindItem(registers(), name) != nullptr) {
-    operand_decl->set_is_implied_register();
+void MdlSpec::checkOperand(OperandDecl *OpndDecl) {
+  const std::string &Name = OpndDecl->getType()->getName();
+  if (OperandMap.count(Name)) {
+    OpndDecl->setOperand(OperandMap[Name]);
+    if (OpndDecl->getOperand()->getBases())
+      ErrorLog(OpndDecl, "Invalid use of a derived operand: {0}", Name);
+  } else if (RegisterClassMap.count(Name)) {
+    OpndDecl->setRegclass(RegisterClassMap[Name]);
+  } else if (FindItem(Registers, Name) != nullptr) {
+    OpndDecl->setIsImpliedRegister();
   } else {
-    ErrorLog(operand_decl, "Undefined operand type: {0}", name);
+    ErrorLog(OpndDecl, "Undefined operand type: {0}", Name);
   }
 
-  if (!operand_decl->is_implied_register() && !operand_decl->is_ellipsis())
-    if (operand_decl->name().empty())
-      ErrorLog(operand_decl, "Instruction operands must have names");
+  if (!OpndDecl->isImpliedRegister() && !OpndDecl->isEllipsis())
+    if (OpndDecl->getName().empty())
+      ErrorLog(OpndDecl, "Instruction operands must have names");
 }
 
 //---------------------------------------------------------------------------
@@ -1101,66 +1101,66 @@ void MdlSpec::CheckOperand(OperandDecl *operand_decl) {
 // operands to their base operands.
 // Check for recursively defined operands, or ambiguously derived operands.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckOperands() {
+void MdlSpec::checkOperands() {
   // Check instruction definitions for valid operand types.  They can
   // be either operand definitions or register class definitions.
-  for (auto *instruct : instructions())
-    for (auto *operand : *instruct->operands())
-      CheckOperand(operand);
+  for (auto *Instr : Instructions)
+    for (auto *Opnd : *Instr->getOperands())
+      checkOperand(Opnd);
 
   // Check operand definitions for valid operand types, and link declarations
   // to their definitions.  If an operand is derived, link it to its base.
-  for (auto *operand_def : operands()) {
-    for (auto *operand : *operand_def->operands())
-      CheckOperand(operand);
-    if (auto *base_list = operand_def->bases()) {
-      for (auto *base : *base_list)
-        if (operand_map().count(base->name()))
-          operand_def->add_base_operand(operand_map()[base->name()]);
+  for (auto *OpndDef : Operands) {
+    for (auto *Opnd : *OpndDef->getOperands())
+      checkOperand(Opnd);
+    if (auto *Bases = OpndDef->getBases()) {
+      for (auto *Base : *Bases)
+        if (OperandMap.count(Base->getName()))
+          OpndDef->addBaseOperand(OperandMap[Base->getName()]);
         else
-          ErrorLog(base, "Undefined base operand: {0}", base->name());
+          ErrorLog(Base, "Undefined base operand: {0}", Base->getName());
     }
   }
   if (ErrorsSeen())
     Abort(); // If any errors found, abort.
 
   // Check for recursively defined operands.
-  for (auto *opnd_def : operands()) {
-    OperandDefList seen;
-    CheckRecursiveOperands(opnd_def, seen);
+  for (auto *OpndDef : Operands) {
+    OperandDefList Seen;
+    checkRecursiveOperands(OpndDef, Seen);
   }
 
   // Check for valid derivations for derived operands.
-  for (auto *opnd_def : operands())
-    if (!opnd_def->base_operands()->empty()) {
-      CheckOperandDerivations(opnd_def);
+  for (auto *OpndDef : Operands)
+    if (!OpndDef->getBaseOperands()->empty()) {
+      checkOperandDerivations(OpndDef);
     }
   if (ErrorsSeen())
     Abort(); // If any errors found, abort.
 
   // Once we've checked all the operands, flatten the operand hierarchy to a
   // single level.
-  FlattenInstructionOperands();
+  flattenInstructionOperands();
 }
 
 //---------------------------------------------------------------------------
 // Scan references in each latency rule and report references which were
 // encountered, but never valid (in any instruction, in any subunit).
 //---------------------------------------------------------------------------
-void MdlSpec::CheckReferenceUse() {
-  for (auto *latency : latencies())
-    for (auto *ref : *latency->references())
-      if (ref->seen() && !ref->used())
-        WarningLog(ref, "Reference never used: {0}", ref->ToString());
+void MdlSpec::checkReferenceUse() {
+  for (auto *Lat : Latencies)
+    for (auto *Ref : *Lat->getReferences())
+      if (Ref->getSeen() && !Ref->getUsed())
+        WarningLog(Ref, "Reference never used: {0}", Ref->ToString());
 }
 
 //---------------------------------------------------------------------------
 // Print a warning for any subunit template that isn't used.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckSubunitUse() {
-  for (auto *subunit : subunits())
-    if (subunit->use_count() == 0)
-      WarningLog(subunit, "Subunit never used: {0}", subunit->name());
+void MdlSpec::checkSubunitUse() {
+  for (auto *Subunit : Subunits)
+    if (Subunit->getUseCount() == 0)
+      WarningLog(Subunit, "Subunit never used: {0}", Subunit->getName());
 }
 
 //---------------------------------------------------------------------------
@@ -1168,11 +1168,11 @@ void MdlSpec::CheckSubunitUse() {
 // Pooled resources with shared bits must specify a phase - there's no
 // reasonable way to manage these across arbitrary pipeline phases.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckResourceDef(const ResourceDef *def) {
-  if (def->IsPoolDef() && def->start_phase() == nullptr &&
-      def->has_shared_bits())
-    ErrorLog(def, "Shared resource pools must have a pipeline phase: {0}",
-             def->ToString());
+void MdlSpec::checkResourceDef(const ResourceDef *Def) {
+  if (Def->isPoolDef() && Def->getStartPhase() == nullptr &&
+      Def->hasSharedBits())
+    ErrorLog(Def, "Shared resource pools must have a pipeline phase: {0}",
+             Def->ToString());
 }
 
 //---------------------------------------------------------------------------
@@ -1180,40 +1180,43 @@ void MdlSpec::CheckResourceDef(const ResourceDef *def) {
 // Do this before functional unit instantiation and global/group resource
 // promotion, so that we don't get duplicate error messages.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckResourceDefs() {
+void MdlSpec::checkResourceDefs() {
   // Check resources defined globally.
-  for (auto def : resources())
-    CheckResourceDef(def);
+  for (auto Def : Resources)
+    checkResourceDef(Def);
 
   // Check resources defined in functional units.
-  for (auto *funit : func_units())
-    for (auto def : *funit->resources())
-      CheckResourceDef(def);
+  for (auto *Fu : FuncUnits)
+    for (auto Def : *Fu->getResources())
+      checkResourceDef(Def);
 
   // Check resources defined in cpus (and clusters).
-  FindDuplicates(cpus());
-  for (auto *cpu : cpus()) {
-    for (auto def : *cpu->resources())
-      CheckResourceDef(def);
-    for (auto *cluster : *cpu->clusters())
-      for (auto def : *cluster->resources())
-        CheckResourceDef(def);
+  findDuplicates(Cpus);
+  for (auto *Cpu : Cpus) {
+    for (auto Def : *Cpu->getResources())
+      checkResourceDef(Def);
+    for (auto *Cluster : *Cpu->getClusters())
+      for (auto Def : *Cluster->getResources())
+        checkResourceDef(Def);
   }
 }
 
 //---------------------------------------------------------------------------
 // Print a warning for any inconsistent resource use.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckResourceUse() {
-  for (auto *cpu : cpus())
-    for (auto *res : cpu->all_resources())
-      if (res != cpu->all_resources().back()) {   // skip last dummy resource
-        if (!res->is_used())
-          WarningLog(res, "Resource never referenced: {0}", res->debug_name());
-        else if (res->only_held())
-          WarningLog(res, "Resource Held but never Reserved: {0}", res->name());
-        else if (res->only_reserved())
-          WarningLog(res, "Resource Reserved but never Held: {0}", res->name());
+void MdlSpec::checkResourceUse() {
+  for (auto *Cpu : Cpus)
+    for (auto *Res : Cpu->getAllResources())
+      if (Res != Cpu->getAllResources().back()) {  // skip last dummy resource
+        if (!Res->isUsed())
+          WarningLog(Res, "Resource never referenced: {0}",
+                     Res->getDebugName());
+        else if (Res->isOnlyHeld())
+          WarningLog(Res, "Resource Held but never Reserved: {0}",
+                     Res->getName());
+        else if (Res->isOnlyReserved())
+          WarningLog(Res, "Resource Reserved but never Held: {0}",
+                     Res->getName());
       }
 }
 
@@ -1221,21 +1224,20 @@ void MdlSpec::CheckResourceUse() {
 // Check that conditional references have a valid predicate, and also check
 // the predicated references for validity.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckConditionalReferences(ConditionalRef *cond_ref) {
-  if (cond_ref == nullptr)
+void MdlSpec::checkConditionalReferences(ConditionalRef *CondRef) {
+  if (CondRef == nullptr)
     return;
-  if (cond_ref->predicate() != nullptr)
-    if (predicate_table_.count(cond_ref->predicate()->name()) == 0)
-      ErrorLog(cond_ref->predicate(), "Undefined predicate name: {0}",
-               cond_ref->predicate()->name());
+  if (auto *Pred = CondRef->getPredicate())
+    if (PredicateTable.count(Pred->getName()) == 0)
+      ErrorLog(Pred, "Undefined predicate name: {0}", Pred->getName());
 
-  for (auto *ref : cond_ref->refs()) {
-    if (ref->operand() && ref->operand()->op_type() != nullptr)
-      CheckSubOperands(ref->operand(), ref->operand()->op_type(), 1);
-    if (ref->IsConditionalRef())
-      CheckConditionalReferences(ref->conditional_ref());
+  for (auto *Ref : CondRef->getRefs()) {
+    if (Ref->getOperand() && Ref->getOperand()->getOpType() != nullptr)
+      checkSubOperands(Ref->getOperand(), Ref->getOperand()->getOpType(), 1);
+    if (Ref->isConditionalRef())
+      checkConditionalReferences(Ref->getConditionalRef());
   }
-  CheckConditionalReferences(cond_ref->else_clause());
+  checkConditionalReferences(CondRef->getElseClause());
 }
 
 //---------------------------------------------------------------------------
@@ -1244,13 +1246,13 @@ void MdlSpec::CheckConditionalReferences(ConditionalRef *cond_ref) {
 // operand type. We look for references that will -always- fail for any
 // instruction.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckReferences() {
-  for (auto *latency : latencies())
-    for (auto *ref : *latency->references()) {
-      if (ref->operand() && ref->operand()->op_type() != nullptr)
-        CheckSubOperands(ref->operand(), ref->operand()->op_type(), 1);
-      if (ref->IsConditionalRef())
-        CheckConditionalReferences(ref->conditional_ref());
+void MdlSpec::checkReferences() {
+  for (auto *Lat : Latencies)
+    for (auto *Ref : *Lat->getReferences()) {
+      if (Ref->getOperand() && Ref->getOperand()->getOpType() != nullptr)
+        checkSubOperands(Ref->getOperand(), Ref->getOperand()->getOpType(), 1);
+      if (Ref->isConditionalRef())
+        checkConditionalReferences(Ref->getConditionalRef());
     }
 }
 
@@ -1259,24 +1261,24 @@ void MdlSpec::CheckReferences() {
 // gives each CPU a unique set of resources, so we can name them, renumber
 // them, and track use of them separately for each CPU.
 //---------------------------------------------------------------------------
-void MdlSpec::PromoteGlobalResources() {
-  for (auto *cpu : cpus())
-    for (auto *resource : resources())
-      cpu->resources()->push_back(new ResourceDef(*resource));
+void MdlSpec::promoteGlobalResources() {
+  for (auto *Cpu : Cpus)
+    for (auto *Res : Resources)
+      Cpu->getResources()->push_back(new ResourceDef(*Res));
 }
 
 // If we promoted a member and the promoted resource already exists, check that
 // they have compatible definitions.
-void MdlSpec::CheckPromotedMember(ResourceDef *group, Identifier *member,
-                                  ResourceDef *promoted) {
+void MdlSpec::checkPromotedMember(ResourceDef *Group, Identifier *Member,
+                                  ResourceDef *Promoted) {
   // The promoted resource cannot be part of a group.
-  if (promoted->IsPoolDef())
-    ErrorLog(member, "Invalid group member: {0}", member->name());
+  if (Promoted->isPoolDef())
+    ErrorLog(Member, "Invalid group member: {0}", Member->getName());
   // The group and the promoted resource must have the same attributes.
-  if (group->bit_size() != promoted->bit_size() ||
-      group->start_phase() != promoted->start_phase() ||
-      group->end_phase() != promoted->end_phase())
-    ErrorLog(member, "Inconsistent group definition: {0}", member->name());
+  if (Group->getBitSize() != Promoted->getBitSize() ||
+      Group->getStartPhase() != Promoted->getStartPhase() ||
+      Group->getEndPhase() != Promoted->getEndPhase())
+    ErrorLog(Member, "Inconsistent group definition: {0}", Member->getName());
 }
 
 //---------------------------------------------------------------------------
@@ -1286,57 +1288,59 @@ void MdlSpec::CheckPromotedMember(ResourceDef *group, Identifier *member,
 // already defined (either by the user or a previous promotion), make sure
 // the definitions match.
 //---------------------------------------------------------------------------
-void MdlSpec::PromoteResourceGroupMembers(ResourceDefList *resources,
-                                          ResourceDefList *outer_scope,
+void MdlSpec::promoteResourceGroupMembers(ResourceDefList *Resources,
+                                          ResourceDefList *OuterScope,
                                           ResourceRefDict *args) {
-  ResourceDefList promos;
-  for (auto *resource : *resources) {
-    if (resource->IsGroupDef()) {
-      for (unsigned idx = 0; idx < resource->members().size(); idx++) {
-        auto *mem = resource->members()[idx];
+  ResourceDefList Promos;
+  for (auto *Res : *Resources) {
+    if (Res->isGroupDef()) {
+      for (unsigned idx = 0; idx < Res->getMembers().size(); idx++) {
+        auto *Mem = Res->getMembers()[idx];
         // See if this member is defined or has been previously promoted.
-        ResourceDef *def = FindItem(*resources, mem->name());
-        if (def == nullptr)
-          def = FindItem(promos, mem->name());
-        if (def == nullptr && outer_scope != nullptr)
-          def = FindItem(*outer_scope, mem->name());
-        if (def == nullptr && args != nullptr) {
-          if (auto *ref = FindItem(*args, mem->name())) {
-            def = ref->definition();
-            resource->members()[idx] = new Identifier(def->id(), mem->index());
+        ResourceDef *Def = FindItem(*Resources, Mem->getName());
+        if (Def == nullptr)
+          Def = FindItem(Promos, Mem->getName());
+        if (Def == nullptr && OuterScope != nullptr)
+          Def = FindItem(*OuterScope, Mem->getName());
+        if (Def == nullptr && args != nullptr) {
+          if (auto *Ref = FindItem(*args, Mem->getName())) {
+            Def = Ref->getDefinition();
+            Res->getMembers()[idx] =
+                new Identifier(Def->getId(), Mem->getIndex());
           }
         }
 
         // If we didn't find the resource, create a new resource and add it to
         // the list of things to promote.
-        if (def == nullptr) {
-          def = new ResourceDef(*mem, mem, resource->bit_size(), 0,
-                                resource->start_phase(), resource->end_phase());
-          promos.push_back(def);
+        if (Def == nullptr) {
+          Def = new ResourceDef(*Mem, Mem, Res->getBitSize(), 0,
+                                Res->getStartPhase(),
+                                Res->getEndPhase());
+          Promos.push_back(Def);
         }
         // Add the promoted resource to the def list for the group.
-        CheckPromotedMember(resource, mem, def);
-        resource->add_member_def(def);
+        checkPromotedMember(Res, Mem, Def);
+        Res->addMemberDef(Def);
       }
       // After promoting all the members of a group, check that we didn't end
       // up with duplicate members in the group.
-      FindDuplicates(resource->members());
+      findDuplicates(Res->getMembers());
     }
   }
 
   // Add all the new resources to the defined resources.
-  resources->insert(resources->end(), promos.begin(), promos.end());
+  Resources->insert(Resources->end(), Promos.begin(), Promos.end());
 }
 
 //---------------------------------------------------------------------------
 // Scan arguments to functional unit instances, and promote implicit group
 // definitions to cluster resources.
 //---------------------------------------------------------------------------
-void PromoteFuncUnitGroupArgs(ClusterInstance *cluster) {
-  for (auto *instance : *cluster->func_units()) {
-    for (auto *arg : *instance->args()) {
-      if (arg->IsGroupRef() && arg->implicit_group())
-        cluster->resources()->push_back(arg->definition());
+void promoteFuncUnitGroupArgs(ClusterInstance *Cluster) {
+  for (auto *Instance : *Cluster->getFuncUnits()) {
+    for (auto *Arg : *Instance->getArgs()) {
+      if (Arg->isGroupRef() && Arg->isImplicitGroup())
+        Cluster->getResources()->push_back(Arg->getDefinition());
     }
   }
 }
@@ -1346,12 +1350,13 @@ void PromoteFuncUnitGroupArgs(ClusterInstance *cluster) {
 // We promote functional unit templates' resources separately for each
 // instance.
 //---------------------------------------------------------------------------
-void MdlSpec::PromoteResourceGroups() {
-  for (auto *cpu : cpus()) {
-    PromoteResourceGroupMembers(cpu->resources(), nullptr, nullptr);
-    for (auto *clus : *cpu->clusters()) {
-      PromoteFuncUnitGroupArgs(clus);
-      PromoteResourceGroupMembers(clus->resources(), cpu->resources(), nullptr);
+void MdlSpec::promoteResourceGroups() {
+  for (auto *Cpu : Cpus) {
+    promoteResourceGroupMembers(Cpu->getResources(), nullptr, nullptr);
+    for (auto *Cluster : *Cpu->getClusters()) {
+      promoteFuncUnitGroupArgs(Cluster);
+      promoteResourceGroupMembers(Cluster->getResources(), Cpu->getResources(),
+                                  nullptr);
     }
   }
 }
@@ -1359,46 +1364,42 @@ void MdlSpec::PromoteResourceGroups() {
 //---------------------------------------------------------------------------
 // Return true if this is a valid operand reference.
 //---------------------------------------------------------------------------
-bool MdlSpec::CheckSubOperands(OperandRef *ref, const Identifier *opnd,
-                               int idx) {
-  int size = ref->op_names()->size();
-  bool is_reg_class = reg_class_map().count(opnd->name());
-  bool is_operand = operand_map().count(opnd->name());
+bool MdlSpec::checkSubOperands(OperandRef *Ref, const Identifier *Opnd,
+                               int Idx) {
+  int Size = Ref->getOpNames()->size();
+  bool IsRegClass = RegisterClassMap.count(Opnd->getName());
+  bool IsOperand = OperandMap.count(Opnd->getName());
 
-  if (is_reg_class)
-    ref->set_regclass(reg_class_map()[opnd->name()]);
-  if (is_operand)
-    ref->set_operand(operand_map()[opnd->name()]);
+  if (IsRegClass)
+    Ref->setRegClass(RegisterClassMap[Opnd->getName()]);
+  if (IsOperand)
+    Ref->setOperand(OperandMap[Opnd->getName()]);
 
-  if (is_reg_class && idx == size)
+  if (IsRegClass && Idx == Size)
     return true;
 
-  if (is_operand && idx < size) {
-    OperandDef *op_type = operand_map()[opnd->name()];
-    if (!op_type->operands()->empty()) {
-      auto *item =
-          FindItem(*op_type->operands(), (*ref->op_names())[idx]->name());
-      if (item != nullptr)
-        return CheckSubOperands(ref, item->type(), idx + 1);
-      opnd = nullptr; // Force an error message.
+  if (IsOperand && Idx < Size) {
+    OperandDef *Type = OperandMap[Opnd->getName()];
+    if (!Type->getOperands()->empty()) {
+      auto *Item =
+        FindItem(*Type->getOperands(), (*Ref->getOpNames())[Idx]->getName());
+      if (Item != nullptr)
+        return checkSubOperands(Ref, Item->getType(), Idx + 1);
+      Opnd = nullptr; // Force an error message.
     }
   }
-
-  if (opnd == nullptr || (!is_reg_class && !is_operand)) {
-    ErrorLog(ref, "Undefined operand type: {0}", ref->ToString());
+  if (Opnd == nullptr || (!IsRegClass && !IsOperand)) {
+    ErrorLog(Ref, "Undefined operand type: {0}", Ref->ToString());
     return false;
   }
-
-  if (idx < size) {
-    ErrorLog(ref, "Over-qualified operand reference: {0}", ref->ToString());
+  if (Idx < Size) {
+    ErrorLog(Ref, "Over-qualified operand reference: {0}", Ref->ToString());
     return false;
   }
-
-  if (is_operand && !operand_map()[opnd->name()]->operands()->empty()) {
-    ErrorLog(ref, "Under-qualified operand reference: {0}", ref->ToString());
+  if (IsOperand && !OperandMap[Opnd->getName()]->getOperands()->empty()) {
+    ErrorLog(Ref, "Under-qualified operand reference: {0}", Ref->ToString());
     return false;
   }
-
   return true;
 }
 

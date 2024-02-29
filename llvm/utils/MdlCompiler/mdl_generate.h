@@ -39,86 +39,85 @@ constexpr int kOneCycle = 1;
 // A description of a single resource reference.
 //-----------------------------------------------------------------------------
 class ResourceEvent {
+  RefType Type;                     // type of reference
+  int PhaseValue = -1;              // value of phase if constant expression
+  PhaseExpr *Expr = nullptr;        // when reference happens
+  int UseCycles = 1;                // # cycles resource is used
+  ResourceRef *Resource;            // referenced resource
+  int MicroOps = 0;                 // micro_ops (for fus)
+  RefFlags::Item FuFlags;           // various flags for explicit fu refs
+  Reference *Ref = nullptr;         // pointer to original reference
+  SubUnitInstantiation *Subunit;    // pointer to subunit instantiation context
+
 public:
-  ResourceEvent(RefType type, PhaseExpr *expr, int use_cycles, ResourceRef *res,
-                Reference *ref = nullptr,
-                SubUnitInstantiation *subunit = nullptr)
-      : ref_type_(type), phase_expr_(expr), use_cycles_(use_cycles),
-        resource_(res), reference_(ref), subunit_(subunit) {
-    res->definition()->RecordReference(type, expr, res, ref, subunit);
-    SetConstantPhase();
+  ResourceEvent(RefType Type, PhaseExpr *Expr, int Cycles, ResourceRef *Res,
+                Reference *Ref = nullptr,
+                SubUnitInstantiation *Subunit = nullptr)
+      : Type(Type), Expr(Expr), UseCycles(Cycles),
+        Resource(Res), Ref(Ref), Subunit(Subunit) {
+    Res->getDefinition()->recordReference(Type, Expr, Res, Ref, Subunit);
+    setConstantPhase();
   }
-  ResourceEvent(RefType type, PhaseExpr *expr, ResourceRef *res,
-                Reference *ref = nullptr,
-                SubUnitInstantiation *subunit = nullptr)
-      : ref_type_(type), phase_expr_(expr), use_cycles_(kOneCycle),
-        resource_(res), reference_(ref), subunit_(subunit) {
-    res->definition()->RecordReference(type, expr, res, ref, subunit);
-    SetConstantPhase();
+  ResourceEvent(RefType Type, PhaseExpr *Expr, ResourceRef *Res,
+                Reference *Ref = nullptr,
+                SubUnitInstantiation *Subunit = nullptr)
+      : Type(Type), Expr(Expr), UseCycles(kOneCycle),
+        Resource(Res), Ref(Ref), Subunit(Subunit) {
+    Res->getDefinition()->recordReference(Type, Expr, Res, Ref, Subunit);
+    setConstantPhase();
   }
-  ResourceEvent(RefType type, PhaseExpr *expr, ResourceDef *port)
-      : ref_type_(type), phase_expr_(expr), resource_(new ResourceRef(port)) {
-    port->RecordReference(type, expr, nullptr, nullptr, nullptr);
-    SetConstantPhase();
+  ResourceEvent(RefType Type, PhaseExpr *Expr, ResourceDef *port)
+      : Type(Type), Expr(Expr), Resource(new ResourceRef(port)) {
+    port->recordReference(Type, Expr, nullptr, nullptr, nullptr);
+    setConstantPhase();
   }
   // Constructor for an fus reference, including micro_ops.
-  ResourceEvent(RefType type, Reference *ref, ResourceRef *res)
-      : ref_type_(type), phase_expr_(ref->phase_expr()),
-        use_cycles_(ref->use_cycles()), resource_(res),
-        micro_ops_(ref->micro_ops()), fu_flags_(ref->fu_flags()),
-        reference_(ref) {
-    res->definition()->RecordReference(
-                          type, phase_expr_, res, nullptr, nullptr);
+  ResourceEvent(RefType Type, Reference *Ref, ResourceRef *Res)
+      : Type(Type), Expr(Ref->getPhaseExpr()),
+        UseCycles(Ref->getUseCycles()), Resource(Res),
+        MicroOps(Ref->getMicroOps()), FuFlags(Ref->getFuFlags()),
+        Ref(Ref) {
+    Res->getDefinition()->recordReference(
+                          Type, Expr, Res, nullptr, nullptr);
   }
 
-  RefType ref_type() const { return ref_type_; }
-  bool IsFuncUnitRef() const { return ref_type_ == RefTypes::kFus; }
-  PhaseExpr *phase_expr() const { return phase_expr_; }
-  int use_cycles() const { return use_cycles_; }
-  int micro_ops() const { return micro_ops_; }
+  RefType getRefType() const { return Type; }
+  bool isFuncUnitRef() const { return Type == RefTypes::kFus; }
+  PhaseExpr *getPhaseExpr() const { return Expr; }
+  int getUseCycles() const { return UseCycles; }
+  int getMicroOps() const { return MicroOps; }
 
-  RefFlags::Item fu_flags() const { return fu_flags_; }
-  ResourceRef *resource() const { return resource_; }
-  Reference *reference() const { return reference_; }
-  SubUnitInstantiation *subunit() const { return subunit_; }
-  void SetConstantPhase() { phase_value_ = phase_expr_->ConstantPhase(); }
+  RefFlags::Item getFuFlags() const { return FuFlags; }
+  ResourceRef *getResource() const { return Resource; }
+  Reference *getReference() const { return Ref; }
+  SubUnitInstantiation *getSubunit() const { return Subunit; }
+  void setConstantPhase() { PhaseValue = Expr->getConstantPhase(); }
 
   // Resource references are sorted by pipeline phase, then by resource id.
   // If the pipeline phase is non-constant, its ordered last. If both are
   // non-constant, use the formatting string to decide (so that the sort
   // is stable).
-  bool operator<(const ResourceEvent &rhs) const {
-    if (phase_value_ != rhs.phase_value_) {
-      if (phase_value_ == -1)
+  bool operator<(const ResourceEvent &Rhs) const {
+    if (PhaseValue != Rhs.PhaseValue) {
+      if (PhaseValue == -1)
         return false;
-      if (rhs.phase_value_ == -1)
+      if (Rhs.PhaseValue == -1)
         return true;
-      return phase_value_ < rhs.phase_value_;
+      return PhaseValue < Rhs.PhaseValue;
     }
-    if (phase_value_ == -1 && rhs.phase_value_ == -1)
-      return phase_expr_->ToString() < rhs.phase_expr_->ToString();
+    if (PhaseValue == -1 && Rhs.PhaseValue == -1)
+      return Expr->ToString() < Rhs.Expr->ToString();
 
-    return resource_->get_final_resource_id() <
-           rhs.resource()->get_final_resource_id();
+    return Resource->getFinalResourceId() <
+           Rhs.getResource()->getFinalResourceId();
   }
-  bool operator>(const ResourceEvent &rhs) const { return rhs < *this; }
+  bool operator>(const ResourceEvent &Rhs) const { return Rhs < *this; }
 
   std::string ToString() const {
-    return formatv("{0}{1}({2},{3})", RefTypeToString(ref_type()),
-                   phase_expr_->FormatProtection(), phase_expr_->ToString(),
-                   resource_->ToString());
+    return formatv("{0}{1}({2},{3})", convertRefTypeToString(getRefType()),
+                   Expr->formatProtection(), Expr->ToString(),
+                   Resource->ToString());
   }
-
-private:
-  RefType ref_type_;                // type of reference
-  int phase_value_ = -1;            // value of phase if constant expression
-  PhaseExpr *phase_expr_ = nullptr; // when reference happens
-  int use_cycles_ = 1;              // # cycles resource is used
-  ResourceRef *resource_;           // referenced resource
-  int micro_ops_ = 0;               // micro_ops (for fus)
-  RefFlags::Item fu_flags_;         // various flags for explicit fu refs
-  Reference *reference_ = nullptr;  // pointer to original reference
-  SubUnitInstantiation *subunit_;   // pointer to subunit instantiation context
 };
 
 //-----------------------------------------------------------------------------
@@ -126,29 +125,27 @@ private:
 // and subunit instantiation pair.
 //-----------------------------------------------------------------------------
 class InstrInfo {
+  InstructionDef *Instruct;        // pointer to the instruction description
+  SubUnitInstantiation *Subunit;   // which subunit instance
+  ReferenceList *References;       // valid references for this instruction
+  ResourceList Resources;          // sets of resource references
+  ReferenceList ResourceRefs;      // conditional resources and FUs
+
 public:
-  InstrInfo(InstructionDef *instruct, SubUnitInstantiation *subunit,
-            ResourceList &resources, ReferenceList *refs,
-            ReferenceList &resource_refs)
-      : instruct_(instruct), subunit_(subunit), references_(refs),
-        resources_(resources), resource_refs_(resource_refs) {}
+  InstrInfo(InstructionDef *Instruct, SubUnitInstantiation *Subunit,
+            ResourceList &Resources, ReferenceList *Refs,
+            ReferenceList &ResourceRefs)
+      : Instruct(Instruct), Subunit(Subunit), References(Refs),
+        Resources(Resources), ResourceRefs(ResourceRefs) {}
 
-  void CheckUnreferencedOperands(bool check_all_operands);
-  ReferenceList *references() const { return references_; }
-  ResourceList &resources() { return resources_; }
-  ReferenceList &resource_refs() { return resource_refs_; }
-  SubUnitInstantiation *subunit() const { return subunit_; }
-  InstructionDef *instruct() const { return instruct_; }
+  void checkUnreferencedOperands(bool CheckAllOperands);
+  ReferenceList *getReferences() const { return References; }
+  ResourceList &getResources() { return Resources; }
+  ReferenceList &getResourceRefs() { return ResourceRefs; }
+  SubUnitInstantiation *getSubunit() const { return Subunit; }
+  InstructionDef *getInstruct() const { return Instruct; }
   std::string ToString() const;
-  void dump() const { std::cout << ToString() << "\n"; }
-
-private:
-  InstructionDef *instruct_;      // pointer to the instruction description
-  SubUnitInstantiation *subunit_; // which subunit instance
-
-  ReferenceList *references_;   // valid references for this instruction
-  ResourceList resources_;      // sets of resource references
-  ReferenceList resource_refs_; // conditional resources and FUs
+  void Dump() const { std::cout << ToString() << "\n"; }
 };
 
 //-----------------------------------------------------------------------------
@@ -157,120 +154,68 @@ private:
 // the contained map.
 //-----------------------------------------------------------------------------
 class InstructionDatabase {
-public:
-  InstructionDatabase(std::string directory_name, std::string file_name,
-                      bool gen_missing_info, MdlSpec &spec);
-  void GenerateInstructionInfo(InstructionDef *instruct);
-  ResourceSets BuildResourceSets(ResourceList &resources,
-                                 SubUnitInstantiation *subunit);
-  void RecordConditionallyUsedFus(
-                  ConditionalRef *cond, SubUnitInstantiation *subunit);
-  void RecordUsedFus(
-                  ReferenceList &resource_refs, SubUnitInstantiation *subunit);
+  std::string DirectoryName; // output directory name
+  std::string FileName;      // original mdl filename
+  bool GenMissingInfo;       // reflects command line option of same name
+  MdlSpec &Spec;             // machine description specification
+  std::map<std::string, InstrInfoList> InstructionInfo;
 
-  void FindReferencedOperands(const InstructionDef *instr, ReferenceList *refs,
-                              CpuInstance *cpu, std::set<int> &found);
-  void FindCondReferencedOperands(const InstructionDef *instr,
-                                  ConditionalRef *cond, CpuInstance *cpu,
-                                  std::set<int> &found);
-  void AddUnreferencedOperandDefs(const InstructionDef *instr,
-                                  ReferenceList *refs, CpuInstance *cpu);
+public:
+  InstructionDatabase(std::string DirectoryName, std::string FileName,
+                      bool GenMissingInfo, MdlSpec &Spec);
+
+  void generateInstructionInfo(InstructionDef *Instruct);
+  ResourceSets buildResourceSets(ResourceList &Resources,
+                                 SubUnitInstantiation *Subunit);
+  void recordConditionallyUsedFus(
+                  ConditionalRef *Cond, SubUnitInstantiation *Subunit);
+  void recordUsedFus(
+                  ReferenceList &Resource_refs, SubUnitInstantiation *Subunit);
+
+  void findReferencedOperands(const InstructionDef *Instr, ReferenceList *Refs,
+                              CpuInstance *Cpu, std::set<int> &Found);
+  void findCondReferencedOperands(const InstructionDef *Instr,
+                                  ConditionalRef *Cond, CpuInstance *Cpu,
+                                  std::set<int> &Found);
+  void addUnreferencedOperandDefs(const InstructionDef *Instr,
+                                  ReferenceList *Refs, CpuInstance *Cpu);
 
   // Check all instruction records for operands that don't have explicit
   // references referring to them - these are likely errors.
-  void CheckUnreferencedOperands(bool check_all_operands) {
-    for (auto &[name, info_set] : instruction_info_)
-      for (auto *info : info_set)
-        info->CheckUnreferencedOperands(check_all_operands);
-  }
-
+  void checkUnreferencedOperands(bool check_all_operands);
   // Given a Reference operand, determine if it is valid for this instruction.
   // If the reference operand is null, its always valid.
   // Return true if its valid.
-  bool IsOperandValid(const InstructionDef *instr, const OperandRef *opnd,
-                      RefType ref_type) const {
-    if (opnd == nullptr)
-      return true;
-    int op_index = spec_.GetOperandIndex(instr, opnd, ref_type);
-    if (op_index == -1)
-      return false;
-
-    // For holds and reserves, we don't have to check the reference type.
-    int iref_type = static_cast<int>(ref_type);
-    if ((iref_type & RefTypes::kAnyUseDef) == 0)
-      return true;
-
-    // If the reference is any use or def, make sure it matches the type of the
-    // operand declaration in the instruction.  Input operands must be "used",
-    // and output operands must be "defed".
-    // Occasionally td files give input and output operands the same name/type
-    // (in different instructions), and latency rules must provide "defs" and
-    // "uses" for those operands, but we don't have an obvious way to decide
-    // whether a particular def or use matches an operand reference. So we use
-    // an operand's I/O designator to differentiate. (These are -always- there
-    // for definitions scraped from llvm).  If an operand doesn't have an I/O
-    // designator, we can skip this check.
-    auto *op = instr->GetOperandDecl(op_index);
-    if (op == nullptr)
-      return true;
-    if (op->is_input() && (iref_type & RefTypes::kAnyUse) == 0)
-      return false;
-    if (op->is_output() && (iref_type & RefTypes::kAnyDef) == 0)
-      return false;
-    return true;
-  }
-
+  bool isOperandValid(const InstructionDef *Instr, const OperandRef *Opnd,
+                      RefType Type) const;
   // Look for operand references in phase expressions, and make sure the
   // operand exists in the current instruction.
-  // Return true if the expression is valid.
-  bool IsPhaseExprValid(const InstructionDef *instr,
-                        const PhaseExpr *expr) const {
-    if (!expr)
-      return true;
-    if (expr->operation() == kOpnd)
-      return IsOperandValid(instr, expr->operand(), RefTypes::kNull);
-    return IsPhaseExprValid(instr, expr->left()) &&
-           IsPhaseExprValid(instr, expr->right());
-  }
-
+  bool isPhaseExprValid(const InstructionDef *Instr,
+                        const PhaseExpr *Expr) const;
   // Return true if this reference is valid for this instruction.
-  // - If it has an operand reference, then check that the instuction
-  //   definition has that operand.
-  // - If the phase expression contains operand references, check them too.
-  bool IsReferenceValid(const InstructionDef *instr,
-                        const Reference *reference) const {
-    return IsOperandValid(instr, reference->operand(), reference->ref_type()) &&
-           IsPhaseExprValid(instr, reference->phase_expr());
-  }
-
+  bool isReferenceValid(const InstructionDef *Instr,
+                        const Reference *Ref) const;
   // Top level function for checking a set of reference predicates against
   // a particular instruction definition.
-  ReferenceList *FilterReferences(const InstructionDef *instr,
-                                  ReferenceList &candidates, CpuInstance *cpu);
+  ReferenceList *filterReferences(const InstructionDef *Instr,
+                                  ReferenceList &Candidates, CpuInstance *Cpu);
   // Filter a single conditional reference.  Simplify if the predicate
   // evaluates to true or false.
-  ConditionalRef *FilterConditionalRef(const InstructionDef *instr,
-                                       ConditionalRef *cond, CpuInstance *cpu);
+  ConditionalRef *filterConditionalRef(const InstructionDef *Instr,
+                                       ConditionalRef *Cond, CpuInstance *Cpu);
 
-  MdlSpec &spec() { return spec_; }
-  auto &instruction_info() { return instruction_info_; }
-  bool gen_missing_info() const { return gen_missing_info_; }
+  MdlSpec &getSpec() { return Spec; }
+  auto &getInstructionInfo() { return InstructionInfo; }
+  bool genMissingInfo() const { return GenMissingInfo; }
 
   // Write everything out to the C++ output file.
-  void Write(bool generate_llvm_defs);
+  void write(bool GenerateLLVMDefs);
 
   // Dump everything we know about all the target instructions.
-  void DumpInstructions();
+  void dumpInstructions();
 
-  std::string file_name() const { return file_name_; }
-  std::string directory_name() const { return directory_name_; }
-
-private:
-  std::string directory_name_; // output directory name
-  std::string file_name_;      // original mdl filename
-  bool gen_missing_info_;      // reflects command line option of same name
-  MdlSpec &spec_;              // machine description specification
-  std::map<std::string, InstrInfoList> instruction_info_;
+  std::string getFileName() const { return FileName; }
+  std::string getDirectoryName() const { return DirectoryName; }
 };
 
 } // namespace mdl

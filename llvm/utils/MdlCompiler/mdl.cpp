@@ -77,13 +77,13 @@ namespace mdl {
 // is used as a "default" pipe phase identifier for implicit resources.
 // If there are no phase names, make one up to avoid errors downstream.
 //---------------------------------------------------------------------------
-PhaseName *MdlSpec::FindFirstPhase() {
-  if (first_phase_name_ != nullptr)
-    return first_phase_name_;
-  if (pipe_phases().empty() || pipe_phases()[0]->phase_names()->empty())
-    return first_phase_name_ = new PhaseName("E1");
+PhaseName *MdlSpec::findFirstPhase() {
+  if (FirstPhaseName != nullptr)
+    return FirstPhaseName;
+  if (PipeDefs.empty() || PipeDefs[0]->getPhaseNames()->empty())
+    return FirstPhaseName = new PhaseName("E1");
 
-  return first_phase_name_ = (*pipe_phases()[0]->phase_names())[0];
+  return FirstPhaseName = (*PipeDefs[0]->getPhaseNames())[0];
 }
 
 //---------------------------------------------------------------------------
@@ -92,28 +92,28 @@ PhaseName *MdlSpec::FindFirstPhase() {
 // First look in the specified CPU, then the top-level spec.  If you don't
 // find it there, try "E1".  If you don't find that, use first phase.
 //---------------------------------------------------------------------------
-PhaseName *MdlSpec::FindFirstExecutePhase(CpuInstance *cpu) {
-  if (cpu != nullptr && !cpu->pipe_phases()->empty())
-    for (auto *pipe_def : *cpu->pipe_phases())
-      if (pipe_def->first_execute_phase_name() != nullptr)
-        return pipe_def->first_execute_phase_name();
+PhaseName *MdlSpec::findFirstExecutePhase(CpuInstance *Cpu) {
+  if (Cpu != nullptr && !Cpu->getPipePhases()->empty())
+    for (auto *PipeDef : *Cpu->getPipePhases())
+      if (PipeDef->getFirstExecutePhaseName() != nullptr)
+        return PipeDef->getFirstExecutePhaseName();
 
-  for (auto *pipe_def : pipe_phases())
-    if (pipe_def->first_execute_phase_name() != nullptr)
-      return pipe_def->first_execute_phase_name();
+  for (auto *PipeDef : PipeDefs)
+    if (PipeDef->getFirstExecutePhaseName() != nullptr)
+      return PipeDef->getFirstExecutePhaseName();
 
-  auto first = Identifier("E1");
-  if (auto *phase = SearchPipeReference(&first, cpu))
-    return phase;
-  return FindFirstPhase();
+  auto First = Identifier("E1");
+  if (auto *Phase = searchPipeReference(&First, Cpu))
+    return Phase;
+  return findFirstPhase();
 }
 
 //---------------------------------------------------------------------------
 // Conversions between strings and reference types.
 //---------------------------------------------------------------------------
 // For parsing the mdl input file.
-RefType StringToRefType(const std::string &ref_type) {
-  static std::map<std::string, RefType> *mapping =
+RefType convertStringToRefType(const std::string &Type) {
+  static std::map<std::string, RefType> *Mapping =
       new std::map<std::string, RefType>({{"predicate", RefTypes::kPred},
                                           {"use", RefTypes::kUse},
                                           {"def", RefTypes::kDef},
@@ -122,8 +122,8 @@ RefType StringToRefType(const std::string &ref_type) {
                                           {"hold", RefTypes::kHold},
                                           {"res", RefTypes::kReserve},
                                           {"fus", RefTypes::kFus}});
-  if (mapping->count(ref_type))
-    return mapping->at(ref_type);
+  if (Mapping->count(Type))
+    return Mapping->at(Type);
   return RefTypes::kNull;
 }
 
@@ -139,42 +139,42 @@ constexpr int RefMap[] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8}; // 112-128
 
 // For writing out debug information.
-std::string RefTypeToString(RefType ref_type) {
-  static const char *refs[] = {"null",   "predicate", "use",     "def", "kill",
+std::string convertRefTypeToString(RefType Type) {
+  static const char *Names[] = {"null",   "predicate", "use",     "def", "kill",
                                "usedef", "hold",      "reserve", "fus"};
-  if (ref_type < RefTypes::kNull || ref_type > RefTypes::kFus)
+  if (Type < RefTypes::kNull || Type > RefTypes::kFus)
     return "RefNull";
-  return refs[RefMap[static_cast<int>(ref_type)]];
+  return Names[RefMap[static_cast<int>(Type)]];
 }
 
 // For writing out the database.
-std::string FormatReferenceType(RefType ref_type) {
-  static const char *refs[] = {"RefNull", "RefPred",    "RefUse",
+std::string formatReferenceType(RefType Type) {
+  static const char *Names[] = {"RefNull", "RefPred",    "RefUse",
                                "RefDef",  "RefKill",    "RefUseDef",
                                "RefHold", "RefReserve", "RefFus"};
-  if (ref_type < RefTypes::kNull || ref_type > RefTypes::kFus)
+  if (Type < RefTypes::kNull || Type > RefTypes::kFus)
     return "RefNull";
-  return refs[RefMap[static_cast<int>(ref_type)]];
+  return Names[RefMap[static_cast<int>(Type)]];
 }
 
 // For writing out aggregate references (where they are ORed together).
-std::string FormatReferenceTypes(int ref_type) {
+std::string formatReferenceTypes(int Type) {
   std::string out;
-  if (ref_type & static_cast<int>(RefTypes::kPred))
+  if (Type & static_cast<int>(RefTypes::kPred))
     out += " Predicate";
-  if (ref_type & static_cast<int>(RefTypes::kUse))
+  if (Type & static_cast<int>(RefTypes::kUse))
     out += " Use";
-  if (ref_type & static_cast<int>(RefTypes::kDef))
+  if (Type & static_cast<int>(RefTypes::kDef))
     out += " Def";
-  if (ref_type & static_cast<int>(RefTypes::kKill))
+  if (Type & static_cast<int>(RefTypes::kKill))
     out += " Kill";
-  if (ref_type & static_cast<int>(RefTypes::kUseDef))
+  if (Type & static_cast<int>(RefTypes::kUseDef))
     out += " UseDef";
-  if (ref_type & static_cast<int>(RefTypes::kHold))
+  if (Type & static_cast<int>(RefTypes::kHold))
     out += " Hold";
-  if (ref_type & static_cast<int>(RefTypes::kReserve))
+  if (Type & static_cast<int>(RefTypes::kReserve))
     out += " Reserve";
-  if (ref_type & static_cast<int>(RefTypes::kFus))
+  if (Type & static_cast<int>(RefTypes::kFus))
     out += " Fus";
   return formatv("<{0}>", out.substr(1));
 }
@@ -182,13 +182,13 @@ std::string FormatReferenceTypes(int ref_type) {
 //---------------------------------------------------------------------------
 // Create a subpool descriptor for a resource reference.
 //---------------------------------------------------------------------------
-SubPool::SubPool(const ResourceRef *res) {
-  if (res->IsGroupRef()) {
-    first_ = 0;
-    last_ = res->definition()->members().size() - 1;
+SubPool::SubPool(const ResourceRef *Res) {
+  if (Res->isGroupRef()) {
+    First = 0;
+    Last = Res->getDefinition()->getMembers().size() - 1;
   } else {
-    first_ = res->first();
-    last_ = res->last();
+    First = Res->getFirst();
+    Last = Res->getLast();
   }
 }
 
@@ -211,93 +211,93 @@ SubPool::SubPool(const ResourceRef *res) {
 // each CPU. But thats -really- expensive and its generally very reasonable
 // to depend on the function finding "E1" in the spec-level phase table.
 //---------------------------------------------------------------------------
-void MdlSpec::CheckInstructionSubunits() {
-  MdlItem item;
-  std::string unit = "$pseudo_unit";
-  int pseudo_subunits = 0;
+void MdlSpec::checkInstructionSubunits() {
+  MdlItem Item;
+  std::string Unit = "$pseudo_unit";
+  int PseudoSubunits = 0;
 
-  for (auto *instr : instructions())
-    if (instr->subunits()->empty()) {
-      auto *refs = new ReferenceList;
+  for (auto *Instr : Instructions)
+    if (Instr->getSubunits()->empty()) {
+      auto *Refs = new ReferenceList;
       // Create reference objects for each register-based operand. There's a
       // few complexities to this. Register class operands can be embedded
       // in other operands, and we need to properly represent the operand
       // hierarchy in the reference. Register-specific references can just
       // reference the register directly.
-      for (const auto *opnd : *instr->flat_operands()) {
-        auto *back = opnd->types()->back();
-        auto *front = opnd->types()->front();
-        OperandRef *ref_opnd = nullptr;
-        if (auto *rclass = FindItem(reg_classes(), back->name())) {
-          ref_opnd = new OperandRef(front, opnd->op_names(), rclass);
-        } else if (FindItem(registers(), back->name()) != nullptr) {
-          ref_opnd = new OperandRef(item, nullptr, new IdList(1, back));
+      for (const auto *Opnd : *Instr->getFlatOperands()) {
+        auto *Back = Opnd->getTypes()->back();
+        auto *Front = Opnd->getTypes()->front();
+        OperandRef *RefOpnd = nullptr;
+        if (auto *RClass = FindItem(RegClasses, Back->getName())) {
+          RefOpnd = new OperandRef(Front, Opnd->getOpNames(), RClass);
+        } else if (FindItem(Registers, Back->getName()) != nullptr) {
+          RefOpnd = new OperandRef(Item, nullptr, new IdList(1, Back));
         }
-        RefType ref_type = opnd->is_input() ? RefTypes::kUse : RefTypes::kDef;
-        auto *phase = FindFirstExecutePhase(nullptr);
-        refs->push_back(new Reference(ref_type, phase, ref_opnd));
+        RefType Type = Opnd->isInput() ? RefTypes::kUse : RefTypes::kDef;
+        auto *Phase = findFirstExecutePhase(nullptr);
+        Refs->push_back(new Reference(Type, Phase, RefOpnd));
       }
       // Create an explicit reference to the functional unit.
-      auto *phase = FindFirstPhase();
-      refs->push_back(new Reference(RefTypes::kFus, phase, unit));
+      auto *Phase = findFirstPhase();
+      Refs->push_back(new Reference(RefTypes::kFus, Phase, Unit));
 
       // We create new templates for the latency and subunit, and new
       // instances for both, then add them to the appropriate spec tables.
-      auto lname = formatv("$latency{0}", pseudo_subunits);
-      auto sname = formatv("$subunit{0}", pseudo_subunits++);
-      auto *latency = new LatencyTemplate(lname, refs);
-      auto *instance = new LatencyInstance(lname);
-      auto *subunit = new SubUnitTemplate(sname, instance, latency);
+      auto LatName = formatv("$latency{0}", PseudoSubunits);
+      auto SuName = formatv("$subunit{0}", PseudoSubunits++);
+      auto *Latency = new LatencyTemplate(LatName, Refs);
+      auto *Instance = new LatencyInstance(LatName);
+      auto *Subunit = new SubUnitTemplate(SuName, Instance, Latency);
 
       // Add the latency and subunit templates to the global sets of units.
-      latencies().push_back(latency);
-      subunits().push_back(subunit);
-      su_instantiations()[sname] = new std::vector<SubUnitInstantiation *>;
+      Latencies.push_back(Latency);
+      Subunits.push_back(Subunit);
+      SuInstantiations[SuName] = new std::vector<SubUnitInstantiation *>;
 
       // Add the latency and subunit templates to the dictionaries.
-      lat_map().emplace(latency->name(), latency);
-      su_map().emplace(subunit->name(), subunit);
+      LatMap.emplace(Latency->getName(), Latency);
+      SuMap.emplace(Subunit->getName(), Subunit);
 
       // Add a subunit instance to the instruction.
-      instr->subunits()->push_back(new Identifier(sname));
+      Instr->getSubunits()->push_back(new Identifier(SuName));
     }
 
-  if (pseudo_subunits == 0)
+  if (PseudoSubunits == 0)
     return;
 
   // Add an implicitly defined functional unit template to the dictionary.
-  fu_map_.emplace(unit, new FuncUnitTemplate(new Identifier(unit)));
+  FuMap.emplace(Unit, new FuncUnitTemplate(new Identifier(Unit)));
 
   // Add the pseudo unit to the first cluster of each cpu instance.
-  for (auto *cpu : cpus())
-    if (!cpu->clusters()->empty())
-      cpu->clusters()->front()->func_units()->push_back(
-          new FuncUnitInstance(unit));
+  for (auto *Cpu : Cpus)
+    if (!Cpu->getClusters()->empty())
+      Cpu->getClusters()->front()->getFuncUnits()->push_back(
+          new FuncUnitInstance(Unit));
 }
 
 //---------------------------------------------------------------------------
 // If a subunit referenced a CPU in an fus clause, create a "fake" functional
 // unit and add the subunit to that.
 //---------------------------------------------------------------------------
-void MdlSpec::AddSubunitToCpu(CpuInstance *cpu, SubUnitTemplate *subunit) {
-  auto fu_temp_name = catchall_name(cpu->name());
+void MdlSpec::addSubunitToCpu(CpuInstance *Cpu, SubUnitTemplate *subunit) {
+  auto FuTempName = catchallName(Cpu->getName());
 
   // If the CPU doesn't have a catchall functional unit, create a CPU-specific
   // functional unit template, and add an instance of it to the CPU.
-  auto *cluster = (*cpu->clusters())[0];
-  auto *fu = FindItem(*cluster->func_units(), fu_temp_name);
-  if (fu == nullptr) {
-    auto *fu_template = new FuncUnitTemplate(new Identifier(fu_temp_name));
-    fu_map_[fu_temp_name] = fu_template;
-    cluster->func_units()->push_back(fu = new FuncUnitInstance(fu_temp_name));
-    fu->set_template(fu_template);
+  auto *Cluster = (*Cpu->getClusters())[0];
+  auto *Fu = FindItem(*Cluster->getFuncUnits(), FuTempName);
+  if (Fu == nullptr) {
+    auto *FuTemplate = new FuncUnitTemplate(new Identifier(FuTempName));
+    FuMap[FuTempName] = FuTemplate;
+    Cluster->getFuncUnits()->push_back(Fu = new FuncUnitInstance(FuTempName));
+    Fu->setTemplate(FuTemplate);
   }
 
   // If the subunit hasn't been added previously, add it now.
-  if (!FindItem(*fu->get_template()->subunits(), subunit->name())) {
-    auto *instance = new SubUnitInstance(*subunit, subunit->type());
-    instance->set_template(subunit);
-    fu->get_template()->add_subunit_instance(instance);
+  if (!FindItem(*Fu->getTemplate()->getSubunits(), subunit->getName())) {
+    auto *Instance = new SubUnitInstance(*subunit, subunit->getType());
+    Instance->setTemplate(subunit);
+    Fu->getTemplate()->addSubunitInstance(Instance);
   }
 }
 
@@ -309,26 +309,28 @@ void MdlSpec::AddSubunitToCpu(CpuInstance *cpu, SubUnitTemplate *subunit) {
 //  with only one member, we rewrite the resource reference to that func
 //  unit template.
 //---------------------------------------------------------------------------
-void MdlSpec::FindLatencyFuncUnits(ReferenceList *references,
-                                   LatencyFuncUnits &func_units) {
-  for (auto *ref : *references) {
-    if (ref->IsConditionalRef()) {
-      for (auto *cnd = ref->conditional_ref(); cnd; cnd = cnd->else_clause())
-        FindLatencyFuncUnits(&cnd->refs(), func_units);
-    } else if (ref->ref_type() == RefTypes::kFus) {
-      for (auto *res : *ref->resources()) {
-        if (FindItem(fu_map_, res->name()) || FindItem(cpus_, res->name())) {
-          func_units.AddUnit(res->name(), ref->predicates());
-        } else if (auto *group = FindItem(fu_group_map(), res->name())) {
-          if (group->members()->size() > 1) {
-            for (auto *fu : *group->members())
-              func_units.AddUnit(fu->name(), ref->predicates());
+void MdlSpec::findLatencyFuncUnits(ReferenceList *References,
+                                   LatencyFuncUnits &FuncUnits) {
+  for (auto *Ref : *References) {
+    if (Ref->isConditionalRef()) {
+      for (auto *Cr = Ref->getConditionalRef(); Cr; Cr = Cr->getElseClause())
+        findLatencyFuncUnits(&Cr->getRefs(), FuncUnits);
+    } else if (Ref->getRefType() == RefTypes::kFus) {
+      for (auto *Res : *Ref->getResources()) {
+        if (FindItem(FuMap, Res->getName()) ||
+            FindItem(Cpus, Res->getName())) {
+          FuncUnits.addUnit(Res->getName(), Ref->getPredicates());
+        } else if (auto *Group = FindItem(FuGroupMap, Res->getName())) {
+          if (Group->getMembers()->size() > 1) {
+            for (auto *Fu : *Group->getMembers())
+              FuncUnits.addUnit(Fu->getName(), Ref->getPredicates());
           } else {
-            res->rename((*group->members())[0]);
-            func_units.AddUnit(res->name(), ref->predicates());
+            Res->rename((*Group->getMembers())[0]);
+            FuncUnits.addUnit(Res->getName(), Ref->getPredicates());
           }
         } else {
-          ErrorLog(res, "Invalid functional unit specifier: {0}", res->name());
+          ErrorLog(Res, "Invalid functional unit specifier: {0}",
+                   Res->getName());
         }
       }
     }
@@ -338,19 +340,19 @@ void MdlSpec::FindLatencyFuncUnits(ReferenceList *references,
 //---------------------------------------------------------------------------
 // Find the set of explicitly referenced FUS for each latency template.
 //---------------------------------------------------------------------------
-void MdlSpec::FindLatencyFuncUnits(LatencyTemplate *lat) {
-  if (lat->referenced_fus()) return;
+void MdlSpec::findLatencyFuncUnits(LatencyTemplate *Lat) {
+  if (Lat->getReferencedFus()) return;
 
   // Find all the functional units mentioned by this latency template.
   auto *fus = new LatencyFuncUnits;
-  lat->set_referenced_fus(fus);
-  FindLatencyFuncUnits(lat->references(), *fus);
+  Lat->setReferencedFus(fus);
+  findLatencyFuncUnits(Lat->getReferences(), *fus);
 
   // Find referenced fu sets for base units.
-  if (lat->base_ids())
-    for (auto *base : *lat->base_ids()) {
-      FindLatencyFuncUnits(lat_map_[base->name()]);
-      fus->AddBaseUnits(lat_map_[base->name()]->referenced_fus());
+  if (Lat->getBaseIds())
+    for (auto *Base : *Lat->getBaseIds()) {
+      findLatencyFuncUnits(LatMap[Base->getName()]);
+      fus->addBaseUnits(LatMap[Base->getName()]->getReferencedFus());
     }
 }
 
@@ -358,18 +360,18 @@ void MdlSpec::FindLatencyFuncUnits(LatencyTemplate *lat) {
 // For each functional unit template, enumerate all CPUs that instantiate it,
 // including all uses of the unit as a subunit of another template.
 //---------------------------------------------------------------------------
-void MdlSpec::FindFunctionalUnitClientCpus(FuncUnitTemplate *funit,
-                                           CpuInstance *cpu) {
-  funit->add_client_cpu(cpu->name());
-  for (auto *base : funit->unit_bases())
-    FindFunctionalUnitClientCpus(base, cpu);
+void MdlSpec::findFunctionalUnitClientCpus(FuncUnitTemplate *Funit,
+                                           CpuInstance *Cpu) {
+  Funit->addClientCpu(Cpu->getName());
+  for (auto *Base : Funit->getUnitBases())
+    findFunctionalUnitClientCpus(Base, Cpu);
 }
 
-void MdlSpec::FindFunctionalUnitClientCpus() {
-  for (auto *cpu : cpus_)
-    for (auto *cluster : *cpu->clusters())
-      for (auto *funit : *cluster->func_units())
-        FindFunctionalUnitClientCpus(funit->get_template(), cpu);
+void MdlSpec::findFunctionalUnitClientCpus() {
+  for (auto *Cpu : Cpus)
+    for (auto *Cluster : *Cpu->getClusters())
+      for (auto *Funit : *Cluster->getFuncUnits())
+        findFunctionalUnitClientCpus(Funit->getTemplate(), Cpu);
 }
 
 //---------------------------------------------------------------------------
@@ -377,22 +379,21 @@ void MdlSpec::FindFunctionalUnitClientCpus() {
 // functional unit template.  This is used when we're writing out fus()
 // records.
 //---------------------------------------------------------------------------
-void MdlSpec::BuildFuncUnitInstancesMap() {
-  for (auto *cpu : cpus_)
-    for (auto *cluster : *cpu->clusters())
-      for (auto *funit : cluster->fu_instantiations()) {
-        auto &name = funit->func_type()->name();
-        if (!is_catchall_name(name) && !is_based_fu_instance(name))
-          cpu->func_unit_instances()[name].push_back(funit);
+void MdlSpec::buildFuncUnitInstancesMap() {
+  for (auto *Cpu : Cpus)
+    for (auto *Cluster : *Cpu->getClusters())
+      for (auto *Funit : Cluster->getFuInstantiations()) {
+        auto &Name = Funit->getFuncType()->getName();
+        if (!isCatchallName(Name) && !isBasedFuInstance(Name))
+          Cpu->getFuncUnitInstances()[Name].push_back(Funit);
       }
 }
 
-bool HasValidPredicate(IdList *predicates, CpuInstance *cpu,
+bool hasValidPredicate(IdList *Predicates, CpuInstance *Cpu,
                        MdlSpec *spec) {
-  if (predicates == nullptr) return true;
-
-  for (auto *pred : *predicates)
-    if (pred->name() == cpu->name()) return true;
+  if (Predicates == nullptr) return true;
+  for (auto *Pred : *Predicates)
+    if (Pred->getName() == Cpu->getName()) return true;
   return false;
 }
 
@@ -406,72 +407,71 @@ bool HasValidPredicate(IdList *predicates, CpuInstance *cpu,
 // subunits/latencies that reference that CPU's implicitly defined functional
 // units.
 //---------------------------------------------------------------------------
-void MdlSpec::TieSubUnitsToFunctionalUnits() {
+void MdlSpec::tieSubUnitsToFunctionalUnits() {
   // If there were no Fus records seen, we can skip this (expensive) work.
-  if (!has_explicit_fu_refs()) return;
+  if (!hasExplicitFuRefs()) return;
 
   // For each latency template, create a set of functional units it references.
-  for (auto *lat : latencies_)
-    FindLatencyFuncUnits(lat);
+  for (auto *Lat : Latencies)
+    findLatencyFuncUnits(Lat);
 
   // For each functional unit template, find the CPU's that instantiate it.
-  FindFunctionalUnitClientCpus();
+  findFunctionalUnitClientCpus();
 
   // For each CPU, for each subunit template, for each latency, find any
   // explicit references to functional units.  We reiterate the search for
   // subunit (for each CPU) so that we can look for valid CPU-based predicates.
-  for (auto *cpu : cpus_) {
-    for (auto *subunit : subunits_) {
-      std::set<std::string> func_units;
-      if (subunit->latencies())
-        for (auto *latency : *subunit->latencies())
-          if (HasValidPredicate(latency->predicates(), cpu, this))
-            if (auto *lat_fus = latency->get_template()->referenced_fus())
-              for (auto &[pred, funits] : lat_fus->func_units())
-                if (pred.empty() || pred == cpu->name())
-                  for (auto &funit : funits)
-                    func_units.insert(funit);
+  for (auto *Cpu : Cpus) {
+    for (auto *Subunit : Subunits) {
+      std::set<std::string> FuncUnits;
+      if (Subunit->getLatencies()) {
+        for (auto *Latency : *Subunit->getLatencies())
+          if (hasValidPredicate(Latency->getPredicates(), Cpu, this))
+            if (auto *LatFus = Latency->getTemplate()->getReferencedFus())
+              for (auto &[Pred, Funits] : LatFus->getFuncUnits())
+                if (Pred.empty() || Pred == Cpu->getName())
+                  for (auto &Funit : Funits)
+                    FuncUnits.insert(Funit);
+      }
 
-      if (func_units.empty()) continue;
+      if (FuncUnits.empty()) continue;
       // If we found functional units for this subunit (for this CPU), add the
       // subunit to that CPU.
       // If the subunit template has parameters, print an error, since we
       // can't support that (implicitly defined functional units can't pass
       // parameters to the subunit instance.
-      if (!subunit->params()->empty()) {
-        ErrorLog(subunit, "Subunits/Latencies with parameters cannot reference"
+      if (!Subunit->getParams()->empty()) {
+        ErrorLog(Subunit, "Subunits/Latencies with parameters cannot reference"
                           " implicitly defined functional units: {0}",
-                          subunit->name());
+                          Subunit->getName());
         break;
       }
-      bool found = true;
-      for (auto &unit : func_units) {
+      bool Found = true;
+      for (auto &Unit : FuncUnits) {
         // If the latency references a CPU name, add the subunit to that CPU.
-        if (auto *cpu = FindItem(cpus_, unit)) {
-          AddSubunitToCpu(cpu, subunit);
+        if (auto *Cpu = FindItem(Cpus, Unit)) {
+          addSubunitToCpu(Cpu, Subunit);
           continue;
         }
         // Annotate this template as explicitly referenced.
-        fu_map_[unit]->set_referenced();
+        FuMap[Unit]->setReferenced();
 
         // We only allow explicit functional unit references (fus) to
         // reference implicitly defined functional units. Referencing an
         // explicitly defined functional unit template is not supported,
         // so we issue a warning and ignore the reference.
-        if (!fu_map_[unit]->is_implicitly_defined()) {
-          WarningLog(subunit,
-                     "Invalid reference to an explicitly defined "
-                     "functional unit \"{0}\"",
-                     unit);
-          found = false;
+        if (!FuMap[Unit]->isImplicitlyDefined()) {
+          WarningLog(Subunit, "Invalid reference to an explicitly defined "
+                              "functional unit \"{0}\"", Unit);
+          Found = false;
           continue;
         }
         // If the current CPU is not a client of any mentioned unit, we will
         // not add this subunit to this CPU.
-        if (!fu_map()[unit]->client_cpus().count(cpu->name()))
-          found = false;
+        if (!FuMap[Unit]->getClientCpus().count(Cpu->getName()))
+          Found = false;
       }
-      if (found) AddSubunitToCpu(cpu, subunit);
+      if (Found) addSubunitToCpu(Cpu, Subunit);
     }
   }
 
@@ -480,26 +480,26 @@ void MdlSpec::TieSubUnitsToFunctionalUnits() {
   // have references. Unreferenced implicit functional unit templates are
   // reported as a warning.  Implicitly defined based functional units must
   // have at least one base referenced.
-  for (auto [name, fu] : fu_map_)
-    if (fu->is_implicitly_defined() && !fu->is_referenced() &&
-        !is_catchall_name(name)) {
-      bool found_ref = false;
-      for (auto *base : *fu->bases())
-        if (fu_map_[base->name()]->is_referenced()) {
-          found_ref = true;
+  for (auto [Name, Fu] : FuMap)
+    if (Fu->isImplicitlyDefined() && !Fu->isReferenced() &&
+        !isCatchallName(Name)) {
+      bool FoundRef = false;
+      for (auto *Base : *Fu->getBases())
+        if (FuMap[Base->getName()]->isReferenced()) {
+          FoundRef = true;
           break;
         }
-      if (!found_ref)
-        WarningLog(fu, "Undefined functional unit \"{0}\"", name);
+      if (!FoundRef)
+        WarningLog(Fu, "Undefined functional unit \"{0}\"", Name);
     }
 }
 
 // Helper function for recursively adding derived subunits to instructions.
-static void AddDerivedSubUnits(InstructionDef *instruction,
-                               SubUnitTemplate *subunit) {
-  for (auto *derived_unit : subunit->derived_subunits()) {
-    instruction->add_subunit(derived_unit);
-    AddDerivedSubUnits(instruction, derived_unit);
+static void addDerivedSubUnits(InstructionDef *Instruction,
+                               SubUnitTemplate *Subunit) {
+  for (auto *DerivedUnit : Subunit->getDerivedSubunits()) {
+    Instruction->addSubunit(DerivedUnit);
+    addDerivedSubUnits(Instruction, DerivedUnit);
   }
 }
 
@@ -507,23 +507,22 @@ static void AddDerivedSubUnits(InstructionDef *instruction,
 // can search for. Generally, this is anything up to the first metacharacter.
 // However, if the expression has a top level | or ? operator, we can't
 // define a prefix.
-static std::string GetPrefix(std::string &regex) {
+static std::string getPrefix(std::string &Regex) {
   static const char meta[] = "()^$*+?.[]\\{}";
-  auto first_meta = regex.find_first_of(meta);
-  if (first_meta == std::string::npos)
-    return regex;
+  auto FirstMeta = Regex.find_first_of(meta);
+  if (FirstMeta == std::string::npos)
+    return Regex;
 
-  int param = 0;
-  for (char ch : regex) {
-    if (ch == '(')
-      param++;
-    else if (ch == ')')
-      param--;
-    else if ((ch == '|' || ch == '?') && param == 0)
+  int Param = 0;
+  for (char Ch : Regex) {
+    if (Ch == '(')
+      Param++;
+    else if (Ch == ')')
+      Param--;
+    else if ((Ch == '|' || Ch == '?') && Param == 0)
       return "";
   }
-
-  return regex.substr(0, first_meta);
+  return Regex.substr(0, FirstMeta);
 }
 
 //---------------------------------------------------------------------------
@@ -532,51 +531,51 @@ static std::string GetPrefix(std::string &regex) {
 // expressions in that they are always prefix searches - we must match
 // the whole instruction name.
 //---------------------------------------------------------------------------
-void MdlSpec::TieSubUnitToInstructions(SubUnitTemplate *subunit,
-                                       StringList *regex_bases) {
-  if (regex_bases == nullptr)
+void MdlSpec::tieSubUnitToInstructions(SubUnitTemplate *Subunit,
+                                       StringList *RegExBases) {
+  if (RegExBases == nullptr)
     return;
 
   // We can speed the searches where the expression has an alphanumeric prefix,
   // by only searching names that begin with that prefix.
-  for (auto &regex : *regex_bases) {
-    auto prefix = GetPrefix(regex);
-    auto pattern = regex.substr(prefix.size());
+  for (auto &regex : *RegExBases) {
+    auto Prefix = getPrefix(regex);
+    auto Pattern = regex.substr(Prefix.size());
 
-    std::optional<llvm::Regex> rex;
-    if (!pattern.empty()) {
-      if (pattern[0] != '^')
-        pattern = formatv("^({0})", pattern);
-      rex = llvm::Regex(pattern);
+    std::optional<llvm::Regex> Rex;
+    if (!Pattern.empty()) {
+      if (Pattern[0] != '^')
+        Pattern = formatv("^({0})", Pattern);
+      Rex = llvm::Regex(Pattern);
     }
 
     // If we see a prefix, we can narrow the range of instructions searched.
-    bool match = false;
-    auto end = instruction_map_.end();
-    auto begin = instruction_map_.begin();
-    if (!prefix.empty())
-      begin = instruction_map_.lower_bound(prefix);
+    bool Match = false;
+    auto End = InstructionMap.end();
+    auto Begin = InstructionMap.begin();
+    if (!Prefix.empty())
+      Begin = InstructionMap.lower_bound(Prefix);
 
     // If we don't have a prefix, we need to search every single instruction.
-    if (prefix.empty()) {
-      for (auto itr = begin; itr != end; ++itr)
-        if (rex->match(itr->first)) {
-          itr->second->add_subunit(subunit);
-          match = true;
+    if (Prefix.empty()) {
+      for (auto Itr = Begin; Itr != End; ++Itr)
+        if (Rex->match(Itr->first)) {
+          Itr->second->addSubunit(Subunit);
+          Match = true;
         }
     } else {
       // If we have a prefix, only search instructions with that prefix.
-      for (auto itr = begin; itr != end; ++itr) {
-        if (itr->first.compare(0, prefix.size(), prefix) != 0)
+      for (auto Itr = Begin; Itr != End; ++Itr) {
+        if (Itr->first.compare(0, Prefix.size(), Prefix) != 0)
           break;
-        if (!rex || rex->match(itr->first.substr(prefix.size()))) {
-          itr->second->add_subunit(subunit);
-          match = true;
+        if (!Rex || Rex->match(Itr->first.substr(Prefix.size()))) {
+          Itr->second->addSubunit(Subunit);
+          Match = true;
         }
       }
     }
-    if (!match)
-      ErrorLog(subunit, "Unmatched base instruction expression \"{0}\"", regex);
+    if (!Match)
+      ErrorLog(Subunit, "Unmatched base instruction expression \"{0}\"", regex);
   }
 }
 
@@ -584,54 +583,54 @@ void MdlSpec::TieSubUnitToInstructions(SubUnitTemplate *subunit,
 // Tie each derived subunit to each instruction that uses any of its base
 // subunits (recursively).
 //---------------------------------------------------------------------------
-void MdlSpec::TieDerivedSubUnitsToInstructions() {
-  for (auto *instruction : instructions_)
-    if (auto *subunits = instruction->subunits()) {
-      IdList base_subunits = *subunits; // We're going to add to vector...
-      for (auto *subunit : base_subunits)
-        AddDerivedSubUnits(instruction, su_map()[subunit->name()]);
+void MdlSpec::tieDerivedSubUnitsToInstructions() {
+  for (auto *Instruction : Instructions)
+    if (auto *Subunits = Instruction->getSubunits()) {
+      IdList BaseSubunits = *Subunits; // We're going to add to vector...
+      for (auto *Subunit : BaseSubunits)
+        addDerivedSubUnits(Instruction, SuMap[Subunit->getName()]);
     }
 }
 
 //---------------------------------------------------------------------------
 // If a merged definition has allocation information, make sure it's correct.
 //---------------------------------------------------------------------------
-ResourceRef *FuncUnitInstantiation::CheckAllocation(ResourceRef *def,
-                                                    ResourceRef *ref) {
-  int count = ref->pool_count();
-  Identifier *count_name = ref->pool_count_name();
-  Identifier *value_name = ref->value_name();
+ResourceRef *FuncUnitInstantiation::checkAllocation(ResourceRef *Def,
+                                                    ResourceRef *Ref) {
+  int Count = Ref->getPoolCount();
+  Identifier *CountName = Ref->getPoolCountName();
+  Identifier *ValueName = Ref->getValueName();
 
   // Copy any allocation information from the reference to the definition.
-  def->set_value_name(value_name);
-  def->set_pool_count_name(count_name);
-  def->set_pool_count(count);
+  Def->setValueName(ValueName);
+  Def->setPoolCountName(CountName);
+  Def->setPoolCount(Count);
 
   // Return if there is no allocation request, or the request is symbolic.
   // (We will check symbolic sizes later).
-  if (!ref->HasCount() || count_name)
-    return def;
+  if (!Ref->hasCount() || CountName)
+    return Def;
 
   // Check array references.
   // Array allocations must be non-zero and between 1 and the pool size.
-  if (def->IsArrayDef()) {
-    if (count == 0 || count > def->pool_size()) {
-      ErrorLog(ref, "Invalid resource allocation size: {0}", count);
+  if (Def->isArrayDef()) {
+    if (Count == 0 || Count > Def->getPoolSize()) {
+      ErrorLog(Ref, "Invalid resource allocation size: {0}", Count);
       return nullptr;
     }
     // The pool size must evenly divide the number of entries in the pool.
-    if (def->pool_size() % count != 0) {
-      ErrorLog(ref, "Pool count must evenly divide the resource pool size");
+    if (Def->getPoolSize() % Count != 0) {
+      ErrorLog(Ref, "Pool count must evenly divide the resource pool size");
       return nullptr;
     }
-    return def;
+    return Def;
   }
   // Allocation for everything else must be 1.
-  if (count != 1) {
-    ErrorLog(ref, "Invalid resource allocation size: {0}", count);
+  if (Count != 1) {
+    ErrorLog(Ref, "Invalid resource allocation size: {0}", Count);
     return nullptr;
   }
-  return def;
+  return Def;
 }
 
 //---------------------------------------------------------------------------
@@ -654,61 +653,63 @@ ResourceRef *FuncUnitInstantiation::CheckAllocation(ResourceRef *def,
 // of a template.  This function returns a reference that represents the
 // fully qualified reference.
 //---------------------------------------------------------------------------
-ResourceRef *FuncUnitInstantiation::MergeRefs(ResourceRef *def,
-                                              ResourceRef *ref) {
-  if (def->IsNull())
-    return new ResourceRef(*def);
+ResourceRef *FuncUnitInstantiation::mergeRefs(ResourceRef *Def,
+                                              ResourceRef *Ref) {
+  if (Def->isNull())
+    return new ResourceRef(*Def);
 
-  // Case 1: if the reference is unqualified, just return the def.
-  if (ref->IsUnqualifiedRef())
-    return CheckAllocation(new ResourceRef(*def), ref);
+  // Case 1: if the reference is unqualified, just return the Def.
+  if (Ref->isUnqualifiedRef())
+    return checkAllocation(new ResourceRef(*Def), Ref);
 
   // Case 2: look up the member reference, and return a reference to the
   // group's promoted resource.
-  if (def->IsGroupRef() && ref->member()) {
-    auto *mem = FindItem(def->definition()->members(), ref->member()->name());
-    if (mem == nullptr) {
-      ErrorLog(ref, "Resource member not found: {0}", ref->member()->name());
+  if (Def->isGroupRef() && Ref->getMember()) {
+    auto *Mem = FindItem(Def->getDefinition()->getMembers(),
+                         Ref->getMember()->getName());
+    if (Mem == nullptr) {
+      ErrorLog(Ref, "Resource member not found: {0}",
+               Ref->getMember()->getName());
       return nullptr;
     }
-    auto *member = def->definition()->get_member_def(mem->index());
-    return new ResourceRef(member);
+    auto *Member = Def->getDefinition()->getMemberDef(Mem->getIndex());
+    return new ResourceRef(Member);
   }
 
   // Case 3 and 4: Ensure the subrange is a subset of the def's range.
   // Note: All subranges are zero based relative to the original pool def.
   // But in general we don't want successive qualifications to make the
   // subrange larger.
-  if (def->IsArrayDef() && (ref->IsSubrange() || ref->IsIndexed())) {
-    if (ref->first() < def->first() || ref->last() > def->last()) {
-      if (ref->IsIndexed())
-        ErrorLog(ref, "Invalid resource pool index: {0}; expected [{1}..{2}]",
-                 ref->first(), def->first(), def->last());
+  if (Def->isArrayDef() && (Ref->isSubrange() || Ref->isIndexed())) {
+    if (Ref->getFirst() < Def->getFirst() || Ref->getLast() > Def->getLast()) {
+      if (Ref->isIndexed())
+        ErrorLog(Ref, "Invalid resource pool index: {0}; expected [{1}..{2}]",
+                 Ref->getFirst(), Def->getFirst(), Def->getLast());
       else
-        ErrorLog(ref, "Invalid resource pool subrange");
+        ErrorLog(Ref, "Invalid resource pool subrange");
       return nullptr;
     }
-    auto *qualified_ref = new ResourceRef(*def);
-    qualified_ref->set_subrange(ref->first(), ref->last());
-    return CheckAllocation(qualified_ref, ref);
+    auto *QualifiedRef = new ResourceRef(*Def);
+    QualifiedRef->setSubrange(Ref->getFirst(), Ref->getLast());
+    return checkAllocation(QualifiedRef, Ref);
   }
 
   // Member references cannot be further qualified.
-  if (def->member()) {
-    ErrorLog(ref, "Invalid member reference qualification");
+  if (Def->getMember()) {
+    ErrorLog(Ref, "Invalid member reference qualification");
     return nullptr;
   }
   // Member references can only be used with grouped resources.
-  if (ref->member()) {
-    ErrorLog(ref, "Invalid member reference: {0}", ref->member()->name());
+  if (Ref->getMember()) {
+    ErrorLog(Ref, "Invalid member reference: {0}", Ref->getMember()->getName());
     return nullptr;
   }
 
   // For everything else, check any pool allocations.
-  if (def->IsGroupDef() || def->IsArrayDef())
-    return CheckAllocation(new ResourceRef(*def), ref);
+  if (Def->isGroupDef() || Def->isArrayDef())
+    return checkAllocation(new ResourceRef(*Def), Ref);
 
-  ErrorLog(ref, "Invalid resource qualifiers");
+  ErrorLog(Ref, "Invalid resource qualifiers");
   return nullptr;
 }
 
@@ -717,52 +718,53 @@ ResourceRef *FuncUnitInstantiation::MergeRefs(ResourceRef *def,
 //----------------------------------------------------------------------------
 
 // Create definition objects for each locally defined reference and port.
-void FuncUnitInstantiation::InstantiateLocalDefs() {
-  for (auto *res : *get_template()->resources())
-    resources().push_back(new ResourceDef(*res));
-  for (auto *port : *get_template()->ports())
-    ports().push_back(new ResourceDef(port));
+void FuncUnitInstantiation::instantiateLocalDefs() {
+  for (auto *Res : *getTemplate()->getResources())
+    getResources().push_back(new ResourceDef(*Res));
+  for (auto *Port : *getTemplate()->getPorts())
+    getPorts().push_back(new ResourceDef(Port));
 }
 
 // Look up a register class in the template's parameter list.
-RegisterClass *FuncUnitInstantiation::FindRegClass(Identifier *item) {
-  if (auto *arg = FindItem(class_args(), item->name()))
-    return arg->regs();
+RegisterClass *FuncUnitInstantiation::findRegClass(Identifier *Item) {
+  if (auto *Arg = FindItem(getClassArgs(), Item->getName()))
+    return Arg->getRegs();
   return nullptr;
 }
 
 // Bind a functional unit instantiation parameter to a register class.
-void FuncUnitInstantiation::BindClassArg(ResourceRef *arg) {
-  class_args()[arg->get_parameter()->name()] = BindFuncUnitClass(arg);
+void FuncUnitInstantiation::bindClassArg(ResourceRef *Arg) {
+  getClassArgs()[Arg->getParameter()->getName()] = bindFuncUnitClass(Arg);
 }
 
 // Bind a functional unit instantiation parameter to a resource reference.
-void FuncUnitInstantiation::BindResourceArg(ResourceRef *arg) {
-  resource_args()[arg->get_parameter()->name()] = BindFuncUnitResource(arg);
+void FuncUnitInstantiation::bindResourceArg(ResourceRef *Arg) {
+  getResourceArgs()[Arg->getParameter()->getName()] = bindFuncUnitResource(Arg);
 }
 
 // Map a functional unit instantiation parameter id to its bound class.
-RegisterClassRef *FuncUnitInstantiation::GetClassArg(int param_id) {
-  return class_args()[(*get_template()->params())[param_id]->name()];
+RegisterClassRef *FuncUnitInstantiation::getClassArg(int ParamId) {
+  return getClassArgs()[(*getTemplate()->getParams())[ParamId]->getName()];
 }
 
 // Map a functional unit instantiation parameter id to its bound resource.
-ResourceRef *FuncUnitInstantiation::GetResourceArg(int param_id) {
-  return resource_args()[(*get_template()->params())[param_id]->name()];
+ResourceRef *FuncUnitInstantiation::getResourceArg(int ParamId) {
+  return getResourceArgs()[(*getTemplate()->getParams())[ParamId]->getName()];
 }
 
 // Given a predicate for a subunit or latency instance, determine if it
 // matches the instantiation context's cpu name, functional unit name, or
 // functional unit template type.
-bool FuncUnitInstantiation::ValidPredicate(IdList *predicates) const {
-  if (predicates == nullptr)
+bool FuncUnitInstantiation::isValidPredicate(IdList *Predicates) const {
+  if (Predicates == nullptr)
     return true;
-  for (auto *id : *predicates) {
-    if (id->name() == cpu()->name() || id->name() == instance()->name() ||
-        id->name() == func_type()->name() ||
-        spec()->IsValidInstructionPredicate(id->name()))
+  for (auto *Id : *Predicates) {
+    if (Id->getName() == Cpu->getName() ||
+        Id->getName() == Instance->getName() ||
+        Id->getName() == FuncType->getName() ||
+        Spec->isValidInstructionPredicate(Id->getName()))
       return true;
-    spec()->IsValidPredicateName(id);
+    Spec->isValidPredicateName(Id);
   }
   return false;
 }
@@ -772,13 +774,13 @@ bool FuncUnitInstantiation::ValidPredicate(IdList *predicates) const {
 // subunit instantiation, bind its instance parameters, and instantiate
 // all of its latency instances.
 //---------------------------------------------------------------------------
-void FuncUnitInstantiation::InstantiateSubunits() {
-  for (auto *instance : *get_template()->subunits())
-    if (ValidPredicate(instance->predicates())) {
-      auto *subunit = new SubUnitInstantiation(this, instance);
-      BindSubUnitParameters(subunit);
-      subunit->InstantiateLatencies();
-      spec()->AddSubUnitInstantiation(subunit);
+void FuncUnitInstantiation::instantiateSubunits() {
+  for (auto *Instance : *getTemplate()->getSubunits())
+    if (isValidPredicate(Instance->getPredicates())) {
+      auto *Subunit = new SubUnitInstantiation(this, Instance);
+      bindSubUnitParameters(Subunit);
+      Subunit->instantiateLatencies();
+      Spec->addSubUnitInstantiation(Subunit);
     }
 }
 
@@ -786,44 +788,44 @@ void FuncUnitInstantiation::InstantiateSubunits() {
 // Process connect statements. Find the connected resources and register
 // classes, do some error checking.
 //---------------------------------------------------------------------------
-void FuncUnitInstantiation::ProcessConnects() {
-  for (auto *connect : *get_template()->connections()) {
+void FuncUnitInstantiation::processConnects() {
+  for (auto *Connect : *getTemplate()->getConnections()) {
     // First make sure the referenced port definition exists.
-    auto *port = FindItem(ports(), connect->name());
-    if (port == nullptr) {
-      ErrorLog(connect, "Port not found: {0}", connect->name());
+    auto *Port = FindItem(getPorts(), Connect->getName());
+    if (Port == nullptr) {
+      ErrorLog(Connect, "Port not found: {0}", Connect->getName());
       return;
     }
 
     // If a register class is specified, find it, either as an incoming
     // argument or globally defined.
-    if (connect->reg_class()) {
-      auto *name = connect->reg_class();
-      auto *reg_class = FindRegClass(name);
-      if (reg_class == nullptr)
-        reg_class = FindItem(spec()->reg_classes(), name->name());
-      if (reg_class == nullptr) {
-        ErrorLog(connect, "Register class not found: {0}", name->name());
+    if (Connect->getRegClass()) {
+      auto *Name = Connect->getRegClass();
+      auto *RegClass = findRegClass(Name);
+      if (RegClass == nullptr)
+        RegClass = FindItem(getSpec()->getRegClasses(), Name->getName());
+      if (RegClass == nullptr) {
+        ErrorLog(Connect, "Register class not found: {0}", Name->getName());
         return;
       }
-      port->set_reg_class(reg_class);
+      Port->setRegClass(RegClass);
     }
 
     // If a resource reference was provided, verify it.
-    if (auto *resource = connect->resource()) {
-      ResourceRef *ref = nullptr;
-      if (auto *res = FindItem(resource_args(), resource->name())) {
-        ResourceRef arg(*res);
-        ref = MergeRefs(&arg, resource);
-      } else if (auto *def = FindItem(resources(), resource->name())) {
-        ResourceRef arg(def);
-        ref = MergeRefs(&arg, resource);
+    if (auto *Resource = Connect->getResource()) {
+      ResourceRef *Ref = nullptr;
+      if (auto *Res = FindItem(getResourceArgs(), Resource->getName())) {
+        ResourceRef Arg(*Res);
+        Ref = mergeRefs(&Arg, Resource);
+      } else if (auto *Def = FindItem(getResources(), Resource->getName())) {
+        ResourceRef Arg(Def);
+        Ref = mergeRefs(&Arg, Resource);
       }
 
-      if (ref == nullptr)
-        ErrorLog(connect, "Resource not found: {0}", resource->name());
+      if (Ref == nullptr)
+        ErrorLog(Connect, "Resource not found: {0}", Resource->getName());
       else
-        port->set_port_resource(ref);
+        Port->setPortResource(Ref);
     }
     if (ErrorsSeen())
       return;
@@ -834,13 +836,13 @@ void FuncUnitInstantiation::ProcessConnects() {
 // Bind a subunit instance port argument to its definition.
 // Return the definition if found, if any errors are found return nullptr.
 //---------------------------------------------------------------------------
-ResourceDef *FuncUnitInstantiation::BindSubUnitPort(ResourceRef *arg) {
-  if (arg->IsNull())
+ResourceDef *FuncUnitInstantiation::bindSubUnitPort(ResourceRef *Arg) {
+  if (Arg->isNull())
     return NullPortDef;
-  if (auto *port_arg = FindItem(ports(), arg->name()))
-    return port_arg;
+  if (auto *PortArg = FindItem(getPorts(), Arg->getName()))
+    return PortArg;
 
-  ErrorLog(arg, "Port argument not found: {0}", arg->name());
+  ErrorLog(Arg, "Port argument not found: {0}", Arg->getName());
   return nullptr;
 }
 
@@ -848,22 +850,22 @@ ResourceDef *FuncUnitInstantiation::BindSubUnitPort(ResourceRef *arg) {
 // Bind a subunit resource argument to its definition.
 // Return the definition if found, if any errors are found return nullptr.
 //---------------------------------------------------------------------------
-ResourceRef *FuncUnitInstantiation::BindSubUnitResource(ResourceRef *arg) {
+ResourceRef *FuncUnitInstantiation::bindSubUnitResource(ResourceRef *Arg) {
   // If this is a "null" binding, just return null.
-  if (arg->IsNull())
+  if (Arg->isNull())
     return NullResourceRef;
 
   // Search for the resource definition in arguments and FU-level definitions.
-  if (auto *resource = FindItem(resource_args(), arg->name())) {
-    ResourceRef ref(*resource);
-    return MergeRefs(&ref, arg);
+  if (auto *Resource = FindItem(getResourceArgs(), Arg->getName())) {
+    ResourceRef Ref(*Resource);
+    return mergeRefs(&Ref, Arg);
   }
-  if (auto *resource = FindItem(resources(), arg->name())) {
-    ResourceRef def(resource);
-    return MergeRefs(&def, arg);
+  if (auto *Resource = FindItem(getResources(), Arg->getName())) {
+    ResourceRef Def(Resource);
+    return mergeRefs(&Def, Arg);
   }
 
-  ErrorLog(arg, "Resource argument not found: {0}", arg->name());
+  ErrorLog(Arg, "Resource argument not found: {0}", Arg->getName());
   return nullptr;
 }
 
@@ -871,20 +873,20 @@ ResourceRef *FuncUnitInstantiation::BindSubUnitResource(ResourceRef *arg) {
 // Bind a functional unit instance resource argument to its definition.
 // Return the definition if found, if any errors are found return nullptr.
 //---------------------------------------------------------------------------
-ResourceRef *FuncUnitInstantiation::BindFuncUnitResource(ResourceRef *arg) {
+ResourceRef *FuncUnitInstantiation::bindFuncUnitResource(ResourceRef *Arg) {
   // If this is a "null" binding, just return null.
-  if (arg->IsNull())
+  if (Arg->isNull())
     return NullResourceRef;
 
   // Search for resource definition in the cluster and CPU level.
-  ResourceDef *def;
-  if ((def = FindItem(*cluster()->resources(), arg->name())) ||
-      (def = FindItem(*cpu()->resources(), arg->name()))) {
-    ResourceRef ref(def);
-    return MergeRefs(&ref, arg);
+  ResourceDef *Def;
+  if ((Def = FindItem(*Cluster->getResources(), Arg->getName())) ||
+      (Def = FindItem(*Cpu->getResources(), Arg->getName()))) {
+    ResourceRef Ref(Def);
+    return mergeRefs(&Ref, Arg);
   }
 
-  ErrorLog(arg, "Resource argument not found: {0}", arg->name());
+  ErrorLog(Arg, "Resource argument not found: {0}", Arg->getName());
   return nullptr;
 }
 
@@ -892,43 +894,43 @@ ResourceRef *FuncUnitInstantiation::BindFuncUnitResource(ResourceRef *arg) {
 // Bind a functional unit instance register class argument to its definition.
 // Return the definition if found, if any errors are found return nullptr.
 //---------------------------------------------------------------------------
-RegisterClassRef *FuncUnitInstantiation::BindFuncUnitClass(ResourceRef *arg) {
+RegisterClassRef *FuncUnitInstantiation::bindFuncUnitClass(ResourceRef *Arg) {
   // If this is a "null" binding, just return null.
-  if (arg->IsNull())
+  if (Arg->isNull())
     return new RegisterClassRef(NullRegisterClass);
 
   // Look up the register class in the global class table.
-  if (auto *item = FindItem(spec()->reg_classes(), arg->name()))
-    return new RegisterClassRef(item);
+  if (auto *Item = FindItem(getSpec()->getRegClasses(), Arg->getName()))
+    return new RegisterClassRef(Item);
 
   // If we don't find the class, but find a register definition, create a
   // custom class that contains just that single register (a common case).
-  if (RegisterDef *reg = FindItem(spec()->registers(), arg->name())) {
-    auto *members = new RegisterDefList;
-    members->push_back(reg);
-    std::string newname = "[" + arg->name() + "]";
+  if (RegisterDef *Reg = FindItem(getSpec()->getRegisters(), Arg->getName())) {
+    auto *Members = new RegisterDefList;
+    Members->push_back(Reg);
+    std::string NewName = "[" + Arg->getName() + "]";
     return new RegisterClassRef(
-        new RegisterClass(*arg, new Identifier(newname), members));
+        new RegisterClass(*Arg, new Identifier(NewName), Members));
   }
 
-  ErrorLog(arg, "Register class argument not found: {0}", arg->name());
+  ErrorLog(Arg, "Register class argument not found: {0}", Arg->getName());
   return nullptr;
 }
 
 //---------------------------------------------------------------------------
 // Bind functional unit instantiation parameters to resources and classes.
 //---------------------------------------------------------------------------
-void FuncUnitInstantiation::BindFuncUnitParameters() {
-  auto &instance_args = *instance()->args();
-  int num_params = instance_args.size();
+void FuncUnitInstantiation::bindFuncUnitParameters() {
+  auto &InstanceArgs = *Instance->getArgs();
+  int NumParams = InstanceArgs.size();
 
   // Iterate over the parameters, bind the parameters of the instance
   // to the objects (register classes or resources) they refer to.
-  for (int argid = 0; argid < num_params; argid++) {
-    if (instance_args[argid]->get_parameter()->IsResource()) {
-      BindResourceArg(instance_args[argid]);
+  for (int ArgId = 0; ArgId < NumParams; ArgId++) {
+    if (InstanceArgs[ArgId]->getParameter()->isResource()) {
+      bindResourceArg(InstanceArgs[ArgId]);
     } else {
-      BindClassArg(instance_args[argid]);
+      bindClassArg(InstanceArgs[ArgId]);
     }
   }
 }
@@ -936,98 +938,98 @@ void FuncUnitInstantiation::BindFuncUnitParameters() {
 //---------------------------------------------------------------------------
 // Look up functional unit pinning resources.
 //---------------------------------------------------------------------------
-void FuncUnitInstantiation::BindFuncUnitSlotResources() {
-  IdList *slots_any = instance()->pin_any();
-  IdList *slots_all = instance()->pin_all();
-  IdList *slots = slots_any ? slots_any : slots_all;
-  IdList *implicit_slots = nullptr;
+void FuncUnitInstantiation::bindFuncUnitSlotResources() {
+  IdList *SlotsAny = Instance->getPinAny();
+  IdList *SlotsAll = Instance->getPinAll();
+  IdList *Slots = SlotsAny ? SlotsAny : SlotsAll;
+  IdList *ImplicitSlots = nullptr;
 
   // If the instance wasn't pinned to any slots, and slots have been
   // declared for this cpu/cluster, create an "any" set of resources.
-  if (slots == nullptr && (cluster()->issues() || cpu()->issues())) {
-    auto *issues = cluster()->issues() ? cluster()->issues() : cpu()->issues();
-    slots = slots_any = implicit_slots = new IdList;
-    for (auto *res : *issues)
-      slots->push_back(res->id());
+  if (Slots == nullptr && (Cluster->getIssues() || Cpu->getIssues())) {
+    auto *Issues = Cluster->getIssues() ?
+                   Cluster->getIssues() : Cpu->getIssues();
+    Slots = SlotsAny = ImplicitSlots = new IdList;
+    for (auto *Res : *Issues)
+      Slots->push_back(Res->getId());
   }
 
   // Find the definition of any pin reference.
-  auto resource_list = new ResourceRefList;
-  ResourceDef *res;
-  for (auto *slot : *slots) {
-    if ((res = FindItem(*cluster()->issues(), slot->name())) ||
-        (res = FindItem(*cpu()->issues(), slot->name())))
-      resource_list->push_back(new ResourceRef(res));
+  auto ResourceList = new ResourceRefList;
+  ResourceDef *Res;
+  for (auto *Slot : *Slots) {
+    if ((Res = FindItem(*Cluster->getIssues(), Slot->getName())) ||
+        (Res = FindItem(*Cpu->getIssues(), Slot->getName())))
+      ResourceList->push_back(new ResourceRef(Res));
     else
-      ErrorLog(res, "Issue slot resource not found: {0}", slot->name());
+      ErrorLog(Res, "Issue slot resource not found: {0}", Slot->getName());
   }
 
-  // Add the slot references to the functional unit instance.
-  if (slots_any)
-    instance()->set_resource_slots_any(resource_list);
+  // Add the Slot references to the functional unit instance.
+  if (SlotsAny)
+    Instance->setResourceSlotsAny(ResourceList);
   else
-    instance()->set_resource_slots_all(resource_list);
+    Instance->setResourceSlotsAll(ResourceList);
 
-  if (implicit_slots != nullptr)
-    delete implicit_slots;
+  if (ImplicitSlots != nullptr)
+    delete ImplicitSlots;
 }
 
 //---------------------------------------------------------------------------
 // Bind subunit instantiation parameters to ports and resources.
 //---------------------------------------------------------------------------
-void FuncUnitInstantiation::BindSubUnitParameters(SubUnitInstantiation *su) {
-  auto &instance_args = *su->subunit()->args();
-  int num_params = instance_args.size();
+void FuncUnitInstantiation::bindSubUnitParameters(SubUnitInstantiation *Su) {
+  auto &InstanceArgs = *Su->getSubunit()->getArgs();
+  int NumParams = InstanceArgs.size();
 
-  for (int argid = 0; argid < num_params; argid++)
-    if (instance_args[argid]->get_parameter()->IsResource())
-      su->BindResourceArg(instance_args[argid]);
+  for (int ArgId = 0; ArgId < NumParams; ArgId++)
+    if (InstanceArgs[ArgId]->getParameter()->isResource())
+      Su->bindResourceArg(InstanceArgs[ArgId]);
     else
-      su->BindPortArg(instance_args[argid]);
+      Su->bindPortArg(InstanceArgs[ArgId]);
 }
 
 //---------------------------------------------------------------------------
 // Implementation of SubUnitInstantiation methods.
 //---------------------------------------------------------------------------
-
 // Bind a port definition to the specified subunit instantiation parameter.
-void SubUnitInstantiation::BindPortArg(ResourceRef *arg) {
-  port_args()[arg->get_parameter()->name()] = func_unit()->BindSubUnitPort(arg);
+void SubUnitInstantiation::bindPortArg(ResourceRef *Arg) {
+  PortArgs[Arg->getParameter()->getName()] = FuncUnit->bindSubUnitPort(Arg);
 }
 
 // Bind a resource definition to the specified subunit instantiation parameter.
-void SubUnitInstantiation::BindResourceArg(ResourceRef *arg) {
-  resource_args()[arg->get_parameter()->name()] =
-      func_unit()->BindSubUnitResource(arg);
+void SubUnitInstantiation::bindResourceArg(ResourceRef *Arg) {
+  ResourceArgs[Arg->getParameter()->getName()] =
+                               FuncUnit->bindSubUnitResource(Arg);
 }
 
 // Map a subunit instantiation parameter id to its bound resource.
-ResourceRef *SubUnitInstantiation::GetResourceArg(int param_id) {
-  return resource_args()[(*su_template()->params())[param_id]->name()];
+ResourceRef *SubUnitInstantiation::getResourceArg(int ParamId) {
+  return ResourceArgs[(*getSuTemplate()->getParams())[ParamId]->getName()];
 }
 
 // Map a subunit instantiation parameter id to its bound port.
-ResourceDef *SubUnitInstantiation::GetPortArg(int param_id) {
-  return port_args()[(*su_template()->params())[param_id]->name()];
+ResourceDef *SubUnitInstantiation::getPortArg(int ParamId) {
+  return PortArgs[(*getSuTemplate()->getParams())[ParamId]->getName()];
 }
 
 // Given a predicate for a latency instance, determine if it matches the
 // instantiation context's cpu name or functional unit name.
-bool SubUnitInstantiation::ValidPredicate(IdList *predicates) const {
-  return func_unit()->ValidPredicate(predicates);
+bool SubUnitInstantiation::isValidPredicate(IdList *Predicates) const {
+  return FuncUnit->isValidPredicate(Predicates);
 }
 
 //---------------------------------------------------------------------------
 // Bind a latency instance port argument to its definition.
 // Return the definition if found, if any errors are found return nullptr.
 //---------------------------------------------------------------------------
-ResourceDef *SubUnitInstantiation::BindLatPort(ResourceRef *arg) {
-  if (arg->IsNull())
+ResourceDef *SubUnitInstantiation::bindLatPort(ResourceRef *Arg) {
+  if (Arg->isNull())
     return NullPortDef;
-  if (auto *port_arg = FindItem(port_args(), arg->name()))
-    return port_arg;
+  if (auto *PortArg = FindItem(PortArgs, Arg->getName()))
+    return PortArg;
 
-  ErrorLog(arg, "Port argument not found: {0}", arg->name());
+  ErrorLog(Arg, "Port argument not found: {0}", Arg->getName());
   return nullptr;
 }
 
@@ -1035,33 +1037,33 @@ ResourceDef *SubUnitInstantiation::BindLatPort(ResourceRef *arg) {
 // Bind a latency resource argument to its definition.
 // Return the definition if found, if any errors are found return nullptr.
 //---------------------------------------------------------------------------
-ResourceRef *SubUnitInstantiation::BindLatResource(ResourceRef *arg) {
+ResourceRef *SubUnitInstantiation::bindLatResource(ResourceRef *Arg) {
   // If this is a "null" binding, just return null.
-  if (arg->IsNull())
+  if (Arg->isNull())
     return NullResourceRef;
 
   // Search for the resource definition in arguments an SU-level definitions.
-  if (auto *resource = FindItem(resource_args(), arg->name())) {
-    ResourceRef ref(*resource);
-    return func_unit()->MergeRefs(&ref, arg);
+  if (auto *Resource = FindItem(ResourceArgs, Arg->getName())) {
+    ResourceRef ref(*Resource);
+    return FuncUnit->mergeRefs(&ref, Arg);
   }
 
-  ErrorLog(arg, "Resource argument not found: {0}", arg->name());
+  ErrorLog(Arg, "Resource argument not found: {0}", Arg->getName());
   return nullptr;
 }
 
 //---------------------------------------------------------------------------
 // Bind latency instantiation parameters to ports and resources.
 //---------------------------------------------------------------------------
-void SubUnitInstantiation::BindLatencyParams(LatencyInstantiation *lat) {
-  auto &instance_args = *lat->latency()->args();
-  int num_params = instance_args.size();
+void SubUnitInstantiation::bindLatencyParams(LatencyInstantiation *Lat) {
+  auto &InstanceArgs = *Lat->getLatency()->getArgs();
+  int NumParams = InstanceArgs.size();
 
-  for (int argid = 0; argid < num_params; argid++) {
-    if (instance_args[argid]->get_parameter()->IsResource()) {
-      lat->BindResourceArg(instance_args[argid]);
+  for (int ArgId = 0; ArgId < NumParams; ArgId++) {
+    if (InstanceArgs[ArgId]->getParameter()->isResource()) {
+      Lat->bindResourceArg(InstanceArgs[ArgId]);
     } else {
-      lat->BindPortArg(instance_args[argid]);
+      Lat->bindPortArg(InstanceArgs[ArgId]);
     }
   }
 }
@@ -1069,39 +1071,39 @@ void SubUnitInstantiation::BindLatencyParams(LatencyInstantiation *lat) {
 //---------------------------------------------------------------------------
 // Bind latency reference resources to template parameters.
 //---------------------------------------------------------------------------
-void SubUnitInstantiation::BindLatencyResources(LatencyInstantiation &lat,
-                                                Reference *reference,
-                                                ResourceRefList *resources) {
-  for (auto *res : *resources) {
-    ResourceRef *ref = nullptr;
-    if (auto *resource = FindItem(lat.resource_args(), res->name())) {
-      ref = func_unit()->MergeRefs(resource, res);
-    } else if (auto *port = FindItem(lat.port_args(), res->name())) {
-      reference->add_port(port);
-      if (auto *port_res = port->port_resource())
-        ref = func_unit()->MergeRefs(port_res, res);
-    } else if (!res->IsNull()) {
-      ErrorLog(res, "Resource undefined: {0}", res->name());
+void SubUnitInstantiation::bindLatencyResources(LatencyInstantiation &Lat,
+                                                Reference *LatReference,
+                                                ResourceRefList *Resources) {
+  for (auto *Res : *Resources) {
+    ResourceRef *ResRef = nullptr;
+    if (auto *FoundRes = FindItem(Lat.getResourceArgs(), Res->getName())) {
+      ResRef = FuncUnit->mergeRefs(FoundRes, Res);
+    } else if (auto *Port = FindItem(Lat.getPortArgs(), Res->getName())) {
+      LatReference->addPort(Port);
+      if (auto *PortRes = Port->getPortResource())
+        ResRef = FuncUnit->mergeRefs(PortRes, Res);
+    } else if (!Res->isNull()) {
+      ErrorLog(Res, "Resource undefined: {0}", Res->getName());
     }
     // If we have a valid resource reference, add it to the reference.
-    if (ref == nullptr)
+    if (ResRef == nullptr)
       continue;
-    reference->add_resource(ref);
+    LatReference->addResource(ResRef);
 
     // Check for unqualified pool/group references.  If it's a group
     // reference, either use all the members or just one, depending on
     // how the group was defined. If it's an array reference, print an
     // error message.
-    if (ref->IsPooledResourceRef() && !res->use_all_members()) {
-      if (ref->IsGroupRef()) {
-        if (ref->definition()->group_type() == GroupType::kUseAll)
-          ref->set_use_all_members();
+    if (ResRef->isPooledResourceRef() && !Res->useAllMembers()) {
+      if (ResRef->isGroupRef()) {
+        if (ResRef->getDefinition()->getGroupType() == GroupType::kUseAll)
+          ResRef->setUseAllMembers();
         else
-          ref->set_pool_count(1); // Set pool allocation for group to 1.
+          ResRef->setPoolCount(1); // Set pool allocation for group to 1.
       } else {                    // It's an array reference.
-        ErrorLog(reference,
+        ErrorLog(LatReference,
                  "Unqualified pool - use :* to reference whole pool: {0}",
-                 ref->ToString());
+                 ResRef->ToString());
       }
     }
   }
@@ -1112,91 +1114,89 @@ void SubUnitInstantiation::BindLatencyResources(LatencyInstantiation &lat,
 // else clauses.
 //---------------------------------------------------------------------------
 ConditionalRef *
-SubUnitInstantiation::CopyLatencyCondReference(LatencyInstantiation &lat,
-                                               ConditionalRef *cond) {
+SubUnitInstantiation::copyLatencyCondReference(LatencyInstantiation &Lat,
+                                               ConditionalRef *Cond) {
   // Copy the else clause, if there is one.
-  if (cond == nullptr)
+  if (Cond == nullptr)
     return nullptr;
-  auto *else_clause = CopyLatencyCondReference(lat, cond->else_clause());
+  auto *ElseClause = copyLatencyCondReference(Lat, Cond->getElseClause());
 
   // Make a copy of the conditional reference (and the copied else clause),
   // and copy the references associated with this condition.
-  auto *copy = new ConditionalRef(cond, else_clause);
-  for (auto *ref : cond->refs())
-    CopyLatencyReference(lat, copy->refs(), ref);
-  return copy;
+  auto *Copy = new ConditionalRef(Cond, ElseClause);
+  for (auto *Ref : Cond->getRefs())
+    copyLatencyReference(Lat, Copy->getRefs(), Ref);
+  return Copy;
 }
 
 //---------------------------------------------------------------------------
 // When instantiating a latency, copy each reference, bind resources to
 // instance parameters, and do some error checking.
 //---------------------------------------------------------------------------
-void SubUnitInstantiation::CopyLatencyReference(LatencyInstantiation &lat,
-                                                ReferenceList &references,
-                                                Reference *ref) {
-  if (!ValidPredicate(ref->predicates()))
+void SubUnitInstantiation::copyLatencyReference(LatencyInstantiation &Lat,
+                                                ReferenceList &LatReferences,
+                                                Reference *Ref) {
+  if (!isValidPredicate(Ref->getPredicates()))
     return;
-
   // Recursively copy conditional references.
-  if (ref->IsConditionalRef()) {
-    auto *cond = CopyLatencyCondReference(lat, ref->conditional_ref());
-    references.push_back(new Reference(ref, cond));
+  if (Ref->isConditionalRef()) {
+    auto *Cond = copyLatencyCondReference(Lat, Ref->getConditionalRef());
+    LatReferences.push_back(new Reference(Ref, Cond));
     return;
   }
-
   // If the reference doesn't have a phase expression, give it one.
-  auto *phase = ref->phase_expr();
-  if (phase == nullptr)
-    phase = new PhaseExpr(spec_->FindFirstExecutePhase(cpu()));
+  auto *Phase = Ref->getPhaseExpr();
+  if (Phase == nullptr)
+    Phase = new PhaseExpr(Spec->findFirstExecutePhase(getCpu()));
   else
-    phase = phase->clone();
+    Phase = Phase->clone();
 
   // Copy the reference, and for each resource reference, bind the named
   // resource to the value passed into the subunit instance resource or
   // port parameter.
-  auto *new_reference = new Reference(ref, phase);
-  if (!ref->IsFuncUnitRef())
-    BindLatencyResources(lat, new_reference, ref->resources());
+  auto *NewReference = new Reference(Ref, Phase);
+  if (!Ref->isFuncUnitRef())
+    bindLatencyResources(Lat, NewReference, Ref->getResources());
 
   // Currently we don't allow holds/reserves on pooled resources.
-  if (new_reference->ref_type() & (RefTypes::kHold | RefTypes::kReserve))
-    for (auto *res : *new_reference->resources())
-      if (res->HasCount())
-        ErrorLog(ref, "Hold/reserve not supported on pool references: {0}",
-                 res->ToString());
+  if (NewReference->getRefType() & (RefTypes::kHold | RefTypes::kReserve))
+    for (auto *Res : *NewReference->getResources())
+      if (Res->hasCount())
+        ErrorLog(Ref, "Hold/reserve not supported on pool references: {0}",
+                 Res->ToString());
 
-  references.push_back(new_reference);
+  LatReferences.push_back(NewReference);
 }
 
 //---------------------------------------------------------------------------
 // Add references from a latency template to a subunit. lat_template is
 // passed in explicitly so that we can instantiate parents and bases.
 //---------------------------------------------------------------------------
-void SubUnitInstantiation::InstantiateLatency(LatencyInstantiation &lat,
-                                              LatencyTemplate *lat_template) {
-  for (auto *reference : *lat_template->references())
-    CopyLatencyReference(lat, references(), reference);
+void SubUnitInstantiation::instantiateLatency(LatencyInstantiation &Lat,
+                                              LatencyTemplate *LatTemplate) {
+  for (auto *Reference : *LatTemplate->getReferences())
+    copyLatencyReference(Lat, References, Reference);
 }
 
 //---------------------------------------------------------------------------
 // Instantiate a latency template and all of its bases, recursively.
 //---------------------------------------------------------------------------
-void SubUnitInstantiation::InstantiateLatencyBases(LatencyInstantiation &lat,
-                                                   LatencyTemplate *parent,
-                                                   LatencyList &bases) {
+void SubUnitInstantiation::instantiateLatencyBases(LatencyInstantiation &Lat,
+                                                   LatencyTemplate *Parent,
+                                                   LatencyList &Bases) {
   // There's no need to instantiate a latency template in a particular
   // subunit more than once (which is possible if you have multiple bases,
   // or recursive bases).
-  if (std::find(bases.begin(), bases.end(), parent) != bases.end())
+  if (std::find(Bases.begin(), Bases.end(), Parent) != Bases.end())
     return;
-  bases.push_back(parent);
+  Bases.push_back(Parent);
 
-  InstantiateLatency(lat, parent);
+  instantiateLatency(Lat, Parent);
   if (ErrorsSeen())
     return;
 
-  for (auto *base : parent->unit_bases()) {
-    InstantiateLatencyBases(lat, base, bases);
+  for (auto *Base : Parent->getUnitBases()) {
+    instantiateLatencyBases(Lat, Base, Bases);
     if (ErrorsSeen())
       return;
   }
@@ -1206,18 +1206,18 @@ void SubUnitInstantiation::InstantiateLatencyBases(LatencyInstantiation &lat,
 // Instantiate all the latencies (and latency bases) associated with a
 // subunit instantiation.
 //---------------------------------------------------------------------------
-void SubUnitInstantiation::InstantiateLatencies() {
-  if (su_template()->latencies() == nullptr)
+void SubUnitInstantiation::instantiateLatencies() {
+  if (SuTemplate->getLatencies() == nullptr)
     return;
 
-  for (auto *instance : *su_template()->latencies())
-    if (ValidPredicate(instance->predicates())) {
-      LatencyInstantiation latency(this, instance);
-      BindLatencyParams(&latency);
+  for (auto *Instance : *SuTemplate->getLatencies())
+    if (isValidPredicate(Instance->getPredicates())) {
+      LatencyInstantiation Latency(this, Instance);
+      bindLatencyParams(&Latency);
       if (ErrorsSeen())
         return;
-      LatencyList bases; // used to avoid duplicates and recursion.
-      InstantiateLatencyBases(latency, instance->get_template(), bases);
+      LatencyList Bases; // used to avoid duplicates and recursion.
+      instantiateLatencyBases(Latency, Instance->getTemplate(), Bases);
       if (ErrorsSeen())
         return;
     }
@@ -1228,24 +1228,23 @@ void SubUnitInstantiation::InstantiateLatencies() {
 //---------------------------------------------------------------------------
 
 // Bind a port definition to the specified latency instantiation parameter.
-void LatencyInstantiation::BindPortArg(ResourceRef *arg) {
-  port_args()[arg->get_parameter()->name()] = subunit()->BindLatPort(arg);
+void LatencyInstantiation::bindPortArg(ResourceRef *Arg) {
+  PortArgs[Arg->getParameter()->getName()] = Subunit->bindLatPort(Arg);
 }
 
 // Bind a resource definition to the specified latency instantiation parameter.
-void LatencyInstantiation::BindResourceArg(ResourceRef *arg) {
-  resource_args()[arg->get_parameter()->name()] =
-      subunit()->BindLatResource(arg);
+void LatencyInstantiation::bindResourceArg(ResourceRef *Arg) {
+  ResourceArgs[Arg->getParameter()->getName()] = Subunit->bindLatResource(Arg);
 }
 
 // Map a latency instantiation parameter id to its bound resource.
-ResourceRef *LatencyInstantiation::GetResourceArg(int param_id) {
-  return resource_args()[(*lat_template()->params())[param_id]->name()];
+ResourceRef *LatencyInstantiation::getResourceArg(int ParamId) {
+  return ResourceArgs[(*LatTemplate->getParams())[ParamId]->getName()];
 }
 
 // Map a latency instantiation parameter id to its bound port.
-ResourceDef *LatencyInstantiation::GetPortArg(int param_id) {
-  return port_args()[(*lat_template()->params())[param_id]->name()];
+ResourceDef *LatencyInstantiation::getPortArg(int ParamId) {
+  return PortArgs[(*LatTemplate->getParams())[ParamId]->getName()];
 }
 
 //----------------------------------------------------------------------------
@@ -1254,194 +1253,188 @@ ResourceDef *LatencyInstantiation::GetPortArg(int param_id) {
 
 // Create and add a Functional Unit instantiation to the mdl spec table.
 FuncUnitInstantiation *
-MdlSpec::AddFuncUnitInstantiation(CpuInstance *cpu, ClusterInstance *cluster,
-                                  FuncUnitInstance *fu_inst) {
-  auto *fu = new FuncUnitInstantiation(this, cpu, cluster, fu_inst);
-  cluster->AddFuncUnitInstantiation(fu);
-  return fu;
+MdlSpec::addFuncUnitInstantiation(CpuInstance *Cpu, ClusterInstance *Cluster,
+                                  FuncUnitInstance *FuInst) {
+  auto *Fu = new FuncUnitInstantiation(this, Cpu, Cluster, FuInst);
+  Cluster->addFuncUnitInstantiation(Fu);
+  return Fu;
 }
 
 // Create a base function unit instance object and add to mdl spec table.
 FuncUnitInstantiation *
-MdlSpec::AddFuncUnitBaseInstantiation(FuncUnitInstantiation *parent,
-                                      FuncUnitTemplate *base) {
-  auto *fu = new FuncUnitInstantiation(parent, base);
-  parent->cluster()->AddFuncUnitInstantiation(fu);
-  return fu;
+MdlSpec::addFuncUnitBaseInstantiation(FuncUnitInstantiation *Parent,
+                                      FuncUnitTemplate *Base) {
+  auto *Fu = new FuncUnitInstantiation(Parent, Base);
+  Parent->getCluster()->addFuncUnitInstantiation(Fu);
+  return Fu;
 }
 
 // Recursively add base functional units to instantiated parents.
-void MdlSpec::AddFunctionalUnitBases(FuncUnitInstantiation *parent) {
-  auto *root = parent->get_template();
-  for (auto *base : root->unit_bases()) {
-    if (base == root) {
-      WarningLog(base, "Recursive functional unit derivation, ignored");
+void MdlSpec::addFunctionalUnitBases(FuncUnitInstantiation *Parent) {
+  auto *Root = Parent->getTemplate();
+  for (auto *Base : Root->getUnitBases()) {
+    if (Base == Root) {
+      WarningLog(Base, "Recursive functional unit derivation, ignored");
       continue;
     }
-    if (!base->unit_bases().empty())
-      WarningLog(base, "Nested functional unit derivation, ignored");
+    if (!Base->getUnitBases().empty())
+      WarningLog(Base, "Nested functional unit derivation, ignored");
 
-    auto *fu = AddFuncUnitBaseInstantiation(parent, base);
-    fu->set_resource();
-    fu->ProcessConnects();
-    fu->InstantiateSubunits();
+    auto *Fu = addFuncUnitBaseInstantiation(Parent, Base);
+    Fu->setResource();
+    Fu->processConnects();
+    Fu->instantiateSubunits();
   }
 }
 
 // Instantiate a single functional unit, and all of its base units.
-void MdlSpec::InstantiateFunctionalUnit(CpuInstance *cpu,
-                                        ClusterInstance *cluster,
-                                        FuncUnitInstance *fu) {
-  auto *fu_top = AddFuncUnitInstantiation(cpu, cluster, fu);
-  fu_top->set_resource();
-
+void MdlSpec::instantiateFunctionalUnit(CpuInstance *Cpu,
+                                        ClusterInstance *Cluster,
+                                        FuncUnitInstance *Fu) {
+  auto *FuTop = addFuncUnitInstantiation(Cpu, Cluster, Fu);
+  FuTop->setResource();
   // Bind parameters to their associated definitions, check for errors.
   // If errors found, don't try to instantiate any subunits.
-  fu_top->BindFuncUnitParameters();
+  FuTop->bindFuncUnitParameters();
   if (ErrorsSeen())
     return;
-
   // After processing parameters, promote groups.
-  PromoteResourceGroupMembers(&fu_top->resources(), nullptr,
-                              &fu_top->resource_args());
-
+  promoteResourceGroupMembers(&FuTop->getResources(), nullptr,
+                              &FuTop->getResourceArgs());
   // Bind pinning resources.
-  fu_top->BindFuncUnitSlotResources();
-
+  FuTop->bindFuncUnitSlotResources();
   // Process connect statements and instantiate subunits.
-  fu_top->ProcessConnects();
-  fu_top->InstantiateSubunits();
-
+  FuTop->processConnects();
+  FuTop->instantiateSubunits();
   // For each base unit, create a separate instantiation with the same
   // parameters as the parent, and instantiate its subunits.
-  AddFunctionalUnitBases(fu_top);
+  addFunctionalUnitBases(FuTop);
 }
 
 // Instantiate every functional unit instance (in every CPU and cluster).
 // Simply abort if any errors are found.
-void MdlSpec::InstantiateFunctionalUnits() {
-  for (auto *cpu : cpus())
-    for (auto *cluster : *cpu->clusters())
-      for (auto *fu_inst : *cluster->func_units())
-        InstantiateFunctionalUnit(cpu, cluster, fu_inst);
+void MdlSpec::instantiateFunctionalUnits() {
+  for (auto *Cpu : Cpus)
+    for (auto *Cluster : *Cpu->getClusters())
+      for (auto *FuInst : *Cluster->getFuncUnits())
+        instantiateFunctionalUnit(Cpu, Cluster, FuInst);
 
   if (ErrorsSeen())
     Abort();
 }
 
-bool IsValidPoolCount(const ResourceRef *resource, const Reference *ref,
-                      int count, const SubUnitInstantiation *subunit) {
-  if (count == 0)
+bool IsValidPoolCount(const ResourceRef *Resource, const Reference *Ref,
+                      int Count, const SubUnitInstantiation *Subunit) {
+  if (Count == 0)
     return false;
-  if (count < 0) {
-    subunit->ErrorLog(ref, "Negative allocation size");
+  if (Count < 0) {
+    Subunit->ErrorLog(Ref, "Negative allocation size");
     return false;
   }
-  if (count > resource->pool_size()) {
-    subunit->ErrorLog(ref, "Allocation size exceeds resource pool size: {0}",
-                      resource->ToString());
+  if (Count > Resource->getPoolSize()) {
+    Subunit->ErrorLog(Ref, "Allocation size exceeds resource pool size: {0}",
+                      Resource->ToString());
     return false;
   }
   return true;
 }
 
 // Update the subpool reference table for this reference.
-void ResourceDef::AddReferenceSizeToPool(const ResourceRef *resource,
-                                         const Reference *ref,
-                                         const SubUnitInstantiation *subunit) {
-  SubPool pool(resource);
-  auto &pool_info = sub_pool(pool);
+void ResourceDef::addReferenceSizeToPool(const ResourceRef *Resource,
+                                         const Reference *Ref,
+                                         const SubUnitInstantiation *Subunit) {
+  SubPool Pool(Resource);
+  auto &PoolInfo = getSubPool(Pool);
 
   // If the pool has a defined pool count, just use it.
-  if (resource->pool_count() != -1) {
-    if (IsValidPoolCount(resource, ref, resource->pool_count(), subunit)) {
-      pool_info.add_count(resource->pool_count());
+  if (Resource->getPoolCount() != -1) {
+    if (IsValidPoolCount(Resource, Ref, Resource->getPoolCount(), Subunit)) {
+      PoolInfo.addCount(Resource->getPoolCount());
       return;
     }
   }
 
   // If we have no idea what a symbolic size attribute is, just record the
   // worst case number (the whole pool).
-  if (ref == nullptr || ref->operand() == nullptr) {
-    pool_info.add_count(resource->pool_size());
+  if (Ref == nullptr || Ref->getOperand() == nullptr) {
+    PoolInfo.addCount(Resource->getPoolSize());
     return;
   }
 
   // Find the whole derivation of the operand (if any).
-  auto *opnd_ref = ref->operand();
-  auto *opnd_base = opnd_ref->operand_decl()->operand();
-  auto *opnd_def = opnd_ref->operand();
-  OperandDefList opnds;
-  if (!FindDerivation(opnd_def, opnd_base, opnds))
+  auto *OpndRef = Ref->getOperand();
+  auto *OpndBase = OpndRef->getOperandDecl()->getOperand();
+  auto *OpndDef = OpndRef->getOperand();
+  OperandDefList Opnds;
+  if (!findDerivation(OpndDef, OpndBase, Opnds))
     return; // This is a panic, which will have already been seen and reported.
 
   // Make sure we find at least one occurrence of the named attribute.
   // If it's not found, set a worst-case pool count.
-  auto &count_name = resource->pool_count_name()->name();
-  OperandAttribute *attr = nullptr;
-  for (auto *opnd : opnds)
-    if ((attr = FindAttribute(count_name, opnd, subunit)) != nullptr)
+  auto &CountName = Resource->getPoolCountName()->getName();
+  OperandAttribute *Attr = nullptr;
+  for (auto *Opnd : Opnds)
+    if ((Attr = findAttribute(CountName, Opnd, Subunit)) != nullptr)
       break;
-  if (attr == nullptr) {
-    pool_info.add_count(resource->pool_size());
+  if (Attr == nullptr) {
+    PoolInfo.addCount(Resource->getPoolSize());
     return;
   }
 
   // Walk through all the operand derivations, and find values associated with
   // the attribute, and add them to the resource pools definition.
-  for (auto *opnd : opnds)
-    for (auto *op_attr : *opnd->attributes())
-      if (op_attr->name() == count_name)
-        if (subunit->ValidPredicate(op_attr->predicate()))
-          if (IsValidPoolCount(resource, ref, op_attr->values(0), subunit))
-            pool_info.add_count(op_attr->values(0));
+  for (auto *Opnd : Opnds)
+    for (auto *OpAttr : *Opnd->getAttributes())
+      if (OpAttr->getName() == CountName)
+        if (Subunit->isValidPredicate(OpAttr->getPredicate()))
+          if (IsValidPoolCount(Resource, Ref, OpAttr->getValues(0), Subunit))
+            PoolInfo.addCount(OpAttr->getValues(0));
 }
 
 // Annotate a resource with the attributes of a reference to it.
-void ResourceDef::RecordReference(RefType type, const PhaseExpr *expr,
-                                  const ResourceRef *resource,
-                                  const Reference *ref,
-                                  const SubUnitInstantiation *subunit) {
+void ResourceDef::recordReference(RefType Type, const PhaseExpr *Expr,
+                                  const ResourceRef *Resource,
+                                  const Reference *Ref,
+                                  const SubUnitInstantiation *Subunit) {
   // For pools, record each pool size and the number of resources requested.
-
-  if (resource != nullptr && resource->HasCount()) {
-    AddReferenceSizeToPool(resource, ref, subunit);
-    add_alloc_size(resource->pool_count());
+  if (Resource != nullptr && Resource->hasCount()) {
+    addReferenceSizeToPool(Resource, Ref, Subunit);
+    addAllocSize(Resource->getPoolCount());
   }
 
-  ref_types_ |= type;
-  if (!expr->IsExpressionConstant()) {
-    phase_expr_seen_ = true;
+  Types |= Type;
+  if (!Expr->isExpressionConstant()) {
+    PhaseExprSeen = true;
     return;
   }
-  auto phase = expr->EvaluateConstantExpression();
-  if (!phase)
+  auto Phase = Expr->evaluateConstantExpression();
+  if (!Phase)
     return;
-  int cycles = ref ? (ref->use_cycles() - 1) : 0;
-  if (earliest_ref_ == -1 || *phase < earliest_ref_)
-    earliest_ref_ = *phase;
-  if (latest_ref_ == -1 || *phase + cycles > latest_ref_)
-    latest_ref_ = *phase + cycles;
+  int Cycles = Ref ? (Ref->getUseCycles() - 1) : 0;
+  if (EarliestRef == -1 || *Phase < EarliestRef)
+    EarliestRef = *Phase;
+  if (LatestRef == -1 || *Phase + Cycles > LatestRef)
+    LatestRef = *Phase + Cycles;
 }
 
 // Add a nice debug name to a resource definition.
-void ResourceDef::set_debug_name(std::string type, const CpuInstance *cpu,
-                                 const ClusterInstance *cluster,
-                                 const FuncUnitInstantiation *fu) {
-  std::string cpus = cpu ? formatv("{0}.", cpu->name()) : "";
-  std::string cls = cluster ? formatv("{0}.", cluster->name()) : "";
-  std::string fus = fu ? formatv("{0}.", fu->name()) : "";
-  debug_name_ = formatv("{0}.{1}{2}{3}{4}", type, cpus, cls, fus, name());
+void ResourceDef::setDebugName(std::string Type, const CpuInstance *Cpu,
+                               const ClusterInstance *Cluster,
+                               const FuncUnitInstantiation *Fu) {
+  std::string Cpus = Cpu ? formatv("{0}.", Cpu->getName()) : "";
+  std::string Cls = Cluster ? formatv("{0}.", Cluster->getName()) : "";
+  std::string Fus = Fu ? formatv("{0}.", Fu->getName()) : "";
+  DebugName = formatv("{0}.{1}{2}{3}{4}", Type, Cpus, Cls, Fus, getName());
 }
 
 // Assign a resource id to a resource definition.
 // Note that we don't assign ids to groups or their members, they are subsumed
 // by their promoted members.
-static int AssignId(ResourceDef *def, int resource_id) {
-  def->set_resource_id(resource_id);
-  if (def->pool_size() > 1)
-    return resource_id + def->pool_size();
-  return resource_id + 1;
+static int AssignId(ResourceDef *def, int ResourceId) {
+  def->setResourceId(ResourceId);
+  if (def->getPoolSize() > 1)
+    return ResourceId + def->getPoolSize();
+  return ResourceId + 1;
 }
 
 // Assign resource ids to each functional unit, issue slot, and resource
@@ -1454,88 +1447,87 @@ static int AssignId(ResourceDef *def, int resource_id) {
 //      scheduling).
 //    - We note the largest functional unit id for each CPU.
 //    - We note the largest CPU-defined resource for each CPU.
-void MdlSpec::AssignResourceIds() {
-  for (auto *cpu : cpus()) {
-    ResourceDef *last_fu = nullptr;
+void MdlSpec::assignResourceIds() {
+  for (auto *Cpu : Cpus) {
+    ResourceDef *LastFu = nullptr;
 
     // First add resources defined for each functional unit in each cluster.
-    for (auto *cluster : *cpu->clusters())
-      for (auto *fu : cluster->fu_instantiations())
-        if (!fu->instance()->is_catchall_unit() &&
-            fu->get_resource()->is_used() && fu->parent() == nullptr)
-          cpu->add_cpu_resource(fu->get_resource(), "FuncUnit", cpu, cluster,
+    for (auto *Cluster : *Cpu->getClusters())
+      for (auto *Fu : Cluster->getFuInstantiations())
+        if (!Fu->getInstance()->isCatchallUnit() &&
+            Fu->getFuResource()->isUsed() && Fu->getParent() == nullptr)
+          Cpu->addCpuResource(Fu->getFuResource(), "FuncUnit", Cpu, Cluster,
                                 nullptr);
 
     // Note the resource id of the last functional unit.
-    if (!cpu->all_resources().empty())
-      last_fu = cpu->all_resources().back();
+    if (!Cpu->getAllResources().empty())
+      LastFu = Cpu->getAllResources().back();
 
     // Add resources defined for CPU-level issue slots.
-    for (auto *res : *cpu->issues())
-      cpu->add_cpu_resource(res, "Issue", cpu, nullptr, nullptr);
+    for (auto *Res : *Cpu->getIssues())
+      Cpu->addCpuResource(Res, "Issue", Cpu, nullptr, nullptr);
 
     // Add resources defined for cluster-level issue slots.
-    for (auto *cluster : *cpu->clusters())
-      for (auto *res : *cluster->issues())
-        cpu->add_cpu_resource(res, "Issue", cpu, cluster, nullptr);
+    for (auto *Cluster : *Cpu->getClusters())
+      for (auto *Res : *Cluster->getIssues())
+        Cpu->addCpuResource(Res, "Issue", Cpu, Cluster, nullptr);
 
     // Add all resources defined at the CPU level.
-    for (auto *res : *cpu->resources())
-      cpu->add_cpu_resource(res, "Resource", cpu, nullptr, nullptr);
+    for (auto *Res : *Cpu->getResources())
+      Cpu->addCpuResource(Res, "Resource", Cpu, nullptr, nullptr);
 
     // Add all other resources defined in clusters.
-    for (auto *cluster : *cpu->clusters())
-      for (auto *res : *cluster->resources())
-        cpu->add_cpu_resource(res, "Resource", cpu, cluster, nullptr);
+    for (auto *Cluster : *Cpu->getClusters())
+      for (auto *Res : *Cluster->getResources())
+        Cpu->addCpuResource(Res, "Resource", Cpu, Cluster, nullptr);
 
     // Add resources defined in functional unit instantiations.
-    for (auto *cluster : *cpu->clusters()) {
-      for (auto *fu : cluster->fu_instantiations())
-        for (auto *resource : fu->resources())
-          cpu->add_cpu_resource(resource, "FU Resource", cpu, cluster, fu);
+    for (auto *Cluster : *Cpu->getClusters()) {
+      for (auto *Fu : Cluster->getFuInstantiations())
+        for (auto *Resource : Fu->getResources())
+          Cpu->addCpuResource(Resource, "FU Resource", Cpu, Cluster, Fu);
     }
 
     // Add one fake resource to mark the end of the list.
-    cpu->add_cpu_resource(new ResourceDef("end"), "fake", cpu, nullptr,
-                          nullptr);
+    Cpu->addCpuResource(new ResourceDef("end"), "fake", Cpu, nullptr, nullptr);
 
     // We've collected all the resources together, assign ids.
     // We skip resource groups, since their members were promoted to
     // regular resources.
-    int resource_id = 1;
-    for (auto *res : cpu->all_resources())
-      if (!res->IsGroupDef())
-        resource_id = AssignId(res, resource_id);
+    int ResourceId = 1;
+    for (auto *Res : Cpu->getAllResources())
+      if (!Res->isGroupDef())
+        ResourceId = AssignId(Res, ResourceId);
 
-    if (last_fu)
-      cpu->set_max_fu_id(last_fu->get_resource_id());
-    cpu->set_max_resource_id(resource_id);
+    if (LastFu)
+      Cpu->setMaxFuId(LastFu->getResourceId());
+    Cpu->setMaxResourceId(ResourceId);
   }
 }
 
 // Assign pool ids (per CPU) to each resource that defines a pool.
-void MdlSpec::AssignPoolIds() {
-  for (auto *cpu : cpus()) {
+void MdlSpec::assignPoolIds() {
+  for (auto *Cpu : Cpus) {
     // First find and sort the pools by their size.  We prefer to allocate
     // the most constrained pools first.
-    for (auto *res : cpu->all_resources())
-      if (res->IsPoolDef())
-        cpu->add_pool_resource(res);
+    for (auto *Res : Cpu->getAllResources())
+      if (Res->isPoolDef())
+        Cpu->addPoolResource(Res);
 
-    std::sort(cpu->pool_resources().begin(), cpu->pool_resources().end(),
-              [](const ResourceDef *a, const ResourceDef *b) {
-                return a->size() < b->size();
+    std::sort(Cpu->getPoolResources().begin(), Cpu->getPoolResources().end(),
+              [](const ResourceDef *A, const ResourceDef *B) {
+                return A->getSize() < B->getSize();
               });
 
-    int pool_id = 0;
-    for (auto *res : cpu->pool_resources()) {
-      res->set_pool_id(pool_id);
-      for (auto &[pool, pool_info] : res->sub_pools()) {
-        pool_info.set_subpool_id(pool_id);
-        pool_id += *pool_info.counts().rbegin();
+    int PoolId = 0;
+    for (auto *Res : Cpu->getPoolResources()) {
+      Res->setPoolId(PoolId);
+      for (auto &[Pool, PoolInfo] : Res->getSubPools()) {
+        PoolInfo.setSubpoolId(PoolId);
+        PoolId += *PoolInfo.getCounts().rbegin();
       }
     }
-    cpu->set_pool_count(pool_id);
+    Cpu->setPoolCount(PoolId);
   }
 }
 

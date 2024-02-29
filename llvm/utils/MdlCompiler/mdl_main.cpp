@@ -27,50 +27,50 @@ using namespace llvm;
 //-------------------------------------------------------------------------
 // Command line flags.
 //-------------------------------------------------------------------------
-cl::opt<std::string> input_file(cl::Positional, cl::desc("<input file>"));
+cl::opt<std::string> InputFile(cl::Positional, cl::desc("<input file>"));
 
 cl::OptionCategory MdlOutput("Output options");
-cl::opt<std::string> output_dir("output_dir", cl::desc("Output directory"),
+cl::opt<std::string> OutputDir("output_dir", cl::desc("Output directory"),
                                 cl::init(""), cl::value_desc("dir"),
                                 cl::cat(MdlOutput));
-cl::opt<std::string> import_dir("import_dir", cl::desc("Import directory"),
+cl::opt<std::string> ImportDir("import_dir", cl::desc("Import directory"),
                                 cl::init(""), cl::value_desc("dir"),
                                 cl::cat(MdlOutput));
 cl::opt<bool>
-    gen_missing_info("gen_missing_info",
+    GenMissingInfo("gen_missing_info",
                      cl::desc("Generate missing info for instructions"),
                      cl::cat(MdlOutput), cl::init(false));
 
 cl::OptionCategory MdlDiags("Diagnostic options");
-cl::opt<bool> warnings("warnings", cl::desc("Print warnings"),
+cl::opt<bool> Warnings("warnings", cl::desc("Print warnings"),
                        cl::cat(MdlDiags), cl::init(false));
-cl::opt<bool> fatal_warnings("fatal_warnings",
+cl::opt<bool> FatalWarnings("fatal_warnings",
                              cl::desc("Treat warnings as errors"),
                              cl::cat(MdlDiags), cl::init(false));
 cl::opt<bool>
-    check_usage("check_usage",
+    CheckUsage("check_usage",
                 cl::desc("Check subunit, reference, and resource usage"),
                 cl::cat(MdlDiags), cl::init(false));
-cl::opt<bool> check_all_operands(
+cl::opt<bool> CheckAllOperands(
     "check_all_operands",
     cl::desc("Check references to all operands - not just registers"),
     cl::cat(MdlDiags), cl::init(false));
 
 cl::OptionCategory MdlDebug("Debugging options");
-cl::opt<bool> dump_resources("dump_resources", cl::desc("Dump resource ids"),
+cl::opt<bool> DumpResources("dump_resources", cl::desc("Dump resource ids"),
                              cl::init(false), cl::cat(MdlDebug));
-cl::opt<bool> dump_fus("dump_fus",
+cl::opt<bool> DumpFus("dump_fus",
                        cl::desc("Dump functional unit instantiations"),
                        cl::init(false), cl::cat(MdlDebug));
-cl::opt<bool> dump_sus("dump_sus", cl::desc("Dump subunit instantiations"),
+cl::opt<bool> DumpSus("dump_sus", cl::desc("Dump subunit instantiations"),
                        cl::init(false), cl::cat(MdlDebug));
-cl::opt<bool> dump_spec("dump_spec", cl::desc("Dump entire mdl specification"),
+cl::opt<bool> DumpSpec("dump_spec", cl::desc("Dump entire mdl specification"),
                         cl::init(false), cl::cat(MdlDebug));
-cl::opt<bool> dump_instr("dump_instr", cl::desc("Dump instruction information"),
+cl::opt<bool> DumpInstr("dump_instr", cl::desc("Dump instruction information"),
                          cl::init(false), cl::cat(MdlDebug));
-cl::opt<bool> dump_preds("dump_preds", cl::desc("Dump user-defined predicates"),
+cl::opt<bool> DumpPreds("dump_preds", cl::desc("Dump user-defined predicates"),
                          cl::init(false), cl::cat(MdlDebug));
-cl::opt<bool> generate_llvm_defs("gen_llvm_defs",
+cl::opt<bool> GenerateLLVMDefs("gen_llvm_defs",
                                  cl::desc("Generate LLVM definitions"),
                                  cl::init(false), cl::cat(MdlDebug));
 
@@ -85,8 +85,8 @@ static void usage(int argc, char **argv) {
   }
 
   // If user specifies check_all_options, do some other checking too.
-  if (check_all_operands)
-    check_usage = true;
+  if (CheckAllOperands)
+    CheckUsage = true;
 
   // Disable some flags we don't particularly want to see.
   cl::getRegisteredOptions()["help-list"]->setHiddenFlag(cl::ReallyHidden);
@@ -94,7 +94,7 @@ static void usage(int argc, char **argv) {
   cl::getRegisteredOptions()["color"]->setHiddenFlag(cl::ReallyHidden);
   cl::ParseCommandLineOptions(argc, argv, "MDL Compiler");
 
-  if (input_file.empty()) {
+  if (InputFile.empty()) {
     llvm::errs() << "Error: no input file\n";
     exit(EXIT_FAILURE);
   }
@@ -109,13 +109,13 @@ int main(int argc, char **argv) {
   usage(argc, argv);
 
   // Create object which collects all the information from the input files.
-  mpact::mdl::MdlSpec spec(warnings, fatal_warnings);
+  mpact::mdl::MdlSpec Spec(Warnings, FatalWarnings);
 
   //--------------------------------------------------------------------------
   // First Pass: Parse the input file, and build a representation of the
   // entire machine description. Abort if syntax errors found.
   //--------------------------------------------------------------------------
-  if (!ProcessInputFile(spec, import_dir, input_file))
+  if (!ProcessInputFile(Spec, ImportDir, InputFile))
     mpact::mdl::Abort();
 
   //--------------------------------------------------------------------------
@@ -123,54 +123,54 @@ int main(int argc, char **argv) {
   // up the representation so that later passes don't have to look things up.
   //--------------------------------------------------------------------------
   // Build dictionaries for functional unit, subunit, and latency templates.
-  spec.BuildDictionaries();
+  Spec.buildDictionaries();
   // Create templates for implicitly defined functional units.
-  spec.FindImplicitFuncUnitTemplates();
+  Spec.findImplicitFuncUnitTemplates();
   // Check for duplicate definitions, and for valid pipe phase references.
-  spec.CheckForDuplicateDefs();
+  Spec.checkForDuplicateDefs();
   // Check resource definitions for correctness.
-  spec.CheckResourceDefs();
+  Spec.checkResourceDefs();
   // Check subunit references in instructions.
-  spec.CheckPipeReferences();
+  Spec.checkPipeReferences();
   // Add globally defined resources to each defined CPU.
-  spec.PromoteGlobalResources();
+  Spec.promoteGlobalResources();
   // Promote resource group members to regular resource definitions.
-  spec.PromoteResourceGroups();
+  Spec.promoteResourceGroups();
   // Check that base templates exist and have compatible parameters.
   // Explicitly link templates (fu, su, latency) to their bases.
-  spec.CheckTemplateBases();
+  Spec.checkTemplateBases();
   // Check that each instantiation refers to a valid template, and they have
   // compatible parameters/arguments.
-  spec.CheckInstantiations();
+  Spec.checkInstantiations();
 
   // Check operand references in instructions, operands, and latencies.
-  spec.CheckInstructions();
-  spec.CheckOperands();
+  Spec.checkInstructions();
+  Spec.checkOperands();
   // Make sure all instruction have subunits.  If they don't, add a default.
-  if (gen_missing_info)
-    spec.CheckInstructionSubunits();
+  if (GenMissingInfo)
+    Spec.checkInstructionSubunits();
 
   // Check references in latency templates for correctness.
-  spec.CheckReferences();
+  Spec.checkReferences();
   // Determine if we need to explicitly manage issue slots.
-  spec.CheckIssueSlots();
+  Spec.checkIssueSlots();
   // Scan predicate table and do logical simplification on predicates.
-  spec.SimplifyPredicates();
+  Spec.simplifyPredicates();
 
   // If we've seen any semantic errors, abort.
-  if (spec.ErrorsSeen())
+  if (Spec.ErrorsSeen())
     mpact::mdl::Abort();
 
   // Scan latencies for functional unit specifiers. For each specifier
   // add implicit subunit instances to any CPUs which instantiate the FU.
-  spec.TieSubUnitsToFunctionalUnits();
+  Spec.tieSubUnitsToFunctionalUnits();
 
   // A derived subunit should be added to any instruction which is tied to
   // any of the subunit's base subunits.
-  spec.TieDerivedSubUnitsToInstructions();
+  Spec.tieDerivedSubUnitsToInstructions();
 
   // Check that the input spec has some basic required components.
-  spec.CheckInputStructure();
+  Spec.checkInputStructure();
 
   //--------------------------------------------------------------------------
   // Third Pass: Build the internal representation of the processor database.
@@ -178,56 +178,56 @@ int main(int argc, char **argv) {
   //--------------------------------------------------------------------------
   // For each CPU definition, perform the instantiation of each functional
   // unit, which recursively expands subunits and latency instances.
-  spec.InstantiateFunctionalUnits();
+  Spec.instantiateFunctionalUnits();
 
   // For each CPU, build a dictionary of instances for each used functional
   // unit template.
-  spec.BuildFuncUnitInstancesMap();
+  Spec.buildFuncUnitInstancesMap();
 
   // For each instruction, create instruction behaviors for each processor
   // and functional unit that it can run on.
-  mpact::mdl::InstructionDatabase instruction_info(output_dir, input_file,
-                                                   gen_missing_info, spec);
+  mpact::mdl::InstructionDatabase InstructionInfo(OutputDir, InputFile,
+                                                   GenMissingInfo, Spec);
   // Assign ids to every defined resource.
-  spec.AssignResourceIds();
+  Spec.assignResourceIds();
   // Assign pool ids to each pooled resource.
-  spec.AssignPoolIds();
+  Spec.assignPoolIds();
 
   //--------------------------------------------------------------------------
   // Fourth Pass: do consistency checking, dump requested debug information.
   //--------------------------------------------------------------------------
-  if (check_usage) {
+  if (CheckUsage) {
     // Check for operands that never match a reference.
-    instruction_info.CheckUnreferencedOperands(check_all_operands);
+    InstructionInfo.checkUnreferencedOperands(CheckAllOperands);
     // Check for latency referenced that never match instructions.
-    spec.CheckReferenceUse();
+    Spec.checkReferenceUse();
     // Also check for subunits that are never instantiated.
-    spec.CheckSubunitUse();
+    Spec.checkSubunitUse();
     // Look for unreferenced resources.
-    spec.CheckResourceUse();
+    Spec.checkResourceUse();
   }
 
   // If we encountered any errors during database generation, abort.
-  if (spec.ErrorsSeen())
+  if (Spec.ErrorsSeen())
     mpact::mdl::Abort();
 
   // Debug stuff - write out what we know about the machine.
-  if (dump_resources)
-    spec.DumpResourceIds();
-  if (dump_fus)
-    spec.DumpFuncUnitInstantiations();
-  if (dump_sus)
-    spec.DumpSubUnitInstantiations();
-  if (dump_spec)
-    std::cout << spec.ToString();
-  if (dump_instr)
-    instruction_info.DumpInstructions();
-  if (dump_preds)
-    spec.DumpPredicates();
+  if (DumpResources)
+    Spec.dumpResourceIds();
+  if (DumpFus)
+    Spec.dumpFuncUnitInstantiations();
+  if (DumpSus)
+    Spec.dumpSubUnitInstantiations();
+  if (DumpSpec)
+    std::cout << Spec.ToString();
+  if (DumpInstr)
+    InstructionInfo.dumpInstructions();
+  if (DumpPreds)
+    Spec.dumpPredicates();
 
   //--------------------------------------------------------------------------
   // Output Pass: Generate the output files.
   //--------------------------------------------------------------------------
-  instruction_info.Write(generate_llvm_defs);
+  InstructionInfo.write(GenerateLLVMDefs);
   return EXIT_SUCCESS;
 }

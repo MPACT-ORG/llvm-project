@@ -156,66 +156,66 @@ using RegisterClassRefDict = std::map<std::string, RegisterClassRef *>;
 // Template for writing out vectors of pointers to objects.
 //----------------------------------------------------------------------------
 template <typename T>
-std::ostream &PrintVec(std::ostream &out, const std::vector<T> *v,
-                       std::string head = "", std::string sep = "\n",
-                       std::string end = "\n") {
-  if (!v)
-    return out;
-  out << head;
+std::ostream &PrintVec(std::ostream &Out, const std::vector<T> *V,
+                       std::string Head = "", std::string Sep = "\n",
+                       std::string End = "\n") {
+  if (!V)
+    return Out;
+  Out << Head;
 
-  for (auto *item : *v) {
-    out << *item;
-    if (item != v->back())
-      out << sep;
+  for (auto *Item : *V) {
+    Out << *Item;
+    if (Item != V->back())
+      Out << Sep;
   }
-  return out << end;
+  return Out << End;
 }
 
 //----------------------------------------------------------------------------
 // Template function for stringizing vectors of pointers to objects.
 //----------------------------------------------------------------------------
 template <typename T>
-std::string StringVec(const std::vector<T> *v, std::string head = "",
-                      std::string sep = "\n", std::string end = "\n") {
-  if (!v)
+std::string StringVec(const std::vector<T> *V, std::string Head = "",
+                      std::string Sep = "\n", std::string End = "\n") {
+  if (!V)
     return "";
-  std::string out = head;
+  std::string Out = Head;
 
-  for (auto *item : *v) {
-    out += item->ToString();
-    if (item != v->back())
-      out += sep;
+  for (auto *Item : *V) {
+    Out += Item->ToString();
+    if (Item != V->back())
+      Out += Sep;
   }
 
-  return out + end;
+  return Out + End;
 }
 //----------------------------------------------------------------------------
 // Template function for stringizing sets of strings.
 //----------------------------------------------------------------------------
 template <typename T>
-std::string StringSet(const std::set<T> *v, std::string head = "",
-                      std::string sep = "\n", std::string end = "\n") {
-  if (!v)
+std::string StringSet(const std::set<T> *V, std::string Head = "",
+                      std::string Sep = "\n", std::string End = "\n") {
+  if (!V)
     return "";
-  std::string out = head;
+  std::string Out = Head;
 
-  for (auto &item : *v) {
-    out += item;
-    if (item != *v->rbegin())
-      out += sep;
+  for (auto &Item : *V) {
+    Out += Item;
+    if (Item != *V->rbegin())
+      Out += Sep;
   }
 
-  return out + end;
+  return Out + End;
 }
 
 //----------------------------------------------------------------------------
 // Template function to find an MDL item in a vector, by name.
 //----------------------------------------------------------------------------
 template <typename A>
-A *FindItem(std::vector<A *> &items, const std::string &name) {
-  for (auto *a_item : items)
-    if (a_item->name() == name)
-      return a_item;
+A *FindItem(std::vector<A *> &Items, const std::string &Name) {
+  for (auto *Item : Items)
+    if (Item->getName() == Name)
+      return Item;
   return nullptr;
 }
 
@@ -223,62 +223,59 @@ A *FindItem(std::vector<A *> &items, const std::string &name) {
 // Template function to find an MDL item in a map of pointers, by name.
 //----------------------------------------------------------------------------
 template <typename A>
-A *FindItem(std::map<std::string, A *> &items, const std::string &name) {
-  auto it = items.find(name);
-  return (it == items.end()) ? nullptr : it->second;
+A *FindItem(std::map<std::string, A *> &Items, const std::string &Name) {
+  auto It = Items.find(Name);
+  return (It == Items.end()) ? nullptr : It->second;
 }
 
 //----------------------------------------------------------------------------
 // "Internal" FU names contain a leading colon character, so that they never
 // conflict with user-defined names.
 //----------------------------------------------------------------------------
-inline bool is_catchall_name(const std::string &name) {
-  return name[0] == ':';
+inline bool isCatchallName(const std::string &Name) {
+  return Name[0] == ':';
 }
-inline std::string catchall_name(const std::string &name) {
-  return llvm::formatv(":{0}", name);
+inline std::string catchallName(const std::string &Name) {
+  return llvm::formatv(":{0}", Name);
 }
 
 //----------------------------------------------------------------------------
 // FU Instances with explicit bases.
 //----------------------------------------------------------------------------
-inline bool is_based_fu_instance(const std::string &name) {
-  auto loc = name.find(':');
-  return loc != 0 && loc != std::string::npos;
+inline bool isBasedFuInstance(const std::string &Name) {
+  auto Loc = Name.find(':');
+  return Loc != 0 && Loc != std::string::npos;
 }
 
-inline std::string based_fu_instance(const IdList *bases) {
-  return StringVec<Identifier *>(bases, "", ":", "");
+inline std::string basedFuInstance(const IdList *Bases) {
+  return StringVec<Identifier *>(Bases, "", ":", "");
 }
 
 //----------------------------------------------------------------------------
 // Define a base class that contains source information for each object.
 //----------------------------------------------------------------------------
 class MdlItem {
+  std::string *FileName = nullptr;    // Pointer to current file name.
+  int Line = 0;                       // Lexical line number of this item.
+  int Column = 0;                     // Lexical column number of this item.
+
 public:
-  MdlItem(std::string *file_name, int line, int column) :
-    file_name_(file_name), line_(line), column_(column) {}
-  // MdlItem(const MdlItem &item)
-  //   : file_name_(item.file_name_), line_(item.line_), column_(item.column_) {}
-  MdlItem() : line_(0), column_(0) {}
+  MdlItem(std::string *FileName, int Line, int Column) :
+    FileName(FileName), Line(Line), Column(Column) {}
+  MdlItem() : Line(0), Column(0) {}
 
-  const std::string file_name() const { return *file_name_; }
-  int line() const { return line_; }
-  int column() const { return column_; }
-  std::string Location() const {
-    return llvm::formatv("{0}:{1}:{2}", *file_name_, std::to_string(line_),
-                         std::to_string(column_ + 1));
+  const std::string getFileName() const { return *FileName; }
+  int getLine() const { return Line; }
+  int getColumn() const { return Column; }
+  std::string getLocation() const {
+    return llvm::formatv("{0}:{1}:{2}", *FileName, std::to_string(Line),
+                         std::to_string(Column + 1));
   }
-  void SetLocation(std::string *file_name, int line, int column) {
-    file_name_ = file_name;
-    line_ = line;
-    column_ = column;
+  void setLocation(std::string *NewFileName, int NewLine, int NewColumn) {
+    FileName = NewFileName;
+    Line = NewLine;
+    Column = NewColumn;
   }
-
-private:
-  std::string *file_name_ = nullptr;
-  int line_ = 0;                       // Lexical line number of this item.
-  int column_ = 0;                     // Lexical column number of this item.
 };
 
 //----------------------------------------------------------------------------
@@ -286,117 +283,111 @@ private:
 // in the machine description.
 //----------------------------------------------------------------------------
 class Identifier : public MdlItem {
+  const std::string Name;   // Name used anywhere in machine description.
+  int Index = -1;           // If in an IdList, its 0-based position in list.
+
 public:
   // Create a general identifier.
-  Identifier(const MdlItem &item, std::string name)
-      : MdlItem(item), name_(name) {}
+  Identifier(const MdlItem &Item, std::string Name)
+      : MdlItem(Item), Name(Name) {}
   // Used to create identifiers used in resource groups.
-  Identifier(Identifier *item, int index)
-      : MdlItem(*item), name_(item->name_), index_(index) {}
+  Identifier(Identifier *Item, int Index)
+      : MdlItem(*Item), Name(Item->getName()), Index(Index) {}
   // Used to generate internal names that don't map back to source code.
-  explicit Identifier(std::string name) : MdlItem(), name_(name) {}
+  explicit Identifier(std::string Name) : MdlItem(), Name(Name) {}
 
-  bool operator!=(const Identifier &rhs) { return name_ != rhs.name(); }
+  bool operator!=(const Identifier &Rhs) { return Name != Rhs.getName(); }
   std::string ToString() const;
-  std::string const &name() const { return name_; }
-  void set_index(int index) { index_ = index; }
-  int index() const { return index_; }
-  bool is_vararg() const { return name_[0] == '$'; }
-  int vararg_index() const { return std::stoi(name_.substr(1)); }
-  bool is_number() const { return isdigit(name_[0]); }
-  int get_number() const { return std::stoi(name_); }
-
-private:
-  const std::string name_; // Name used anywhere in machine description.
-  int index_ = -1;         // If in an IdList, its 0-based position in list.
+  std::string const &getName() const { return Name; }
+  void setIndex(int NewIndex) { Index = NewIndex; }
+  int getIndex() const { return Index; }
+  bool isVararg() const { return Name[0] == '$'; }
+  int getVarargIndex() const { return std::stoi(Name.substr(1)); }
+  bool isNumber() const { return isdigit(Name[0]); }
+  int getNumber() const { return std::stoi(Name); }
 };
 
 //----------------------------------------------------------------------------
 // An instance of a pipe phase name, defined in a pipeline definition.
 //----------------------------------------------------------------------------
 class PhaseName : public MdlItem {
+  const std::string Name;    // name of the pipeline phase
+  int Index = -1;            // If in an IdList, its 0-based position in list
+  bool IsProtected = true;   // true if this is in a protected pipeline
+  bool IsHard = false;       // true if this is in a "hard" pipeline
+
 public:
-  PhaseName(const MdlItem &item, std::string name, bool is_protected,
-            bool is_hard)
-      : MdlItem(item), name_(name), is_protected_(is_protected),
-        is_hard_(is_hard) {}
-  explicit PhaseName(std::string name) : MdlItem(), name_(name) {}
+  PhaseName(const MdlItem &Item, std::string Name, bool IsProtected,
+            bool IsHard)
+      : MdlItem(Item), Name(Name), IsProtected(IsProtected),
+        IsHard(IsHard) {}
+  explicit PhaseName(std::string Name) : MdlItem(), Name(Name) {}
 
   std::string ToString() const;
-  std::string FormatProtection() const;
-  std::string const &name() const { return name_; }
-  void set_index(int index) { index_ = index; }
-  int index() const { return index_; }
-  bool is_protected() const { return is_protected_; }
-  bool is_unprotected() const { return !is_protected_; }
-  bool is_hard() const { return is_hard_; }
-
-private:
-  const std::string name_;   // name of the pipeline phase
-  int index_ = -1;           // If in an IdList, its 0-based position in list
-  bool is_protected_ = true; // true if this is in a protected pipeline
-  bool is_hard_ = false;     // true if this is in a "hard" pipeline
+  std::string formatProtection() const;
+  std::string const &getName() const { return Name; }
+  void setIndex(int NewIndex) { Index = NewIndex; }
+  int getIndex() const { return Index; }
+  bool isProtected() const { return IsProtected; }
+  bool isUnprotected() const { return !IsProtected; }
+  bool isHard() const { return IsHard; }
 };
 
 //----------------------------------------------------------------------------
 // An instance of a register definition.
 //----------------------------------------------------------------------------
 class RegisterDef : public MdlItem {
+  const Identifier *Id;           // Identifier associated with register.
+
 public:
-  RegisterDef(const MdlItem &item, Identifier *id) : MdlItem(item), id_(id) {}
+  RegisterDef(const MdlItem &Item, Identifier *Id) : MdlItem(Item), Id(Id) {}
 
   std::string ToString() const;
-  std::string const &name() const { return id_->name(); }
-
-private:
-  const Identifier *id_; // Identifier associated with register.
+  std::string const &getName() const { return Id->getName(); }
 };
 
 //----------------------------------------------------------------------------
 // Description of a register class.
 //----------------------------------------------------------------------------
 class RegisterClass : public MdlItem {
+  Identifier *Id;                 // Name of the class.
+  RegisterDefList *Members;       // List of registers included in class.
+
 public:
-  RegisterClass(const MdlItem &item, Identifier *id, RegisterDefList *members)
-      : MdlItem(item), id_(id), members_(members) {}
-  explicit RegisterClass(std::string name) : id_(new Identifier(name)) {}
+  RegisterClass(const MdlItem &Item, Identifier *Id, RegisterDefList *Members)
+      : MdlItem(Item), Id(Id), Members(Members) {}
+  explicit RegisterClass(std::string Name) : Id(new Identifier(Name)) {}
 
   // Return true if decl is a superset of this class.
-  bool IsSupersetOf(const RegisterClass *decl) const {
-    for (auto *reg : *decl->members_)
-      if (!FindItem(*members_, reg->name()))
+  bool isSupersetOf(const RegisterClass *Decl) const {
+    for (auto *Reg : *Decl->Members)
+      if (!FindItem(*Members, Reg->getName()))
         return false;
     return true;
   }
   std::string ToString() const;
 
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  RegisterDefList *members() const { return members_; }
-  bool IsNull() const { return name() == "__"; }
-
-private:
-  Identifier *id_;           // Name of the class.
-  RegisterDefList *members_; // List of registers included in class.
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  RegisterDefList *getMembers() const { return Members; }
+  bool IsNull() const { return getName() == "__"; }
 };
 
 //----------------------------------------------------------------------------
 // An instance argument which refers to a register class.
 //----------------------------------------------------------------------------
 class RegisterClassRef : public MdlItem {
+  Identifier *Id = nullptr;             // name of the referenced class
+  RegisterClass *Regs = nullptr;        // link to the referenced class
+
 public:
-  explicit RegisterClassRef(RegisterClass *item)
-      : MdlItem(*item), id_(item->id()), regs_(item) {}
+  explicit RegisterClassRef(RegisterClass *Item)
+      : MdlItem(*Item), Id(Item->getId()), Regs(Item) {}
 
   std::string ToString() const;
-
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  RegisterClass *regs() { return regs_; }
-
-private:
-  Identifier *id_ = nullptr;      // name of the referenced class
-  RegisterClass *regs_ = nullptr; // link to the referenced class
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  RegisterClass *getRegs() { return Regs; }
 };
 
 //----------------------------------------------------------------------------
@@ -406,30 +397,29 @@ private:
 // This object owns all the data pointed to by member pointers.
 //----------------------------------------------------------------------------
 class PipePhases : public MdlItem {
+  Identifier *const Id = nullptr;               // name of pipeline phase group
+  PhaseNameList *const PhaseNames = nullptr;    // names of each phase
+  PhaseName *const FirstExecutePhaseName;       // first execute phase
+  const bool IsProtected = true;        // true if the pipeline is protected
+  const bool IsHard = false;            // true if the pipeline is hard vs soft
+
 public:
-  PipePhases(const MdlItem &item, Identifier *id, PhaseNameList *phases,
-             PhaseName *first_execute_phase, bool is_protected, bool is_hard)
-      : MdlItem(item), id_(id), phase_names_(phases),
-        first_execute_phase_name_(first_execute_phase),
-        is_protected_(is_protected), is_hard_(is_hard) {}
+  PipePhases(const MdlItem &Item, Identifier *Id, PhaseNameList *Phases,
+             PhaseName *FirstExecutePhase, bool IsProtected, bool IsHard)
+      : MdlItem(Item), Id(Id), PhaseNames(Phases),
+        FirstExecutePhaseName(FirstExecutePhase),
+        IsProtected(IsProtected), IsHard(IsHard) {}
 
   std::string ToString() const;
 
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  PhaseNameList *phase_names() const { return phase_names_; }
-  bool is_protected() const { return is_protected_; }
-  bool is_hard() const { return is_hard_; }
-  PhaseName *first_execute_phase_name() const {
-    return first_execute_phase_name_;
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  PhaseNameList *getPhaseNames() const { return PhaseNames; }
+  bool isProtected() const { return IsProtected; }
+  bool isHard() const { return IsHard; }
+  PhaseName *getFirstExecutePhaseName() const {
+    return FirstExecutePhaseName;
   }
-
-private:
-  Identifier *const id_ = nullptr;             // name of pipeline phase group
-  PhaseNameList *const phase_names_ = nullptr; // names of each phase
-  PhaseName *const first_execute_phase_name_;  // first execute phase
-  const bool is_protected_ = true; // true if the pipeline is protected
-  const bool is_hard_ = false;     // true if the pipeline is hard vs soft
 };
 
 //----------------------------------------------------------------------------
@@ -460,15 +450,15 @@ struct RefTypes {
 using RefType = RefTypes::Item;
 
 // Map a string from the mdl input file to a RefType.
-extern RefType StringToRefType(const std::string &ref_type);
+extern RefType convertStringToRefType(const std::string &Type);
 // Format a RefType for debug output.
-extern std::string RefTypeToString(RefType ref_type);
+extern std::string convertRefTypeToString(RefType Type);
 // Format a RefType for database generation.
-extern std::string FormatReferenceType(RefType ref_type);
+extern std::string formatReferenceType(RefType Type);
 // Format an aggregated RefType for database generation.
-extern std::string FormatReferenceTypes(int ref_type);
+extern std::string formatReferenceTypes(int Type);
 // Format a reference flags field.
-extern std::string FormatReferenceFlags(const Reference *ref);
+extern std::string FormatReferenceFlags(const Reference *Ref);
 
 //----------------------------------------------------------------------------
 // A set of flags for describing scheduling attributes for operand, resource,
@@ -494,16 +484,16 @@ struct RefFlags {
   static constexpr int kSingleIssue = 32;
   static constexpr int kRetireOOO = 64;
 
-  static bool is_protected(Item flag) { return flag & kProtected; }
-  static bool is_unprotected(Item flag) { return flag & kUnprotected; }
-  static bool is_duplicate(Item flag) { return flag & kDuplicate; }
-  static bool is_unbuffered(Item flag) { return flag & kUnbuffered; }
-  static bool is_out_of_order(Item flag) { return flag & kOutOfOrder; }
-  static bool is_in_order(Item flag) { return flag & kInOrder; }
-  static bool is_begin_group(Item flag) { return flag & kBeginGroup; }
-  static bool is_end_group(Item flag) { return flag & kEndGroup; }
-  static bool is_single_issue(Item flag) { return flag & kSingleIssue; }
-  static bool is_retire_ooo(Item flag) { return flag & kRetireOOO; }
+  static bool isProtected(Item Flag) { return Flag & kProtected; }
+  static bool isUnprotected(Item Flag) { return Flag & kUnprotected; }
+  static bool isDuplicate(Item Flag) { return Flag & kDuplicate; }
+  static bool isUnbuffered(Item Flag) { return Flag & kUnbuffered; }
+  static bool isOut_of_order(Item Flag) { return Flag & kOutOfOrder; }
+  static bool isIn_order(Item Flag) { return Flag & kInOrder; }
+  static bool isBeginGroup(Item Flag) { return Flag & kBeginGroup; }
+  static bool isEndGroup(Item Flag) { return Flag & kEndGroup; }
+  static bool isSingleIssue(Item Flag) { return Flag & kSingleIssue; }
+  static bool isRetireOOO(Item Flag) { return Flag & kRetireOOO; }
 };
 
 //----------------------------------------------------------------------------
@@ -513,40 +503,38 @@ struct RefFlags {
 // first.
 //----------------------------------------------------------------------------
 class SubPool {
-public:
-  explicit SubPool(const ResourceRef *res);
-  int first() const { return first_; }
-  int last() const { return last_; }
-  int size() const { return last_ - first_; }
-  bool operator<(const SubPool &rhs) const {
-    return size() < rhs.size() ||
-           (size() == rhs.size() &&
-            (first() < rhs.first() || last() < rhs.last()));
-  }
-  bool operator>(const SubPool &item) const { return item < *this; }
-  std::string ToString() const;
+  int First;    // id of first member of the subpool
+  int Last;     // id of last member of the subpool
 
-private:
-  int first_; // id of first member of the subpool
-  int last_;  // id of last member of the subpool
+public:
+  explicit SubPool(const ResourceRef *Res);
+  int getFirst() const { return First; }
+  int getLast() const { return Last; }
+  int getSize() const { return Last - First; }
+  bool operator<(const SubPool &Rhs) const {
+    return getSize() < Rhs.getSize() ||
+           (getSize() == Rhs.getSize() &&
+            (getFirst() < Rhs.getFirst() || getLast() < Rhs.getLast()));
+  }
+  bool operator>(const SubPool &Item) const { return Item < *this; }
+  std::string ToString() const;
 };
 
 // Information about a single subpool.
 class SubPoolInfo {
+  int SubpoolId = -1;
+  std::set<int> Counts; // the set of all non-zero count requests
+
 public:
-  void set_subpool_id(int id) { subpool_id_ = id; }
-  void add_count(int count) {
-    if (count)
-      counts_.emplace(count); // Don't add zeros.
+  void setSubpoolId(int Id) { SubpoolId = Id; }
+  void addCount(int NewCount) {
+    if (NewCount)               // Don't add zeros.
+      Counts.emplace(NewCount);
   }
-  int subpool_id() const { return subpool_id_; }
-  const std::set<int> &counts() const { return counts_; }
+  int getSubpoolId() const { return SubpoolId; }
+  const std::set<int> &getCounts() const { return Counts; }
 
   std::string ToString(std::string subpool) const;
-
-private:
-  int subpool_id_ = -1;
-  std::set<int> counts_; // the set of all non-zero count requests
 };
 
 // For each pooled reference, keep track of how many resources were requested.
@@ -564,124 +552,120 @@ enum class GroupType { kUseAll, kUseSingle, kUseNull };
 // This object owns all the data pointed to by member pointers.
 //----------------------------------------------------------------------------
 class ResourceDef : public MdlItem {
+  Identifier *const Id = nullptr;        // name of the referenced resource
+  const int BitSize = -1;                // number of bits represented
+  IdList Members;                        // members of a named resource pool
+  int PoolSize = 0;                      // number of elements in pool (or 0)
+  Identifier *StartPhase = nullptr;      // optional start phase id
+  Identifier *EndPhase = nullptr;        // optional end phase id
+  int ResourceId = 0;                    // resource index for this object
+  int PoolId = -1;                       // id, if resource is first in a pool
+
+  std::vector<ResourceDef *> MemberDefs;
+  bool ImplicitGroup = false;            // Is this is an implicit group def?
+  GroupType GrpType = GroupType::kUseSingle;
+
+  ResourceRef *PortResource = nullptr;   // resource port is connected to
+  RegisterClass *RegClass = nullptr;     // optional constraint for a port
+  FuncUnitInstantiation *Fu = nullptr;   // instantated func_unit names
+
+  int EarliestRef = -1;                  // earliest seen reference
+  int LatestRef = -1;                    // latest seen reference
+  bool PhaseExprSeen = false;            // true if there are phase expressions
+  int Types = 0;                         // OR of all seen reference types
+  std::string DebugName;                 // pretty name for printing
+  std::set<int> AllocSizes;              // set of all pool size requests
+  SubPools Pools;                        // Map of all subpools for this pool
+
 public:
-  ResourceDef(const MdlItem &item, Identifier *id, int bits, int pool_size,
-              Identifier *start, Identifier *end)
-      : MdlItem(item), id_(id), bit_size_(bits), pool_size_(pool_size),
-        start_phase_(start), end_phase_(end) {}
-  ResourceDef(const MdlItem &item, Identifier *id, int bits, IdList *members,
-              Identifier *start, Identifier *end)
-      : MdlItem(item), id_(id), bit_size_(bits), members_(*members),
-        start_phase_(start), end_phase_(end) {}
-  ResourceDef(const MdlItem &item, Identifier *id) : MdlItem(item), id_(id) {}
-  ResourceDef(Identifier *const id, FuncUnitInstantiation *fu)
-      : MdlItem(*id), id_(id), fu_(fu) {}
-  explicit ResourceDef(Identifier *const id) : MdlItem(*id), id_(id) {}
-  explicit ResourceDef(std::string name)
-      : MdlItem(), id_(new Identifier(name)) {}
+  ResourceDef(const MdlItem &Item, Identifier *Id, int Bits, int PoolSize,
+              Identifier *Start, Identifier *End)
+      : MdlItem(Item), Id(Id), BitSize(Bits), PoolSize(PoolSize),
+        StartPhase(Start), EndPhase(End) {}
+  ResourceDef(const MdlItem &Item, Identifier *Id, int Bits, IdList *Members,
+              Identifier *Start, Identifier *End)
+      : MdlItem(Item), Id(Id), BitSize(Bits), Members(*Members),
+        StartPhase(Start), EndPhase(End) {}
+  ResourceDef(const MdlItem &Item, Identifier *Id) : MdlItem(Item), Id(Id) {}
+  ResourceDef(Identifier *const Id, FuncUnitInstantiation *Fu)
+      : MdlItem(*Id), Id(Id), Fu(Fu) {}
+  explicit ResourceDef(Identifier *const Id) : MdlItem(*Id), Id(Id) {}
+  explicit ResourceDef(std::string Name)
+      : MdlItem(), Id(new Identifier(Name)) {}
 
   std::string ToString() const;
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  IdList &getMembers() { return Members; }
+  int getBitSize() const { return BitSize; }
+  bool hasSharedBits() const { return BitSize > 0; }
+  int getPoolSize() const { return PoolSize; }
+  Identifier *getStartPhase() const { return StartPhase; }
+  Identifier *getEndPhase() const { return EndPhase; }
+  bool isNull() const { return getName() == "__"; }
 
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  IdList &members() { return members_; }
-  int bit_size() const { return bit_size_; }
-  bool has_shared_bits() const { return bit_size_ > 0; }
-  int pool_size() const { return pool_size_; }
-  Identifier *start_phase() const { return start_phase_; }
-  Identifier *end_phase() const { return end_phase_; }
-  bool IsNull() const { return name() == "__"; }
-
-  bool IsPoolDef() const { return IsGroupDef() || pool_size_ > 0; }
-  bool IsGroupDef() const { return !members_.empty(); }
-  int size() const {
-    if (IsGroupDef()) return members_.size();
-    if (IsPoolDef()) return pool_size_;
+  bool isPoolDef() const { return isGroupDef() || PoolSize > 0; }
+  bool isGroupDef() const { return !Members.empty(); }
+  int getSize() const {
+    if (isGroupDef()) return Members.size();
+    if (isPoolDef()) return PoolSize;
     return 1;
   }
 
-  void set_resource_id(int id) { resource_id_ = id; }
-  int get_resource_id() const { return resource_id_; }
-  int pool_id() const { return pool_id_; }
-  void set_pool_id(int pool_id) { pool_id_ = pool_id; }
-  void add_alloc_size(int size) { alloc_sizes_.emplace(size); }
-  std::set<int> &alloc_sizes() { return alloc_sizes_; }
-  SubPoolInfo &sub_pool(SubPool &pool) { return sub_pools_[pool]; }
-  SubPools &sub_pools() { return sub_pools_; }
-  void AddReferenceSizeToPool(const ResourceRef *resource, const Reference *ref,
-                              const SubUnitInstantiation *subunit);
+  void setResourceId(int Id) { ResourceId = Id; }
+  int getResourceId() const { return ResourceId; }
+  int getPoolId() const { return PoolId; }
+  void setPoolId(int Id) { PoolId = Id; }
+  void addAllocSize(int Size) { AllocSizes.emplace(Size); }
+  std::set<int> &getAllocSizes() { return AllocSizes; }
+  SubPoolInfo &getSubPool(SubPool &Pool) { return Pools[Pool]; }
+  SubPools &getSubPools() { return Pools; }
+  void addReferenceSizeToPool(const ResourceRef *Resource, const Reference *Ref,
+                              const SubUnitInstantiation *Subunit);
 
-  std::string resource_format();
-
-  int GetMemberId(const Identifier *member) const {
-    for (auto *mem : members_)
-      if (mem->name() == member->name())
-        return mem->index();
+  std::string formatResource();
+  int getMemberId(const Identifier *Member) const {
+    for (auto *Mem : Members)
+      if (Mem->getName() == Member->getName())
+        return Mem->getIndex();
     return -1;
   }
+  RegisterClass *getRegClass() const { return RegClass; }
+  void setRegClass(RegisterClass *Regs) { RegClass = Regs; }
+  ResourceRef *getPortResource() const { return PortResource; }
+  void setPortResource(ResourceRef *Res) { PortResource = Res; }
 
-  RegisterClass *reg_class() const { return reg_class_; }
-  void set_reg_class(RegisterClass *regs) { reg_class_ = regs; }
-  ResourceRef *port_resource() const { return port_resource_; }
-  void set_port_resource(ResourceRef *res) { port_resource_ = res; }
+  void recordReference(RefType Type, const PhaseExpr *Expr,
+                       const ResourceRef *Resource, const Reference *Ref,
+                       const SubUnitInstantiation *Subunit);
+  void recordFuReference() { Types |= RefTypes::kFus; }
 
-  void RecordReference(RefType type, const PhaseExpr *expr,
-                       const ResourceRef *resource, const Reference *ref,
-                       const SubUnitInstantiation *subunit);
-  void RecordFuReference() { ref_types_ |= RefTypes::kFus; }
-
-  void set_debug_name(std::string type, const CpuInstance *cpu,
-                      const ClusterInstance *cluster,
-                      const FuncUnitInstantiation *fu);
-  std::string debug_name() const { return debug_name_; }
-  std::string ref_summary() const;
-  int ref_types() const { return ref_types_; }
-  bool is_used() const { return ref_types_ != 0; }
-  bool only_held() const {
-    return (ref_types_ & (RefTypes::kHoldReserve)) == RefTypes::kHold;
+  void setDebugName(std::string Type, const CpuInstance *Cpu,
+                      const ClusterInstance *Cluster,
+                      const FuncUnitInstantiation *Fu);
+  std::string getDebugName() const { return DebugName; }
+  std::string getRefSummary() const;
+  int getRefTypes() const { return Types; }
+  bool isUsed() const { return Types != 0; }
+  bool isOnlyHeld() const {
+    return (Types & (RefTypes::kHoldReserve)) == RefTypes::kHold;
   }
-  bool only_reserved() const {
-    return (ref_types_ & (RefTypes::kHoldReserve)) == RefTypes::kReserve;
+  bool isOnlyReserved() const {
+    return (Types & (RefTypes::kHoldReserve)) == RefTypes::kReserve;
   }
 
-  int latest_ref() const { return latest_ref_; }
-  bool phase_expr_seen() const { return phase_expr_seen_; }
+  int getLatestRef() const { return LatestRef; }
+  bool phaseExprSeen() const { return PhaseExprSeen; }
 
-  std::vector<ResourceDef *> &member_defs() { return member_defs_; }
-  void add_member_def(ResourceDef *def) { member_defs_.push_back(def); }
-  ResourceDef *get_member_def(int index) const { return member_defs_[index]; }
-  bool implicit_group() const { return implicit_group_; }
-  void set_implicit_group() { implicit_group_ = true; }
-  GroupType group_type() const { return group_type_; }
-  void set_group_type(GroupType type) { group_type_ = type; }
-  void set_pool_size(unsigned size) { pool_size_ = size; }
-  FuncUnitInstantiation *get_fu() const { return fu_; }
-
-private:
-  Identifier *const id_ = nullptr;    // name of the referenced resource
-  const int bit_size_ = -1;           // number of bits represented
-  IdList members_;                    // members of a named resource pool
-  int pool_size_ = 0;                 // number of elements in pool (or 0)
-  Identifier *start_phase_ = nullptr; // optional start phase id
-  Identifier *end_phase_ = nullptr;   // optional end phase id
-  int resource_id_ = 0;               // resource index for this object
-  int pool_id_ = -1;                  // id, if resource is first in a pool
-
-  std::vector<ResourceDef *> member_defs_;
-  bool implicit_group_ = false; // True if this is an implicit group def
-  GroupType group_type_ = GroupType::kUseSingle;
-
-  ResourceRef *port_resource_ = nullptr; // resource port is connected to
-  RegisterClass *reg_class_ = nullptr;   // optional constraint for a port
-  FuncUnitInstantiation *fu_ = nullptr;  // instantated func_unit names
-
-  int earliest_ref_ = -1;        // earliest seen reference
-  int latest_ref_ = -1;          // latest seen reference
-  bool phase_expr_seen_ = false; // true if there are phase expressions
-  int ref_types_ = 0;            // OR of all seen reference types
-  std::string debug_name_;       // pretty name for printing
-  std::set<int> alloc_sizes_;    // set of all pool size requests
-  SubPools sub_pools_;           // Map of all subpools for this pool
+  std::vector<ResourceDef *> &getMemberDefs() { return MemberDefs; }
+  void addMemberDef(ResourceDef *Def) { MemberDefs.push_back(Def); }
+  ResourceDef *getMemberDef(int Index) const { return MemberDefs[Index]; }
+  bool isImplicitGroup() const { return ImplicitGroup; }
+  void setImplicitGroup() { ImplicitGroup = true; }
+  GroupType getGroupType() const { return GrpType; }
+  void setGroupType(GroupType Type) { GrpType = Type; }
+  void setPoolSize(unsigned Size) { PoolSize = Size; }
+  FuncUnitInstantiation *getFu() const { return Fu; }
 };
 
 //----------------------------------------------------------------------------
@@ -690,121 +674,122 @@ private:
 //   ... <name>.<member> ...         // Reference a member.
 //   ... <name>:<count> ...          // Reference <count> pool members.
 //   ... <name>[<first>..<last>]...  // Reference part of a pool.
-// This object owns all the data pointed to by member pointers, except
-// for the definition_ member.
 //----------------------------------------------------------------------------
 class ResourceRef : public MdlItem {
-public:
-  ResourceRef(const MdlItem &item, Identifier *id) : MdlItem(item), id_(id) {}
-  ResourceRef(const MdlItem &item, Identifier *id, int pool_count,
-              Identifier *pool_count_name, Identifier *value_name)
-      : MdlItem(item), id_(id), pool_count_(pool_count),
-        pool_count_name_(pool_count_name), value_name_(value_name) {}
-  ResourceRef(const MdlItem &item, Identifier *id, Identifier *member)
-      : MdlItem(item), id_(id), member_(member) {}
-  ResourceRef(const MdlItem &item, Identifier *id, int first, int last)
-      : MdlItem(item), id_(id), first_(first), last_(last) {}
-  explicit ResourceRef(std::string name)
-      : MdlItem(), id_(new Identifier(name)) {}
-  explicit ResourceRef(ResourceDef *def)
-      : MdlItem(*def), id_(def->id()), first_(def->pool_size() > 0 ? 0 : -1),
-        last_(def->pool_size() > 0 ? def->pool_size() - 1 : -1),
-        definition_(def) {}
-
-  std::string ToString() const;
-
-  Identifier *id() const { return id_; }
-  void rename(Identifier *id) { id_ = id; }
-  std::string const &name() const { return id_->name(); }
-  Identifier *member() const { return member_; }
-  int pool_count() const { return pool_count_; }
-  Identifier *pool_count_name() const { return pool_count_name_; }
-
-  bool HasCount() const {
-    return pool_count_ != -1 || pool_count_name_ != nullptr;
-  }
-  Identifier *value_name() const { return value_name_; }
-
-  int first() const { return first_; }
-  int last() const { return last_; }
-  int pool_size() const {
-    if (IsGroupDef())
-      return definition_->members().size();
-    return last_ - first_ + 1;
-  }
-
-  bool IsNull() const { return name() == "__"; }
-  bool IsPool() const { return first_ != -1; }
-  bool IsGroupRef() const { return IsGroupDef() && !member(); }
-  bool IsGroupDef() const {
-    return definition_ != nullptr && definition_->IsGroupDef();
-  }
-  bool implicit_group() const {
-    return IsGroupDef() && definition_->implicit_group();
-  }
-
-  bool IsArrayDef() const {
-    return definition_ != nullptr && IsPool() && definition_->pool_size();
-  }
-  bool IsPooledResourceRef() const {
-    return (IsGroupRef() || (IsArrayDef() && !IsIndexed())) && !HasCount();
-  }
-  bool IsUnqualifiedRef() const { return !member() && first() == -1; }
-  bool HasAllocation() const { return HasCount(); }
-  bool HasValueName() const { return value_name_ != nullptr; }
-
-  int IsSubrange() const { return first_ != -1 && last_ != first_; }
-  int IsIndexed() const { return first_ != -1 && first_ == last_; }
-
-  int member_id() const { return member_id_; }
-
-  void set_first(int first) { first_ = first; }
-  void set_last(int last) { last_ = last; }
-  void set_pool_count(int count) { pool_count_ = count; }
-  void set_pool_count_name(Identifier *count) { pool_count_name_ = count; }
-  void set_use_all_members() { use_all_members_ = true; }
-  bool use_all_members() const { return use_all_members_; }
-  void set_value_name(Identifier *mask) { value_name_ = mask; }
-  void set_subrange(int first, int last) {
-    set_first(first);
-    set_last(last);
-  }
-  void set_fu_pool(ResourceDef *pool) { fu_pool_ = pool; }
-  ResourceDef *fu_pool() const { return fu_pool_; }
-  bool is_fu_pool() const { return fu_pool_; }
-  ResourceDef *definition() const { return definition_; }
-  void set_definition(ResourceDef *def) { definition_ = def; }
-  ResourceDef *get_port_definition() const { return definition_; }
-  int get_resource_id() const {
-    return definition_ ? definition_->get_resource_id() : -1;
-  }
-  int get_final_resource_id() const {
-    if (first() != -1 && first() == last())
-      return get_resource_id() + first();
-    return get_resource_id();
-  }
-
-  Params *get_parameter() { return arg_parameter_link_; }
-  void set_parameter(Params *parameter) { arg_parameter_link_ = parameter; }
-  int operand_index() const { return operand_index_; }
-  void set_operand_index(int id) { operand_index_ = id; }
-  bool has_operand_index() const { return operand_index_ != -1; }
-
-private:
-  Identifier *id_ = nullptr;              // name of the referenced resource
-  Identifier *member_ = nullptr;          // which member is named (a.b)
-  int pool_count_ = -1;                   // how many pool members (a:count)
-  bool use_all_members_ = false;          // was "resource:*" syntax specified
-  Identifier *pool_count_name_ = nullptr; // symbolic count of members
-  Identifier *value_name_ = nullptr;      // name of operand value attribute
-  int first_ = -1, last_ = -1;            // subrange of pool (a[2..4] or a[3])
-  int member_id_ = -1;                    // index of a member reference
-  ResourceDef *fu_pool_ = nullptr;        // for pooled fu references
+  Identifier *Id = nullptr;              // name of the referenced resource
+  Identifier *Member = nullptr;          // which member is named (a.b)
+  int PoolCount = -1;                    // how many pool members (a:count)
+  bool UseAllMembers = false;            // was "resource:*" syntax specified
+  Identifier *PoolCountName = nullptr;   // symbolic count of members
+  Identifier *ValueName = nullptr;       // name of operand value attribute
+  int First = -1, Last = -1;             // subrange of pool (a[2..4] or a[3])
+  int MemberId = -1;                     // index of a member reference
+  ResourceDef *FuPool = nullptr;       // for pooled fu references
 
   // Links to related objects.
-  ResourceDef *definition_ = nullptr;    // link to resource definition
-  Params *arg_parameter_link_ = nullptr; // arguments are linked to parameters
-  int operand_index_ = -1; // pooled resources are tied to an operand
+  ResourceDef *Definition = nullptr;     // link to resource definition
+  Params *ArgParameterLink = nullptr;    // arguments are linked to parameters
+  int OperandIndex = -1;             // pooled resources are tied to an operand
+
+public:
+  ResourceRef(const MdlItem &Item, Identifier *Id) : MdlItem(Item), Id(Id) {}
+  // Create a reference to some number of a pooled resource.
+  ResourceRef(const MdlItem &Item, Identifier *Id, int PoolCount,
+              Identifier *PoolCountName, Identifier *ValueName)
+      : MdlItem(Item), Id(Id), PoolCount(PoolCount),
+        PoolCountName(PoolCountName), ValueName(ValueName) {}
+  // Create a reference to a member of a defined resource (a.member)
+  ResourceRef(const MdlItem &Item, Identifier *Id, Identifier *Member)
+      : MdlItem(Item), Id(Id), Member(Member) {}
+  // Create a reference to a subpool of a pooled resource
+  ResourceRef(const MdlItem &Item, Identifier *Id, int First, int last)
+      : MdlItem(Item), Id(Id), First(First), Last(last) {}
+  explicit ResourceRef(std::string Name)
+      : MdlItem(), Id(new Identifier(Name)) {}
+  // Create a reference to a defined resource.
+  explicit ResourceRef(ResourceDef *Def)
+      : MdlItem(*Def), Id(Def->getId()),
+        First(Def->getPoolSize() > 0 ? 0 : -1),
+        Last(Def->getPoolSize() > 0 ? Def->getPoolSize() - 1 : -1),
+        Definition(Def) {}
+
+  std::string ToString() const;
+  Identifier *getId() const { return Id; }
+  void rename(Identifier *NewId) { Id = NewId; }
+  std::string const &getName() const { return Id->getName(); }
+  Identifier *getMember() const { return Member; }
+  int getPoolCount() const { return PoolCount; }
+  Identifier *getPoolCountName() const { return PoolCountName; }
+
+  bool hasCount() const {
+    return PoolCount != -1 || PoolCountName != nullptr;
+  }
+  Identifier *getValueName() const { return ValueName; }
+
+  int getFirst() const { return First; }
+  int getLast() const { return Last; }
+  int getPoolSize() const {
+    if (isGroupDef())
+      return Definition->getMembers().size();
+    return Last - First + 1;
+  }
+
+  bool isNull() const { return getName() == "__"; }
+  bool isPool() const { return First != -1; }
+  bool isGroupRef() const { return isGroupDef() && !getMember(); }
+  bool isGroupDef() const {
+    return Definition != nullptr && Definition->isGroupDef();
+  }
+  bool isImplicitGroup() const {
+    return isGroupDef() && Definition->isImplicitGroup();
+  }
+
+  bool isArrayDef() const {
+    return Definition != nullptr && isPool() && Definition->getPoolSize();
+  }
+  bool isPooledResourceRef() const {
+    return (isGroupRef() || (isArrayDef() && !isIndexed())) && !hasCount();
+  }
+  bool isUnqualifiedRef() const { return !getMember() && getFirst() == -1; }
+  bool hasAllocation() const { return hasCount(); }
+  bool hasValueName() const { return ValueName != nullptr; }
+
+  int isSubrange() const { return First != -1 && Last != First; }
+  int isIndexed() const { return First != -1 && First == Last; }
+
+  int getMemberId() const { return MemberId; }
+
+  void setFirst(int Value) { First = Value; }
+  void setLast(int Value) { Last = Value; }
+  void setPoolCount(int Count) { PoolCount = Count; }
+  void setPoolCountName(Identifier *Count) { PoolCountName = Count; }
+  void setUseAllMembers() { UseAllMembers = true; }
+  bool useAllMembers() const { return UseAllMembers; }
+  void setValueName(Identifier *Mask) { ValueName = Mask; }
+  void setSubrange(int First, int Last) {
+    setFirst(First);
+    setLast(Last);
+  }
+  void setFuPool(ResourceDef *Pool) { FuPool = Pool; }
+  ResourceDef *getFuPool() const { return FuPool; }
+  bool isFuPool() const { return FuPool; }
+  ResourceDef *getDefinition() const { return Definition; }
+  void setDefinition(ResourceDef *Def) { Definition = Def; }
+  ResourceDef *getPortDefinition() const { return Definition; }
+  int getResourceId() const {
+    return Definition ? Definition->getResourceId() : -1;
+  }
+  int getFinalResourceId() const {
+    if (getFirst() != -1 && getFirst() == getLast())
+      return getResourceId() + getFirst();
+    return getResourceId();
+  }
+
+  Params *getParameter() { return ArgParameterLink; }
+  void setParameter(Params *parameter) { ArgParameterLink = parameter; }
+  int getOperandIndex() const { return OperandIndex; }
+  void setOperandIndex(int Id) { OperandIndex = Id; }
+  bool hasOperandIndex() const { return OperandIndex != -1; }
 };
 
 //----------------------------------------------------------------------------
@@ -812,101 +797,101 @@ private:
 // This object owns all the data pointed to by const member pointers.
 //----------------------------------------------------------------------------
 class CpuInstance : public MdlItem {
+  Identifier *const Id = nullptr;                // name of this CPU
+  PipeDefList *Phases = nullptr;                 // locally defined pipe phases
+  ResourceDefList *const Issues = nullptr;       // issue slot resources
+  ResourceDefList *const Resources = nullptr;    // resources defined locally
+  int ReorderBufferSize = MCSchedModel::DefaultMicroOpBufferSize;
+  ClusterList *const Clusters = nullptr;         // clusters defined
+  ForwardStmtList *const ForwardStmts = nullptr; // forward statements
+  std::vector<std::string> LLVMNames;            // optional llvm cpu names
+
+  ResourceDefList AllResources;           // all resources defined for CPU
+  ResourceDefList PoolResources;          // all pooled resources for CPU
+  FuncUnitInstances FuInstances;          // map of templates to instances
+  std::set<int> FuPoolSizes;              // set of fu allocation pools
+  int InstrCount;                         // number of valid instructions
+
+  int MaxUsedResourceId = 0;              // number of "used" resources
+  int MaxResourcePhase = 0;               // latest resource "use"
+  int MaxIssue = 0;                       // maximum parallel issue size
+  int PoolCount = 0;                      // number of pooled resources
+  int MaxPoolAllocation = 0;              // max pool allocation size
+  int EarlyUsePhase = -1;                 // earliest named "use" phase
+  bool NeedsSlotResources = false;        // True if we must model slots
+  int MaxFuId = 0;                        // Id of last func unit
+  int MaxResourceId = 0;                  // Id of last resource
+
 public:
-  CpuInstance(const MdlItem &item, Identifier *id, PipeDefList *pipe_phases,
-              ResourceDefList *issues, ResourceDefList *res,
-              int reorder_buffer_size, ClusterList *clusters,
-              ForwardStmtList *forward_stmts,
-              std::vector<std::string> &llvm_names)
-      : MdlItem(item), id_(id), pipe_phases_(pipe_phases), issues_(issues),
-        resources_(res), reorder_buffer_size_(reorder_buffer_size),
-        clusters_(clusters), forward_stmts_(forward_stmts),
-        llvm_names_(llvm_names) {}
+  CpuInstance(const MdlItem &Item, Identifier *Id, PipeDefList *Phase,
+              ResourceDefList *Issues, ResourceDefList *Res,
+              int ReorderBufferSize, ClusterList *Clusters,
+              ForwardStmtList *ForwardStmts,
+              std::vector<std::string> &LLVMNames)
+      : MdlItem(Item), Id(Id), Phases(Phase), Issues(Issues),
+        Resources(Res), ReorderBufferSize(ReorderBufferSize),
+        Clusters(Clusters), ForwardStmts(ForwardStmts),
+        LLVMNames(LLVMNames) {}
 
   std::string ToString() const;
 
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  ResourceDefList *issues() const { return issues_; }
-  ResourceDefList *resources() const { return resources_; }
-  int reorder_buffer_size() const { return reorder_buffer_size_; }
-  ClusterList *clusters() const { return clusters_; }
-  ForwardStmtList *forward_stmts() const { return forward_stmts_; }
-  std::vector<std::string> &llvm_names() { return llvm_names_; }
-  bool needs_slot_resources() const { return needs_slot_resources_; }
-  void set_needs_slot_resources(bool value) { needs_slot_resources_ = value; }
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  ResourceDefList *getIssues() const { return Issues; }
+  ResourceDefList *getResources() const { return Resources; }
+  int getReorderBufferSize() const { return ReorderBufferSize; }
+  ClusterList *getClusters() const { return Clusters; }
+  ForwardStmtList *getForwardStmts() const { return ForwardStmts; }
+  std::vector<std::string> &getLlvmNames() { return LLVMNames; }
+  bool needsSlotResources() const { return NeedsSlotResources; }
+  void setNeedsSlotResources(bool Value) { NeedsSlotResources = Value; }
 
-  void add_cpu_resource(ResourceDef *resource, std::string type,
-                        const CpuInstance *cpu, const ClusterInstance *cluster,
-                        const FuncUnitInstantiation *fu) {
-    all_resources_.push_back(resource);
-    resource->set_debug_name(type, cpu, cluster, fu);
+  void addCpuResource(ResourceDef *Res, std::string Type,
+                      const CpuInstance *Cpu, const ClusterInstance *Cluster,
+                      const FuncUnitInstantiation *Fu) {
+    AllResources.push_back(Res);
+    Res->setDebugName(Type, Cpu, Cluster, Fu);
   }
-  void add_fu_pool_size(int size) { fu_pool_sizes_.insert(size); }
-  std::set<int> &fu_pool_sizes() { return fu_pool_sizes_; }
+  void addFuPoolSize(int Size) { FuPoolSizes.insert(Size); }
+  std::set<int> &getFuPoolSizes() { return FuPoolSizes; }
 
-  ResourceDefList &all_resources() { return all_resources_; }
-  void add_pool_resource(ResourceDef *pool) { pool_resources_.push_back(pool); }
-  ResourceDefList &pool_resources() { return pool_resources_; }
-  PipeDefList *pipe_phases() { return pipe_phases_; }
+  ResourceDefList &getAllResources() { return AllResources; }
+  void addPoolResource(ResourceDef *Pool) { PoolResources.push_back(Pool); }
+  ResourceDefList &getPoolResources() { return PoolResources; }
+  PipeDefList *getPipePhases() { return Phases; }
 
-  int max_resource_phase() const { return max_resource_phase_; }
-  void set_max_used_resource_id(int id) { max_used_resource_id_ = id; }
-  int max_used_resource_id() const { return max_used_resource_id_; }
-  void set_max_resource_phase(int phase) { max_resource_phase_ = phase; }
-  int max_issue() const { return max_issue_; }
-  void set_max_issue(int issue) { max_issue_ = issue; }
-  int pool_count() const { return pool_count_; }
-  void set_pool_count(int pool_count) { pool_count_ = pool_count; }
-  int max_pool_allocation() const { return max_pool_allocation_; }
-  void set_max_pool_allocation(int size) { max_pool_allocation_ = size; }
-  int early_use_phase() const { return early_use_phase_; }
-  void set_early_use_phase(int phase) { early_use_phase_ = phase; }
-  int load_phase() {
-    for (const auto *p1 : *pipe_phases())
-      if (const auto *item = FindItem(*p1->phase_names(), "LOAD_PHASE"))
-        return item->index();
+  int getMaxResourcePhase() const { return MaxResourcePhase; }
+  void setMaxUsedResourceId(int Id) { MaxUsedResourceId = Id; }
+  int getMaxUsedResourceId() const { return MaxUsedResourceId; }
+  void setMaxResourcePhase(int Phase) { MaxResourcePhase = Phase; }
+  int getMaxIssue() const { return MaxIssue; }
+  void setMaxIssue(int Issue) { MaxIssue = Issue; }
+  int getPoolCount() const { return PoolCount; }
+  void setPoolCount(int Count) { PoolCount = Count; }
+  int getMaxPoolAllocation() const { return MaxPoolAllocation; }
+  void setMaxPoolAllocation(int Size) { MaxPoolAllocation = Size; }
+  int getEarlyUsePhase() const { return EarlyUsePhase; }
+  void setEarlyUsePhase(int Phase) { EarlyUsePhase = Phase; }
+  int getLoadPhase() {
+    for (const auto *Pipe : *getPipePhases())
+      if (const auto *Item = FindItem(*Pipe->getPhaseNames(), "LOAD_PHASE"))
+        return Item->getIndex();
     return MCSchedModel::DefaultLoadLatency;
   }
-  int high_latency_def_phase() {
-    for (const auto *p1 : *pipe_phases())
-      if (const auto *item = FindItem(*p1->phase_names(), "HIGH_PHASE"))
-        return item->index();
+  int getHighLatencyDefPhase() {
+    for (const auto *Pipe : *getPipePhases())
+      if (const auto *Item = FindItem(*Pipe->getPhaseNames(), "HIGH_PHASE"))
+        return Item->getIndex();
     return MCSchedModel::DefaultHighLatency;
   }
-  void set_max_fu_id(int last_id) { max_fu_id_ = last_id; }
-  int max_fu_id() const { return max_fu_id_; }
-  void set_max_resource_id(int last_id) { max_resource_id_ = last_id; }
-  int max_resource_id() const { return max_resource_id_; }
-  void set_instr_count(int instr_count) { instr_count_ = instr_count; }
-  int get_instr_count() const { return instr_count_; }
+  void setMaxFuId(int LastId) { MaxFuId = LastId; }
+  int getMaxFuId() const { return MaxFuId; }
+  void setMaxResourceId(int LastId) { MaxResourceId = LastId; }
+  int getMaxResourceId() const { return MaxResourceId; }
+  void setInstrCount(int Count) { InstrCount = Count; }
+  int getInstrCount() const { return InstrCount; }
 
-  FuncUnitInstances &func_unit_instances() { return func_unit_instances_; }
-
-private:
-  Identifier *const id_ = nullptr;             // name of this CPU
-  PipeDefList *pipe_phases_ = nullptr;         // locally defined pipe phases
-  ResourceDefList *const issues_ = nullptr;    // issue slot resources
-  ResourceDefList *const resources_ = nullptr; // resources defined locally
-  int reorder_buffer_size_ = MCSchedModel::DefaultMicroOpBufferSize;
-  ClusterList *const clusters_ = nullptr;      // clusters defined
-  ForwardStmtList *const forward_stmts_ = nullptr; // forward statements
-  std::vector<std::string> llvm_names_;            // optional llvm names
-  ResourceDefList all_resources_;         // all resources defined for CPU
-  ResourceDefList pool_resources_;        // all pooled resources for CPU
-  FuncUnitInstances func_unit_instances_; // map of templates to instances
-  std::set<int> fu_pool_sizes_;           // set of fu allocation pools
-  int instr_count_;                       // number of valid instructions
-
-  int max_used_resource_id_ = 0;      // number of "used" resources
-  int max_resource_phase_ = 0;        // latest resource "use"
-  int max_issue_ = 0;                 // maximum parallel issue size
-  int pool_count_ = 0;                // number of pooled resources
-  int max_pool_allocation_ = 0;       // max pool allocation size
-  int early_use_phase_ = -1;          // earliest named "use" phase
-  bool needs_slot_resources_ = false; // True if we must model slots
-  int max_fu_id_ = 0;                 // Id of last func unit
-  int max_resource_id_ = 0;           // Id of last resource
+  FuncUnitInstances &getFuncUnitInstances() { return FuInstances; }
 };
 
 //----------------------------------------------------------------------------
@@ -914,41 +899,39 @@ private:
 // This object owns all the data pointed to by member pointers.
 //----------------------------------------------------------------------------
 class ClusterInstance : public MdlItem {
+  Identifier *const Id = nullptr;                 // name of this CPU
+  ResourceDefList *const Issues = nullptr;        // issue entries, if any
+  ResourceDefList *const Resources = nullptr;     // resources defined locally
+  FuncUnitInstList *const FuncUnits = nullptr;    // func units instantiated
+  ForwardStmtList *const ForwardStmts = nullptr;  // forward statements
+  FuncUnitInstantiations FuInstantiations;
+
 public:
-  ClusterInstance(const MdlItem &item, Identifier *id, ResourceDefList *issue,
-                  ResourceDefList *res, FuncUnitInstList *fus,
-                  ForwardStmtList *forward_stmts)
-      : MdlItem(item), id_(id), issues_(issue), resources_(res),
-        func_units_(fus), forward_stmts_(forward_stmts) {}
-  explicit ClusterInstance(FuncUnitInstance *func_unit)
-      : MdlItem(), id_(new Identifier("__")), issues_(new ResourceDefList),
-        resources_(new ResourceDefList),
-        func_units_(new FuncUnitInstList(1, func_unit)) {}
+  ClusterInstance(const MdlItem &Item, Identifier *Id, ResourceDefList *Issue,
+                  ResourceDefList *Res, FuncUnitInstList *Fus,
+                  ForwardStmtList *ForwardStmts)
+      : MdlItem(Item), Id(Id), Issues(Issue), Resources(Res),
+        FuncUnits(Fus), ForwardStmts(ForwardStmts) {}
+  explicit ClusterInstance(FuncUnitInstance *FuncUnit)
+      : MdlItem(), Id(new Identifier("__")), Issues(new ResourceDefList),
+        Resources(new ResourceDefList),
+        FuncUnits(new FuncUnitInstList(1, FuncUnit)) {}
 
   std::string ToString() const;
 
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  bool IsNull() const { return name() == "__"; }
-  ResourceDefList *issues() const { return issues_; }
-  ResourceDefList *resources() const { return resources_; }
-  FuncUnitInstList *func_units() const { return func_units_; }
-  ForwardStmtList *forward_stmts() const { return forward_stmts_; }
-  void AddFuncUnitInstantiation(FuncUnitInstantiation *fu) {
-    fu_instantiations_.push_back(fu);
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  bool isNull() const { return getName() == "__"; }
+  ResourceDefList *getIssues() const { return Issues; }
+  ResourceDefList *getResources() const { return Resources; }
+  FuncUnitInstList *getFuncUnits() const { return FuncUnits; }
+  ForwardStmtList *getForwardStmts() const { return ForwardStmts; }
+  void addFuncUnitInstantiation(FuncUnitInstantiation *fu) {
+    FuInstantiations.push_back(fu);
   }
-  FuncUnitInstantiations &fu_instantiations() { return fu_instantiations_; }
+  FuncUnitInstantiations &getFuInstantiations() { return FuInstantiations; }
   // Debug: Dump out functional unit instantiations for this cluster.
-  void DumpFuncUnitInstantiations();
-
-private:
-  Identifier *const id_ = nullptr;                 // name of this CPU
-  ResourceDefList *const issues_ = nullptr;        // issue entries, if any
-  ResourceDefList *const resources_ = nullptr;     // resources defined locally
-  FuncUnitInstList *const func_units_ = nullptr;   // func units instantiated
-  ForwardStmtList *const forward_stmts_ = nullptr; // forward statements
-
-  FuncUnitInstantiations fu_instantiations_;
+  void dumpFuncUnitInstantiations();
 };
 
 //----------------------------------------------------------------------------
@@ -963,58 +946,55 @@ private:
 //  - f() -> slot & slot : pin an instance to more than one slot.
 // If there is no pinning specification, the instance can be issued in
 // any slot.
-// This object owns all the data pointed to by member pointers, except for
-// the fu_template member.
 //----------------------------------------------------------------------------
 class FuncUnitInstance : public MdlItem {
+  Identifier *const Id = nullptr;             // name of this unit (optional)
+  Identifier *const Type = nullptr;           // template of this unit
+  bool Unreserved = false;                    // Is this an unreserved FU?
+  std::map<std::string, int> BufferSizes;     // buffer sizes for each base
+  ResourceRefList *const Args = nullptr;      // arguments to this instance
+  IdList *const PinAll = nullptr;             // FU needs more than one slot
+  IdList *const PinAny = nullptr;             // slots FU can be pinned to
+  FuncUnitTemplate *FuTemplate = nullptr;     // link to template
+  ResourceRefList *FuPinAny = nullptr;        // slot resource list
+  ResourceRefList *FuPinAll = nullptr;        // slot resource list
+
 public:
-  FuncUnitInstance(const MdlItem &item, Identifier *type, Identifier *id,
-                   bool unreserved, std::map<std::string, int> buffer_sizes,
-                   ResourceRefList *args, IdList *any, IdList *all)
-     : MdlItem(item), id_(id), type_(type), unreserved_(unreserved),
-       buffer_sizes_(buffer_sizes), args_(args), pin_all_(all), pin_any_(any) {}
-  explicit FuncUnitInstance(const std::string type)
-     : MdlItem(), id_(new Identifier(type)), type_(new Identifier(type)),
-       args_(new ResourceRefList), pin_all_(nullptr), pin_any_(nullptr) {}
+  FuncUnitInstance(const MdlItem &Item, Identifier *Type, Identifier *Id,
+                   bool Unreserved, std::map<std::string, int> BufferSizes,
+                   ResourceRefList *Args, IdList *Any, IdList *All)
+     : MdlItem(Item), Id(Id), Type(Type), Unreserved(Unreserved),
+       BufferSizes(BufferSizes), Args(Args), PinAll(All), PinAny(Any) {}
+  explicit FuncUnitInstance(const std::string Type)
+     : MdlItem(), Id(new Identifier(Type)), Type(new Identifier(Type)),
+       Args(new ResourceRefList), PinAll(nullptr), PinAny(nullptr) {}
 
   std::string ToString() const;
 
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  Identifier *type() const { return type_; }
-  bool is_unreserved() const { return unreserved_; }
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  Identifier *getType() const { return Type; }
+  bool isUnreserved() const { return Unreserved; }
 
-  int buffer_size(std::string fu) { return buffer_sizes_[fu]; }
-  bool is_unbuffered(std::string fu) { return buffer_sizes_[fu] == 0; }
-  bool is_in_order(std::string fu) { return buffer_sizes_[fu] == 1; }
-  bool is_out_of_order(std::string fu) { return buffer_sizes_[fu] > 1; }
+  int getBufferSize(std::string Fu) { return BufferSizes[Fu]; }
+  bool isUnbuffered(std::string Fu) { return BufferSizes[Fu] == 0; }
+  bool isInOrder(std::string Fu) { return BufferSizes[Fu] == 1; }
+  bool isOutOfOrder(std::string Fu) { return BufferSizes[Fu] > 1; }
 
-  ResourceRefList *args() const { return args_; }
-  IdList *pin_any() const { return pin_any_; }
-  IdList *pin_all() const { return pin_all_; }
+  ResourceRefList *getArgs() const { return Args; }
+  IdList *getPinAny() const { return PinAny; }
+  IdList *getPinAll() const { return PinAll; }
 
-  void set_template(FuncUnitTemplate *temp) { fu_template_ = temp; }
-  FuncUnitTemplate *get_template() const { return fu_template_; }
+  void setTemplate(FuncUnitTemplate *Temp) { FuTemplate = Temp; }
+  FuncUnitTemplate *getTemplate() const { return FuTemplate; }
 
-  ResourceRefList *get_resource_slots_any() const { return fu_pin_any_; }
-  ResourceRefList *get_resource_slots_all() const { return fu_pin_all_; }
-  void set_resource_slots_any(ResourceRefList *res) { fu_pin_any_ = res; }
-  void set_resource_slots_all(ResourceRefList *res) { fu_pin_all_ = res; }
+  ResourceRefList *getResourceSlotsAny() const { return FuPinAny; }
+  ResourceRefList *getResourceSlotsAll() const { return FuPinAll; }
+  void setResourceSlotsAny(ResourceRefList *Pins) { FuPinAny = Pins; }
+  void setResourceSlotsAll(ResourceRefList *Pins) { FuPinAll = Pins; }
 
   // "catchall" unit names use a colon followed by their associated CPU name.
-  bool is_catchall_unit() const { return is_catchall_name(name()); }
-
-private:
-  Identifier *const id_ = nullptr;            // name of this unit (optional)
-  Identifier *const type_ = nullptr;          // template of this unit
-  bool unreserved_ = false;                   // Is this an unreserved FU?
-  std::map<std::string, int> buffer_sizes_;   // buffer sizes for each base
-  ResourceRefList *const args_ = nullptr;     // arguments to this instance
-  IdList *const pin_all_ = nullptr;           // FU needs more than one slot
-  IdList *const pin_any_ = nullptr;           // slots FU can be pinned to
-  FuncUnitTemplate *fu_template_ = nullptr;   // link to template
-  ResourceRefList *fu_pin_any_ = nullptr;     // slot resource list
-  ResourceRefList *fu_pin_all_ = nullptr;     // slot resource list
+  bool isCatchallUnit() const { return isCatchallName(getName()); }
 };
 
 //----------------------------------------------------------------------------
@@ -1023,78 +1003,69 @@ private:
 using ForwardToSet = std::vector<std::pair<Identifier *, int>>;
 
 class ForwardStmt : public MdlItem {
+  Identifier *FromUnit;
+  ForwardToSet ToUnits;
+
 public:
-  ForwardStmt(const MdlItem &item, Identifier *from_unit, ForwardToSet to_units)
-      : from_unit_(from_unit), to_units_(to_units) {}
+  ForwardStmt(const MdlItem &Item, Identifier *FromUnit, ForwardToSet ToUnits)
+      : MdlItem(Item), FromUnit(FromUnit), ToUnits(ToUnits) {}
 
-  Identifier *from_unit() const { return from_unit_; }
-  const ForwardToSet &to_units() const { return to_units_; }
+  Identifier *getFromUnit() const { return FromUnit; }
+  const ForwardToSet &getToUnits() const { return ToUnits; }
   std::string ToString() const;
-
-private:
-  Identifier *from_unit_;
-  ForwardToSet to_units_;
 };
 
 //----------------------------------------------------------------------------
 // Instance of a sub-unit referenced in a functional unit.
-// This object owns all the data pointed to by member pointers, except for
-// the su_template member.
 //----------------------------------------------------------------------------
 class SubUnitInstance : public MdlItem {
+  Identifier *const Id = nullptr;          // name of subunit template
+  ResourceRefList *const Args = nullptr;   // arguments passed to the instance
+  IdList *const Predicates = nullptr;      // predicates guarding instance
+  SubUnitTemplate *SuTemplate = nullptr;   // link to subunit template
+
 public:
-  SubUnitInstance(const MdlItem &item, Identifier *id, ResourceRefList *args,
-                  IdList *predicates)
-      : MdlItem(item), id_(id), args_(args), predicates_(predicates) {}
-  SubUnitInstance(const MdlItem &item, Identifier *id)
-      : MdlItem(item), id_(id), args_(new ResourceRefList),
-        predicates_(nullptr) {}
+  SubUnitInstance(const MdlItem &Item, Identifier *Id, ResourceRefList *Args,
+                  IdList *Predicates)
+      : MdlItem(Item), Id(Id), Args(Args), Predicates(Predicates) {}
+  SubUnitInstance(const MdlItem &Item, Identifier *Id)
+      : MdlItem(Item), Id(Id), Args(new ResourceRefList), Predicates(nullptr) {}
 
   std::string ToString() const;
-
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  ResourceRefList *args() const { return args_; }
-  IdList *predicates() const { return predicates_; }
-  void set_template(SubUnitTemplate *temp) { su_template_ = temp; }
-  SubUnitTemplate *get_template() { return su_template_; }
-
-private:
-  Identifier *const id_ = nullptr;         // name of subunit template
-  ResourceRefList *const args_ = nullptr;  // arguments passed to the instance
-  IdList *const predicates_ = nullptr;     // predicates guarding instance
-  SubUnitTemplate *su_template_ = nullptr; // link to subunit template
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  ResourceRefList *getArgs() const { return Args; }
+  IdList *getPredicates() const { return Predicates; }
+  void setTemplate(SubUnitTemplate *Temp) { SuTemplate = Temp; }
+  SubUnitTemplate *getTemplate() { return SuTemplate; }
 };
 
 //----------------------------------------------------------------------------
 // Instance of a latency referenced in a subunit.
-// This object owns all the data pointed to by member pointers, except for
-// the lat_template member.
 //----------------------------------------------------------------------------
 class LatencyInstance : public MdlItem {
+  Identifier *const Id = nullptr;          // which latency to instantiate
+  ResourceRefList *const Args = nullptr;   // instantiation arguments
+  IdList *const Predicates = nullptr;      // predicates guarding instance
+  LatencyTemplate *LatTemplate = nullptr;  // link to template
+
 public:
-  LatencyInstance(const MdlItem &item, Identifier *id, ResourceRefList *args,
-                  IdList *predicates)
-      : MdlItem(item), id_(id), args_(args), predicates_(predicates) {}
-  explicit LatencyInstance(const std::string name)
-      : MdlItem(), id_(new Identifier(name)), args_(new ResourceRefList),
-        predicates_(nullptr) {}
+  LatencyInstance(const MdlItem &Item, Identifier *Id, ResourceRefList *Args,
+                  IdList *Predicates)
+      : MdlItem(Item), Id(Id), Args(Args), Predicates(Predicates) {}
+  explicit LatencyInstance(const std::string Name)
+      : MdlItem(), Id(new Identifier(Name)), Args(new ResourceRefList),
+        Predicates(nullptr) {}
 
   std::string ToString() const;
 
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  ResourceRefList *args() const { return args_; }
-  IdList *predicates() const { return predicates_; }
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  ResourceRefList *getArgs() const { return Args; }
+  IdList *getPredicates() const { return Predicates; }
 
-  void set_template(LatencyTemplate *temp) { lat_template_ = temp; }
-  LatencyTemplate *get_template() { return lat_template_; }
-
-private:
-  Identifier *const id_ = nullptr;          // which latency to instantiate
-  ResourceRefList *const args_ = nullptr;   // instantiation arguments
-  IdList *const predicates_ = nullptr;      // predicates guarding instance
-  LatencyTemplate *lat_template_ = nullptr; // link to template
+  void setTemplate(LatencyTemplate *Temp) { LatTemplate = Temp; }
+  LatencyTemplate *getTemplate() { return LatTemplate; }
 };
 
 //----------------------------------------------------------------------------
@@ -1104,23 +1075,22 @@ private:
 enum ParamType { kParamPort, kParamClass, kParamResource };
 
 class Params : public MdlItem {
+  Identifier *const Id = nullptr;    // name of this parameter
+  const ParamType Type = kParamPort; // port, register class, or resource
+
 public:
-  Params(const MdlItem &item, Identifier *id, ParamType type)
-      : MdlItem(item), id_(id), type_(type) {}
+  Params(const MdlItem &Item, Identifier *Id, ParamType Type)
+      : MdlItem(Item), Id(Id), Type(Type) {}
 
   std::string ToString() const;
 
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  ParamType type() const { return type_; }
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  ParamType getType() const { return Type; }
 
-  bool IsClass() const { return type_ == kParamClass; }
-  bool IsPort() const { return type_ == kParamPort; }
-  bool IsResource() const { return type_ == kParamResource; }
-
-private:
-  Identifier *const id_ = nullptr;    // name of this parameter
-  const ParamType type_ = kParamPort; // port, register class, or resource
+  bool isClass() const { return Type == kParamClass; }
+  bool isPort() const { return Type == kParamPort; }
+  bool isResource() const { return Type == kParamResource; }
 };
 
 //----------------------------------------------------------------------------
@@ -1129,63 +1099,59 @@ private:
 // the template definition pointers in the unit_bases_ vector.
 //----------------------------------------------------------------------------
 class FuncUnitTemplate : public MdlItem {
+  Identifier *const Id = nullptr;               // name of this template
+  IdList *const Bases = nullptr;                // base template ids, if any
+  ParamsList *FuParams = nullptr;                 // parameters defined for unit
+  IdList *const Ports = nullptr;                // ports defined in this unit
+  ResourceDefList *const Resources = nullptr;   // resources defined locally
+  ConnectList *const Connections = nullptr;     // connect statements in unit
+  SubUnitInstList *const Subunits = nullptr;    // subunits instantiated
+  FuncUnitList UnitBases;                       // functional unit bases
+  bool IsImplicitlyDefined = false;             // was unit implicitly defined
+  bool IsReferenced = false;                    // was unit referenced
+  std::set<std::string> ClientCpus;             // cpus that use this FU.
+
 public:
-  FuncUnitTemplate(const MdlItem &item, Identifier *id, IdList *bases,
-                   ParamsList *params, IdList *ports, ResourceDefList *res,
-                   ConnectList *conn, SubUnitInstList *su)
-      : MdlItem(item), id_(id), bases_(bases), params_(params), ports_(ports),
-        resources_(res), connections_(conn), subunits_(su) {}
-  FuncUnitTemplate(MdlItem &item, Identifier *id, IdList *bases)
-      : MdlItem(item), id_(id), bases_(bases), params_(new ParamsList),
-        ports_(new IdList), resources_(new ResourceDefList),
-        connections_(new ConnectList), subunits_(new SubUnitInstList),
-        is_implicitly_defined_(true) {}
-  explicit FuncUnitTemplate(Identifier *id)
-      : MdlItem(*id), id_(id), bases_(new IdList), params_(new ParamsList),
-        ports_(new IdList), resources_(new ResourceDefList),
-        connections_(new ConnectList), subunits_(new SubUnitInstList),
-        is_implicitly_defined_(true) {}
+  // Create a functional unit template from an MDL description.
+  FuncUnitTemplate(const MdlItem &Item, Identifier *Id, IdList *Bases,
+                   ParamsList *FuParams, IdList *Ports, ResourceDefList *Res,
+                   ConnectList *Conn, SubUnitInstList *Su)
+      : MdlItem(Item), Id(Id), Bases(Bases), FuParams(FuParams), Ports(Ports),
+        Resources(Res), Connections(Conn), Subunits(Su) {}
+  // Create an implicitly defined functional unit template.
+  FuncUnitTemplate(MdlItem &Item, Identifier *Id, IdList *Bases)
+      : MdlItem(Item), Id(Id), Bases(Bases), FuParams(new ParamsList),
+        Ports(new IdList), Resources(new ResourceDefList),
+        Connections(new ConnectList), Subunits(new SubUnitInstList),
+        IsImplicitlyDefined(true) {}
+  explicit FuncUnitTemplate(Identifier *Id)
+      : MdlItem(*Id), Id(Id), Bases(new IdList), FuParams(new ParamsList),
+        Ports(new IdList), Resources(new ResourceDefList),
+        Connections(new ConnectList), Subunits(new SubUnitInstList),
+        IsImplicitlyDefined(true) {}
 
   std::string ToString() const;
 
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  IdList *bases() const { return bases_; }
-  ParamsList *params() const { return params_; }
-  IdList *ports() const { return ports_; }
-  ResourceDefList *resources() const { return resources_; }
-  ConnectList *connections() const { return connections_; }
-  SubUnitInstList *subunits() const { return subunits_; }
-  void clone_params(ParamsList *params) {
-    params_ = new ParamsList;
-    for (auto *param : *params)
-      params_->push_back(new Params(*param));
-  }
-  void add_subunit_instance(SubUnitInstance *su) { subunits_->push_back(su); }
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  IdList *getBases() const { return Bases; }
+  ParamsList *getParams() const { return FuParams; }
+  IdList *getPorts() const { return Ports; }
+  ResourceDefList *getResources() const { return Resources; }
+  ConnectList *getConnections() const { return Connections; }
+  SubUnitInstList *getSubunits() const { return Subunits; }
+  void addSubunitInstance(SubUnitInstance *Su) { Subunits->push_back(Su); }
 
-  void add_base(FuncUnitTemplate *base) { unit_bases_.push_back(base); }
-  FuncUnitList &unit_bases() { return unit_bases_; }
+  void addBase(FuncUnitTemplate *Base) { UnitBases.push_back(Base); }
+  FuncUnitList &getUnitBases() { return UnitBases; }
 
   // Note implicitly defined templates, and whether they are referenced.
-  bool is_implicitly_defined() const { return is_implicitly_defined_; }
-  bool is_referenced() const { return is_referenced_; }
-  void set_referenced() { is_referenced_ = true; }
+  bool isImplicitlyDefined() const { return IsImplicitlyDefined; }
+  bool isReferenced() const { return IsReferenced; }
+  void setReferenced() { IsReferenced = true; }
 
-  std::set<std::string> &client_cpus() { return client_cpus_; }
-  void add_client_cpu(const std::string &cpu) { client_cpus_.insert(cpu); }
-
-private:
-  Identifier *const id_ = nullptr;             // name of this template
-  IdList *const bases_ = nullptr;              // base template ids, if any
-  ParamsList *params_ = nullptr;               // parameters defined for unit
-  IdList *const ports_ = nullptr;              // ports defined in this unit
-  ResourceDefList *const resources_ = nullptr; // resources defined locally
-  ConnectList *const connections_ = nullptr;   // connect statements in unit
-  SubUnitInstList *const subunits_ = nullptr;  // subunits instantiated
-  FuncUnitList unit_bases_;                    // functional unit bases
-  bool is_implicitly_defined_ = false;         // was unit implicitly defined
-  bool is_referenced_ = false;                 // was unit referenced
-  std::set<std::string> client_cpus_;          // cpus that use this FU.
+  std::set<std::string> &getClientCpus() { return ClientCpus; }
+  void addClientCpu(const std::string &Cpu) { ClientCpus.insert(Cpu); }
 };
 
 //----------------------------------------------------------------------------
@@ -1193,25 +1159,23 @@ private:
 // Each item assigns a name to a group of functional units.
 //----------------------------------------------------------------------------
 class FuncUnitGroup : public MdlItem {
+  Identifier *const Id = nullptr;     // name of the group
+  int BufferSize = -1;                // size of input buffer
+  IdList *const Members = nullptr;    // names of members of the group
+  FuncUnitList FuMembers;             // links to members' templates
+
 public:
-  FuncUnitGroup(const MdlItem &item, Identifier *id, int buffer_size,
-                IdList *members)
-      : MdlItem(item), id_(id), buffer_size_(buffer_size), members_(members) {}
+  FuncUnitGroup(const MdlItem &Item, Identifier *id, int Size, IdList *Members)
+      : MdlItem(Item), Id(id), BufferSize(Size), Members(Members) {}
 
   std::string ToString() const;
 
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  int buffer_size() const { return buffer_size_; }
-  IdList *members() const { return members_; }
-  FuncUnitList &fu_members() { return fu_members_; }
-  void add_unit(FuncUnitTemplate *unit) { fu_members_.push_back(unit); }
-
-private:
-  Identifier *const id_ = nullptr;  // name of the group
-  int buffer_size_ = -1;            // size of input buffer
-  IdList *const members_ = nullptr; // members of the group
-  FuncUnitList fu_members_;         // links to templates
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  int getBufferSize() const { return BufferSize; }
+  IdList *getMembers() const { return Members; }
+  FuncUnitList &getFuMembers() { return FuMembers; }
+  void addUnit(FuncUnitTemplate *Unit) { FuMembers.push_back(Unit); }
 };
 
 //----------------------------------------------------------------------------
@@ -1219,52 +1183,20 @@ private:
 // This object owns all the data pointed to by member pointers.
 //----------------------------------------------------------------------------
 class Connect : public MdlItem {
+  Identifier *const Id = nullptr;           // name of referenced port
+  Identifier *const RegClass = nullptr;     // register class connected to
+  ResourceRef *const Resource = nullptr;    // resource being referenced
+
 public:
-  Connect(const MdlItem &item, Identifier *id, Identifier *rclass,
-          ResourceRef *resource)
-      : MdlItem(item), id_(id), reg_class_(rclass), resource_(resource) {}
+  Connect(const MdlItem &Item, Identifier *Id, Identifier *RClass,
+          ResourceRef *Resource)
+      : MdlItem(Item), Id(Id), RegClass(RClass), Resource(Resource) {}
 
   std::string ToString() const;
-
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  Identifier *reg_class() const { return reg_class_; }
-  ResourceRef *resource() const { return resource_; }
-
-private:
-  Identifier *const id_ = nullptr;        // name of referenced port
-  Identifier *const reg_class_ = nullptr; // register class connected to
-  ResourceRef *const resource_ = nullptr; // resource being referenced
-};
-
-//----------------------------------------------------------------------------
-// Description of a single functional unit reservation in subunit templates.
-//----------------------------------------------------------------------------
-class FuncUnitUse : public MdlItem {
-public:
-  FuncUnitUse(const MdlItem &item, Identifier *predicate, Identifier *func_unit,
-              int cycles)
-      : MdlItem(item), predicate_(predicate), func_unit_(func_unit),
-        cycles_(cycles) {}
-
-  Identifier *predicate() const { return predicate_; }
-  Identifier *func_unit() const { return func_unit_; }
-  std::string name() const { return func_unit_->name(); }
-  int cycles() const { return cycles_; }
-  std::string ToString() const {
-    std::string out;
-    if (predicate_)
-      out += predicate_->name() + ":";
-    out += func_unit_->name();
-    if (cycles_ != -1)
-      out += llvm::formatv("<{0}>", cycles_);
-    return out;
-  }
-
-private:
-  Identifier *predicate_; // optional predicate
-  Identifier *func_unit_; // used functional unit name
-  int cycles_;            // number of cycles reserved
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  Identifier *getRegClass() const { return RegClass; }
+  ResourceRef *getResource() const { return Resource; }
 };
 
 //----------------------------------------------------------------------------
@@ -1273,51 +1205,49 @@ private:
 // the su_base member.
 //----------------------------------------------------------------------------
 class SubUnitTemplate : public MdlItem {
+  Identifier *const Type = nullptr;                 // type of this subunit
+  IdList *const Bases = nullptr;                    // base subunits (or empty)
+  StringList *const RegExBases = nullptr;           // matching instructions
+  ParamsList *const SuParams = nullptr;             // unit parameters
+  LatencyInstList *const Latencies = nullptr;       // which latencies to use
+  LatencyTemplate *const InlineLatency = nullptr;   // inline latency template
+  SubUnitList UnitBases;                            // link to base templates
+  SubUnitList DerivedSubunits;                      // derived subunits
+  int UseCount = 0;                                 // was it ever referenced?
+
 public:
   SubUnitTemplate(const MdlItem &item, Identifier *type, IdList *bases,
                   StringList *regex_bases, ParamsList *params,
                   LatencyInstList *latencies, LatencyTemplate *inline_latency)
-      : MdlItem(item), type_(type), bases_(bases), regex_bases_(regex_bases),
-        params_(params), latencies_(latencies),
-        inline_latency_(inline_latency) {}
+      : MdlItem(item), Type(type), Bases(bases), RegExBases(regex_bases),
+        SuParams(params), Latencies(latencies),
+        InlineLatency(inline_latency) {}
   SubUnitTemplate(const std::string type, LatencyInstance *latency,
                   LatencyTemplate *inline_latency)
-      : MdlItem(), type_(new Identifier(type)), bases_(nullptr),
-        params_(new ParamsList), latencies_(new LatencyInstList(1, latency)),
-        inline_latency_(inline_latency) {}
+      : MdlItem(), Type(new Identifier(type)), Bases(nullptr),
+        SuParams(new ParamsList), Latencies(new LatencyInstList(1, latency)),
+        InlineLatency(inline_latency) {}
 
   std::string ToString() const;
+  Identifier *getType() const { return Type; }
+  std::string const &getName() const { return Type->getName(); }
+  IdList *getBases() const { return Bases; }
+  StringList *getRegexBases() const { return RegExBases; }
+  ParamsList *getParams() const { return SuParams; }
+  LatencyInstList *getLatencies() const { return Latencies; }
+  LatencyTemplate *getInlineLatency() { return InlineLatency; }
 
-  Identifier *type() const { return type_; }
-  std::string const &name() const { return type_->name(); }
-  IdList *bases() const { return bases_; }
-  StringList *regex_bases() const { return regex_bases_; }
-  ParamsList *params() const { return params_; }
-  LatencyInstList *latencies() const { return latencies_; }
-  LatencyTemplate *inline_latency() { return inline_latency_; }
-
-  void add_base(SubUnitTemplate *unit) { unit_bases_.push_back(unit); }
-  SubUnitList &unit_bases() { return unit_bases_; }
-  void add_derived_subunit(SubUnitTemplate *derived) {
-    if (FindItem(derived_subunits_, derived->name()))
+  void addBase(SubUnitTemplate *unit) { UnitBases.push_back(unit); }
+  SubUnitList &getUnitBases() { return UnitBases; }
+  void addDerivedSubunit(SubUnitTemplate *derived) {
+    if (FindItem(DerivedSubunits, derived->getName()))
       return;
-    derived_subunits_.push_back(derived);
+    DerivedSubunits.push_back(derived);
   }
-  SubUnitList &derived_subunits() { return derived_subunits_; }
+  SubUnitList &getDerivedSubunits() { return DerivedSubunits; }
 
-  int use_count() const { return use_count_; }
-  void inc_use() { use_count_++; }
-
-private:
-  Identifier *const type_ = nullptr;                // type of this subunit
-  IdList *const bases_ = nullptr;                   // base subunits (or empty)
-  StringList *const regex_bases_ = nullptr;         // matching instructions
-  ParamsList *const params_ = nullptr;              // unit parameters
-  LatencyInstList *const latencies_ = nullptr;      // which latencies to use
-  LatencyTemplate *const inline_latency_ = nullptr; // inline latency template
-  SubUnitList unit_bases_;                          // link to base templates
-  SubUnitList derived_subunits_;                    // derived subunits
-  int use_count_ = 0;                               // was it ever referenced?
+  int getUseCount() const { return UseCount; }
+  void incUse() { UseCount++; }
 };
 
 //----------------------------------------------------------------------------
@@ -1327,25 +1257,25 @@ private:
 // references.
 //----------------------------------------------------------------------------
 class LatencyFuncUnits {
-  std::map<std::string, std::set<std::string>> func_units_;
+  std::map<std::string, std::set<std::string>> FuncUnits;
 
  public:
-  void AddUnit(std::string func_unit, std::string predicate) {
-    func_units_[predicate].insert(func_unit);
+  void addUnit(std::string FuncUnit, std::string Predicate) {
+    FuncUnits[Predicate].insert(FuncUnit);
   }
-  void AddUnit(std::string func_unit, IdList *predicates) {
-    if (predicates == nullptr)
-      AddUnit(func_unit, "");
+  void addUnit(std::string FuncUnit, IdList *Predicates) {
+    if (Predicates == nullptr)
+      addUnit(FuncUnit, "");
     else
-      for (auto *predicate : *predicates)
-        AddUnit(func_unit, predicate->name());
+      for (auto *Predicate : *Predicates)
+        addUnit(FuncUnit, Predicate->getName());
   }
-  void AddBaseUnits(LatencyFuncUnits *base) {
-    for (auto &[predicate, units] : base->func_units_)
-      func_units_[predicate].insert(units.begin(), units.end());
+  void addBaseUnits(LatencyFuncUnits *base) {
+    for (auto &[Predicate, Units] : base->FuncUnits)
+      FuncUnits[Predicate].insert(Units.begin(), Units.end());
   }
-  std::map<std::string, std::set<std::string>> &func_units() {
-    return func_units_;
+  std::map<std::string, std::set<std::string>> &getFuncUnits() {
+    return FuncUnits;
   }
 };
 
@@ -1355,216 +1285,215 @@ class LatencyFuncUnits {
 // the lat_base member.
 //----------------------------------------------------------------------------
 class LatencyTemplate : public MdlItem {
+  Identifier *const Id = nullptr;               // which latency to instantiate
+  IdList *const BaseIds = nullptr;              // base latencies (or empty)
+  ParamsList *const LatParams = nullptr;        // parameters for this unit
+  ReferenceList *const References = nullptr;    // all refs in template
+  LatencyList UnitBases;                        // links to base templates
+  LatencyFuncUnits *ReferencedFus = nullptr;    // set of referenced FUs
+
 public:
-  LatencyTemplate(const MdlItem &item, Identifier *id, IdList *bases,
-                  ParamsList *params, ReferenceList *refs)
-      : MdlItem(item), id_(id), base_ids_(bases), params_(params),
-        references_(refs) {}
-  LatencyTemplate(std::string name, ReferenceList *refs)
-      : MdlItem(), id_(new Identifier(name)), base_ids_(nullptr),
-        params_(new ParamsList), references_(refs) {}
+  LatencyTemplate(const MdlItem &Item, Identifier *Id, IdList *Bases,
+                  ParamsList *LatParams, ReferenceList *Refs)
+      : MdlItem(Item), Id(Id), BaseIds(Bases), LatParams(LatParams),
+        References(Refs) {}
+  LatencyTemplate(std::string Name, ReferenceList *Refs)
+      : MdlItem(), Id(new Identifier(Name)), BaseIds(nullptr),
+        LatParams(new ParamsList), References(Refs) {}
 
   std::string ToString() const;
+  Identifier *getId() const { return Id; }
+  std::string const &getName() const { return Id->getName(); }
+  IdList *getBaseIds() const { return BaseIds; }
+  ParamsList *getParams() const { return LatParams; }
+  ReferenceList *getReferences() const { return References; }
 
-  Identifier *id() const { return id_; }
-  std::string const &name() const { return id_->name(); }
-  IdList *base_ids() const { return base_ids_; }
-  ParamsList *params() const { return params_; }
-  ReferenceList *references() const { return references_; }
+  LatencyFuncUnits *getReferencedFus() { return ReferencedFus; }
+  void setReferencedFus(LatencyFuncUnits *fus) { ReferencedFus = fus; }
 
-  LatencyFuncUnits *referenced_fus() { return referenced_fus_; }
-  void set_referenced_fus(LatencyFuncUnits *fus) { referenced_fus_ = fus; }
-
-  void add_base(LatencyTemplate *temp) { unit_bases_.push_back(temp); }
-  LatencyList &unit_bases() { return unit_bases_; }
-
-private:
-  Identifier *const id_ = nullptr;              // which latency to instantiate
-  IdList *const base_ids_ = nullptr;            // base latencies (or empty)
-  ParamsList *const params_ = nullptr;          // parameters for this unit
-  ReferenceList *const references_ = nullptr;   // all refs in template
-  LatencyList unit_bases_;                      // links to base templates
-  LatencyFuncUnits *referenced_fus_ = nullptr;  // set of referenced FUs
+  void addBase(LatencyTemplate *temp) { UnitBases.push_back(temp); }
+  LatencyList &getUnitBases() { return UnitBases; }
 };
 
 //----------------------------------------------------------------------------
 // Description of an instruction operand reference, used in latency
 // rules to explicitly reference an operand, and for immediate operands
-// in phase expressions. This object owns all the data pointed to by member
-// pointers.
+// in phase expressions.
 //----------------------------------------------------------------------------
 class OperandRef : public MdlItem {
-public:
-  OperandRef(const MdlItem &item, Identifier *type, IdList *names)
-      : MdlItem(item), op_type_(type), op_names_(names) {}
-  OperandRef(Identifier *type, IdList *names, int operand_index)
-      : MdlItem(), op_type_(type), op_names_(names),
-        operand_index_(operand_index) {}
-  OperandRef(Identifier *type, IdList *names, RegisterClass *reg_class)
-      : MdlItem(), op_type_(type), op_names_(names), reg_class_(reg_class) {}
-  OperandRef(Identifier *type, IdList *names, RegisterClass *reg_class,
-             int operand_index)
-      : MdlItem(), op_type_(type), op_names_(names), reg_class_(reg_class),
-        operand_index_(operand_index) {}
-  explicit OperandRef(std::string default_name)
-      : MdlItem(), op_type_(new Identifier(default_name)),
-        op_names_(new IdList({new Identifier(default_name)})) {}
-
-  std::string ToString() const;
-
-  Identifier *op_type() const { return op_type_; }
-  IdList *op_names() const { return op_names_; }
-  std::string const &name() const { return (*op_names_)[0]->name(); }
-  std::string type_name() const;
-
-  int operand_index() const { return operand_index_; }
-  void set_operand_index(int index) { operand_index_ = index; }
-
-  OperandDef *operand() const { return operand_; }
-  void set_operand(OperandDef *operand) { operand_ = operand; }
-  RegisterClass *reg_class() const { return reg_class_; }
-  void set_regclass(RegisterClass *reg_class) { reg_class_ = reg_class; }
-  OperandDecl *operand_decl() const { return operand_decl_; }
-  void set_operand_decl(OperandDecl *decl) { operand_decl_ = decl; }
-
-private:
   // Basic information that reflects directly what was in the input spec.
-  Identifier *const op_type_ = nullptr; // name of operand type (or null)
-  IdList *const op_names_ = nullptr;    // names of operand and suboperands
+  Identifier *const OpType = nullptr;   // name of operand type (or null)
+  IdList *const OpNames = nullptr;      // names of operand and suboperands
 
   // The type of a reference can be either an operand type or a register class.
   // These link the reference to one of those object types.
-  OperandDef *operand_ = nullptr;      // pointer to associated operand type
-  RegisterClass *reg_class_ = nullptr; // pointer to associated register class
+  OperandDef *Operand = nullptr;        // pointer to associated operand type
+  RegisterClass *RegClass = nullptr;    // pointer to associated register class
 
   // Links to more detailed information about how the reference is used.
   // This information is generated when we generate instruction information.
-  int operand_index_ = -1;              // index of operand in instruction
-  OperandDecl *operand_decl_ = nullptr; // pointer to operand declaration
+  int OperandIndex = -1;                // index of operand in instruction
+  OperandDecl *Decl = nullptr;          // pointer to operand declaration
+
+public:
+  OperandRef(const MdlItem &Item, Identifier *Type, IdList *Names)
+      : MdlItem(Item), OpType(Type), OpNames(Names) {}
+  OperandRef(Identifier *Type, IdList *Names, int OperandIndex)
+      : MdlItem(), OpType(Type), OpNames(Names),
+        OperandIndex(OperandIndex) {}
+  OperandRef(Identifier *Type, IdList *Names, RegisterClass *RegClass)
+      : MdlItem(), OpType(Type), OpNames(Names), RegClass(RegClass) {}
+  OperandRef(Identifier *Type, IdList *Names, RegisterClass *RegClass,
+             int OperandIndex)
+      : MdlItem(), OpType(Type), OpNames(Names), RegClass(RegClass),
+        OperandIndex(OperandIndex) {}
+  explicit OperandRef(std::string DefaultName)
+      : MdlItem(), OpType(new Identifier(DefaultName)),
+        OpNames(new IdList({new Identifier(DefaultName)})) {}
+
+  std::string ToString() const;
+  Identifier *getOpType() const { return OpType; }
+  IdList *getOpNames() const { return OpNames; }
+  std::string const &getName() const { return (*OpNames)[0]->getName(); }
+  std::string getTypeName() const;
+
+  int getOperandIndex() const { return OperandIndex; }
+  void setOperandIndex(int Index) { OperandIndex = Index; }
+
+  OperandDef *getOperand() const { return Operand; }
+  void setOperand(OperandDef *Opnd) { Operand = Opnd; }
+  RegisterClass *getRegClass() const { return RegClass; }
+  void setRegClass(RegisterClass *Regs) { RegClass = Regs; }
+  OperandDecl *getOperandDecl() const { return Decl; }
+  void setOperandDecl(OperandDecl *NewDecl) { Decl = NewDecl; }
 };
 
 //----------------------------------------------------------------------------
 // Description of an expression used to specify a pipeline phase in a
-// latency rule. This object owns all the data pointed to by member pointers.
+// latency rule.  This is very basic, just the typical 4 operators, plus
+// a "positive" op that brackets expressions to positive numbers. Terminals
+// can be numbers, phase names, or instruction operand names.
 //----------------------------------------------------------------------------
 enum PhaseOp {
-  kPlus,
-  kMinus,
-  kMult,
-  kDiv,
-  kNeg,
-  kPositive,
-  kPhase,
-  kInt,
-  kOpnd
+  kPlus, kMinus, kMult, kDiv, kNeg, kPositive,
+  kPhase, kInt, kOpnd
 };
 
 class PhaseExpr : public MdlItem {
+  const PhaseOp Operation;              // operation of the expression
+  PhaseExpr *const Left = nullptr;      // child operations
+  PhaseExpr *const Right = nullptr;     // child operations
+  PhaseName *Phase = nullptr;           // Pointer to phase name item.
+  union {
+    const int Number;                   // integer constant
+    OperandRef *const Operand;          // reference to an instruction operand
+    Identifier *const PhaseId;          // reference to a phase name
+  };
+
 public:
-  PhaseExpr(const MdlItem &item, PhaseOp op, PhaseExpr *left, PhaseExpr *right)
-      : MdlItem(item), operation_(op), left_(left), right_(right) {}
-  PhaseExpr(const MdlItem &item, PhaseOp op, int number)
-      : MdlItem(item), operation_(op), number_(number) {}
-  PhaseExpr(const MdlItem &item, PhaseOp op, Identifier *phase)
-      : MdlItem(item), operation_(op), phase_(phase) {}
-  PhaseExpr(const MdlItem &item, PhaseOp op, OperandRef *operand)
-      : MdlItem(item), operation_(op), operand_(operand) {}
-  PhaseExpr(Identifier *name, PhaseName *phase)
-      : MdlItem(), operation_(kPhase), phase_name_(phase), phase_(name) {}
-  explicit PhaseExpr(PhaseName *phase)
-      : MdlItem(), operation_(kPhase), phase_name_(phase),
-        phase_(new Identifier(phase->name())) {}
-  explicit PhaseExpr(int phase) : MdlItem(), operation_(kInt), number_(phase) {}
+  // Create a binary operator.
+  PhaseExpr(const MdlItem &Item, PhaseOp Op, PhaseExpr *Left, PhaseExpr *Right)
+      : MdlItem(Item), Operation(Op), Left(Left), Right(Right) {}
+  // Create an expression that represents a number.
+  PhaseExpr(const MdlItem &Item, PhaseOp Op, int Number)
+      : MdlItem(Item), Operation(Op), Number(Number) {}
+  // Create an expression that represents a named phase.
+  PhaseExpr(const MdlItem &Item, PhaseOp Op, Identifier *PhaseId)
+      : MdlItem(Item), Operation(Op), PhaseId(PhaseId) {}
+  // Create an expression that represents a specified operand reference.
+  PhaseExpr(const MdlItem &Item, PhaseOp Op, OperandRef *Operand)
+      : MdlItem(Item), Operation(Op), Operand(Operand) {}
+  // Create an expression that represents a verified phase name.
+  PhaseExpr(Identifier *Name, PhaseName *Phase)
+      : MdlItem(), Operation(kPhase), Phase(Phase), PhaseId(Name) {}
+  explicit PhaseExpr(PhaseName *Phase)
+      : MdlItem(), Operation(kPhase), Phase(Phase),
+        PhaseId(new Identifier(Phase->getName())) {}
+  explicit PhaseExpr(int Phase) : MdlItem(), Operation(kInt), Number(Phase) {}
 
   PhaseExpr *clone() {
-    if (operation() == kPhase)
-      return new PhaseExpr(phase_, phase_name_);
-    if (operation() == kInt)
+    if (Operation == kPhase)
+      return new PhaseExpr(PhaseId, Phase);
+    if (Operation == kInt)
       return this;
-    if (operation() == kOpnd)
-      return new PhaseExpr(*this, kOpnd, new OperandRef(*operand_));
+    if (Operation == kOpnd)
+      return new PhaseExpr(*this, kOpnd, new OperandRef(*Operand));
 
-    PhaseExpr *nleft = left() ? left()->clone() : nullptr;
-    PhaseExpr *nright = right() ? right()->clone() : nullptr;
-    return new PhaseExpr(*this, operation(), nleft, nright);
+    PhaseExpr *Nleft = Left ? Left->clone() : nullptr;
+    PhaseExpr *Nright = Right ? Right->clone() : nullptr;
+    return new PhaseExpr(*this, Operation, Nleft, Nright);
   }
 
-  static PhaseExpr *DefaultLatency() { return new PhaseExpr(-1); }
-  bool IsDefaultLatency() { return operation_ == kInt && number_ == -1; }
+  static PhaseExpr *getDefaultLatency() { return new PhaseExpr(-1); }
+  bool isDefaultLatency() { return Operation == kInt && Number == -1; }
 
   // Methods for evaluating and checking validity/const-ness of expressions.
-  bool IsExpressionConstant() const;
-  llvm::ErrorOr<int> EvaluateConstantExpression() const;
+  bool isExpressionConstant() const;
+  llvm::ErrorOr<int> evaluateConstantExpression() const;
 
-  int ConstantPhase() {
-    if (!IsExpressionConstant())
+  int getConstantPhase() {
+    if (!isExpressionConstant())
       return -1;
-    auto result = EvaluateConstantExpression();
-    if (!result)
+    auto Result = evaluateConstantExpression();
+    if (!Result)
       return -1;
-    return *result;
+    return *Result;
   }
 
   // Are two phase expressions identical?
   // We don't handle the general case of operand references here, those are
   // considered unequal if they have different operand ids.
   bool operator==(const PhaseExpr &item) {
-    if (operation_ != item.operation_)
+    if (Operation != item.Operation)
       return false;
-    if (left_ && item.left_ && *left_ != *item.left_)
+    if (Left && item.Left && *Left != *item.Left)
       return false;
-    if (right_ && item.right_ && *right_ != *item.right_)
+    if (Right && item.Right && *Right != *item.Right)
       return false;
-    if (operation_ == PhaseOp::kPhase)
-      return phase_name_ == item.phase_name_;
-    if (operation_ == PhaseOp::kInt)
-      return number_ == item.number_;
-    if (operation_ == PhaseOp::kOpnd)
-      return operand_ && item.operand_ &&
-             operand_->operand_index() == item.operand_->operand_index();
+    if (Operation == PhaseOp::kPhase)
+      return Phase == item.Phase;
+    if (Operation == PhaseOp::kInt)
+      return Number == item.Number;
+    if (Operation == PhaseOp::kOpnd)
+      return Operand && item.Operand &&
+             Operand->getOperandIndex() == item.Operand->getOperandIndex();
     return true;
   }
   bool operator!=(const PhaseExpr &item) { return !(*this == item); }
 
   // Add a small constant to a phase expression.
-  PhaseExpr *increment(int increment) {
-    if (increment == 0)
+  PhaseExpr *increment(int Increment) {
+    if (Increment == 0)
       return this->clone();
     return new PhaseExpr(*this, PhaseOp::kPlus, this->clone(),
-                         new PhaseExpr(*this, kInt, increment));
+                         new PhaseExpr(*this, kInt, Increment));
   }
   std::string ToString() const;
-  std::string FormatProtection() const {
-    auto *phase_name = GetPhaseName();
-    if (phase_name == nullptr)
+  std::string formatProtection() const {
+    auto *Name = getPhaseName();
+    if (Name == nullptr)
       return "";
-    return phase_name->FormatProtection();
+    return Name->formatProtection();
   }
-  bool IsProtected() const { return GetPhaseName()->is_protected(); }
-  bool IsUnprotected() const { return !GetPhaseName()->is_protected(); }
+  bool isProtected() const { return getPhaseName()->isProtected(); }
+  bool isUnprotected() const { return !getPhaseName()->isProtected(); }
 
-  PhaseOp operation() const { return operation_; }
-  PhaseExpr *left() const { return left_; }
-  PhaseExpr *right() const { return right_; }
-  int number() const { return number_; }
-  OperandRef *operand() const { return operand_; }
-  Identifier *phase() const { return phase_; }
-  int phase_id() const { return phase_name_->index(); }
-  PhaseName *GetPhaseName() const;
-  bool HasPhaseName() const;
-  void set_phase_name(PhaseName *name) { phase_name_ = name; }
-
-private:
-  const PhaseOp operation_;          // operation of the expression
-  PhaseExpr *const left_ = nullptr;  // child operations
-  PhaseExpr *const right_ = nullptr; // child operations
-  PhaseName *phase_name_ = nullptr;  // Pointer to phase name item.
-  union {
-    const int number_;          // integer constant
-    OperandRef *const operand_; // reference to an instruction operand
-    Identifier *const phase_;   // reference to a phase name
-  };
+  PhaseOp getOperation() const { return Operation; }
+  PhaseExpr *getLeft() const { return Left; }
+  PhaseExpr *getRight() const { return Right; }
+  int getNumber() const { return Number; }
+  OperandRef *getOperand() const { return Operand; }
+  Identifier *getPhase() const { return PhaseId; }
+  int getPhaseId() const { return Phase->getIndex(); }
+  PhaseName *getPhaseName() const;
+  bool hasPhaseName() const;
+  void setPhaseName(PhaseName *Name) { Phase = Name; }
 };
+
+//----------------------------------------------------------------------------
+// Definition of a predicate expression. These mirror the predicate
+// expressions in tablegen, with all the same capability.
+//----------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------
 // Enumerate the kinds of predicate expressions we support.
@@ -1583,18 +1512,18 @@ enum class PredOp {
   kCheckZeroOperand,       // Check that an operand is zero
   kCheckFunctionPredicate, // Function to call to implement predicate
   kCheckFunctionPredicateWithTII, // Function to call to implement predicate
-  kCheckNumOperands, // Check that an instr has some number of opnds
-  kOpcodeSwitchStmt, // Switch statement
-  kOpcodeSwitchCase, // Single case statement
-  kReturnStatement,  // Switch return statement
-  kCode,             // String representing C code
-  kTrue,             // Predicate always returns TRUE
-  kFalse,            // Predicate always returns FALSE
-  kEmpty,            // Undefined predicate
-  kName,             // Register name, Predicate name, Opcode Name, etc
-  kNumber,           // An integer operand
-  kOperandRef,       // A named operand reference.
-  kString,           // A string operand
+  kCheckNumOperands,       // Check that an instr has some number of opnds
+  kOpcodeSwitchStmt,       // Switch statement
+  kOpcodeSwitchCase,       // Single case statement
+  kReturnStatement,        // Switch return statement
+  kCode,                   // String representing C code
+  kTrue,                   // Predicate always returns TRUE
+  kFalse,                  // Predicate always returns FALSE
+  kEmpty,                  // Undefined predicate
+  kName,                   // Register name, Predicate name, Opcode Name, etc
+  kNumber,                 // An integer operand
+  kOperandRef,             // A named operand reference.
+  kString,                 // A string operand
 };
 
 //----------------------------------------------------------------------------
@@ -1626,275 +1555,264 @@ constexpr auto kTrue = "TruePred";
 constexpr auto kFalse = "FalsePred";
 constexpr auto kEmpty = "Empty";
 
-//----------------------------------------------------------------------------
-// Definition of a predicate expression.
-//----------------------------------------------------------------------------
+// Definition of a predicate expression object.
 class PredExpr : public MdlItem {
+  PredOp Opcode;
+  bool Negate = false;                 // perform a logical NOT of operation
+  int64_t IntValue;                    // Integer value of this op
+  union {                              // Variant versions of the op
+    std::string Value;                 // Value of this op
+    OperandRef *Opnd;                  // Reference to a named operand
+    std::vector<PredExpr *> Operands;  // Operands of this op (0..n)
+  };
 public:
-  explicit PredExpr(PredOp opcode) : MdlItem(), opcode_(opcode) {}
-  PredExpr(const MdlItem &item, PredOp opcode)
-      : MdlItem(item), opcode_(opcode) {}
-  PredExpr(const MdlItem &item, PredOp opcode, std::string value)
-      : MdlItem(item), opcode_(opcode), value_(value) {
-        if (IsInteger()) int_value_ = std::stoi(value);
+  explicit PredExpr(PredOp Opcode) : MdlItem(), Opcode(Opcode) {}
+  PredExpr(const MdlItem &Item, PredOp Opcode)
+      : MdlItem(Item), Opcode(Opcode) {}
+  PredExpr(const MdlItem &Item, PredOp Opcode, std::string Value)
+      : MdlItem(Item), Opcode(Opcode), Value(Value) {
+        if (isInteger()) IntValue = std::stoi(Value);
       }
-  PredExpr(const MdlItem &item, PredOp opcode, OperandRef *opnd)
-      : MdlItem(item), opcode_(opcode), opnd_(opnd) {}
-  PredExpr(const MdlItem &item, PredOp opcode, PredExpr *opnd)
-      : MdlItem(item), opcode_(opcode), operands_({opnd}) {}
-  PredExpr(const MdlItem &item, PredOp opcode, std::vector<PredExpr *> &opnds)
-      : MdlItem(item), opcode_(opcode), operands_(opnds) {}
-  PredExpr(PredOp opcode, bool negate) : MdlItem(), opcode_(opcode) {
-    if (negate)
-      opcode = IsTrue() ? PredOp::kFalse : PredOp::kTrue;
+  PredExpr(const MdlItem &Item, PredOp Opcode, OperandRef *Opnd)
+      : MdlItem(Item), Opcode(Opcode), Opnd(Opnd) {}
+  PredExpr(const MdlItem &Item, PredOp Opcode, PredExpr *Opnd)
+      : MdlItem(Item), Opcode(Opcode), Operands({Opnd}) {}
+  PredExpr(const MdlItem &Item, PredOp Opcode, std::vector<PredExpr *> &Opnds)
+      : MdlItem(Item), Opcode(Opcode), Operands(Opnds) {}
+  PredExpr(PredOp Opcode, bool IsNegate) : MdlItem(), Opcode(Opcode) {
+    if (IsNegate)
+      Opcode = isTrue() ? PredOp::kFalse : PredOp::kTrue;
   }
 
-  PredOp opcode() const { return opcode_; }
-  void set_opcode(PredOp opcode) { opcode_ = opcode; }
-  std::string value() const { return value_; }
-  OperandRef *opnd() const { return opnd_; }
-  std::vector<PredExpr *> &operands() { return operands_; }
-  std::string PredName();
-  std::string ToString(int indent);
-  bool negate() const { return negate_; }
-  void set_negate() { negate_ = !negate_; }
-  void reset_negate() { negate_ = false; }
-  int64_t int_value() const { return int_value_; }
+  PredOp getOpcode() const { return Opcode; }
+  void setOpcode(PredOp Op) { Opcode = Op; }
+  std::string getValue() const { return Value; }
+  OperandRef *getOpnd() const { return Opnd; }
+  std::vector<PredExpr *> &getOperands() { return Operands; }
+  std::string getPredName();
+  std::string ToString(int Indent);
+  bool getNegate() const { return Negate; }
+  void setNegate() { Negate = !Negate; }
+  void resetNegate() { Negate = false; }
+  int64_t getIntValue() const { return IntValue; }
 
-  bool IsTrue() const { return opcode_ == PredOp::kTrue; }
-  bool IsFalse() const { return opcode_ == PredOp::kFalse; }
-  bool IsEmpty() const { return opcode_ == PredOp::kEmpty; }
-  bool IsInteger() const { return opcode_ == PredOp::kNumber; }
-  bool IsName() const { return opcode_ == PredOp::kName; }
-  bool IsString() const { return opcode_ == PredOp::kString; }
-  bool IsOperand() const { return opcode_ == PredOp::kOperandRef; }
-  bool IsPred() const { return opcode_ <= PredOp::kName; }
-  bool IsIntegerOrOperand() const { return IsInteger() || IsOperand(); }
+  bool isTrue() const { return Opcode == PredOp::kTrue; }
+  bool isFalse() const { return Opcode == PredOp::kFalse; }
+  bool isEmpty() const { return Opcode == PredOp::kEmpty; }
+  bool isInteger() const { return Opcode == PredOp::kNumber; }
+  bool isName() const { return Opcode == PredOp::kName; }
+  bool isString() const { return Opcode == PredOp::kString; }
+  bool isOperand() const { return Opcode == PredOp::kOperandRef; }
+  bool isPred() const { return Opcode <= PredOp::kName; }
+  bool isIntegerOrOperand() const { return isInteger() || isOperand(); }
 
   // Functions to generate code for reference predicates.
-  std::string GetOperand(PredExpr *index) const;
-  std::string OperandType() const;
-  std::string InvalidRegOperand() const;
-  std::string RegOperand(const std::string &family) const;
-  std::string SameRegOperand() const;
-  std::string ImmOperand() const;
-  std::string ImmZeroOperand() const;
-  std::string FunctionPredicate(bool withTII, OutputState *spec) const;
-  std::string NumOperands() const;
-  std::string CheckCompound(OutputState *spec);
-  std::string CheckCode(OutputState *spec) const;
-
-private:
-  PredOp opcode_;
-  bool negate_ = false;                // perform a logical NOT of operation
-  int64_t int_value_;                  // Integer value of this op
-  union {                              // Variant versions of the op
-    std::string value_;                // Value of this op
-    OperandRef *opnd_;                 // Reference to a named operand
-    std::vector<PredExpr *> operands_; // Operands of this op (0..n)
-  };
+  std::string fmtGetOperand(PredExpr *Index) const;
+  std::string fmtOperandType() const;
+  std::string fmtInvalidRegOperand() const;
+  std::string fmtRegOperand(const std::string &Family) const;
+  std::string fmtSameRegOperand() const;
+  std::string fmtImmOperand() const;
+  std::string fmtImmZeroOperand() const;
+  std::string fmtFunctionPredicate(bool WithTII, OutputState *Outspec) const;
+  std::string fmtNumOperands() const;
+  std::string fmtCheckCompound(OutputState *Outspec);
+  std::string fmtCheckCode(OutputState *Outspec) const;
 };
 
 //----------------------------------------------------------------------------
 // Description of a single latency rule as described in MDL.
-// This object owns all the data pointed to by member pointers.
 //----------------------------------------------------------------------------
 class Reference : public MdlItem {
+  IdList *const Predicates = nullptr;          // list of predicates for rule
+  ConditionalRef *CondRef = nullptr;           // if/then/else reference
+  RefType Type = RefTypes::kNull;              // type of reference
+  PhaseExpr *Phase = nullptr;                  // pipeline phase of reference
+  int32_t PhaseValue = -1;                     // phase if expression is const
+  int UseCycles = 1;                           // # cycles resource is used
+  int Repeat = 1;                              // default repeat count
+  int Delay = 1;                               // default repeat delay cycles
+  int MicroOps = 0;                            // Fus entry micro ops
+  int BufferSize = -1;                         // Fus reference is buffered
+  RefFlags::Item FuFlags = RefFlags::kNone;    // Fus reference attributes
+  OperandRef *const Operand = nullptr;         // operand we are referencing
+  ResourceRefList *const Resources = nullptr;  // resources we are referencing
+  ResourceDef *Port = nullptr;                 // port we are referencing
+  Reference *Base = nullptr;                   // base ref for copied objects
+  bool Used = false;                           // was this reference ever used?
+  bool Seen = false;                           // ever considered for a SU?
+  bool IsDuplicate = false;                    // duplicate resource reference?
+
 public:
   // This constructor is used by the parser to create a new basic reference.
-  Reference(const MdlItem &item, IdList *predicates, RefType ref_type,
-            PhaseExpr *phase_expr, int repeat, int delay, int use_cycles,
-            OperandRef *operand, ResourceRefList *resources)
-      : MdlItem(item), predicates_(predicates), conditional_ref_(nullptr),
-        ref_type_(ref_type), phase_expr_(phase_expr), use_cycles_(use_cycles),
-        repeat_(repeat), delay_(delay), operand_(operand),
-        resources_(resources) {}
-
+  Reference(const MdlItem &Item, IdList *Predicates, RefType Type,
+            PhaseExpr *Phase, int Repeat, int Delay, int UseCycles,
+            OperandRef *Operand, ResourceRefList *Resources)
+      : MdlItem(Item), Predicates(Predicates), CondRef(nullptr),
+        Type(Type), Phase(Phase), UseCycles(UseCycles),
+        Repeat(Repeat), Delay(Delay), Operand(Operand),
+        Resources(Resources) {}
   // This constructor creates a conditional reference.
-  Reference(const MdlItem &item, IdList *predicates, ConditionalRef *ref)
-      : MdlItem(item), predicates_(predicates), conditional_ref_(ref),
-        resources_(new ResourceRefList) {}
-
+  Reference(const MdlItem &Item, IdList *Predicates, ConditionalRef *Ref)
+      : MdlItem(Item), Predicates(Predicates), CondRef(Ref),
+        Resources(new ResourceRefList) {}
   // This constructor is used to generate RefFus entries, which includes
   // an explicit "micro_op" value.
-  Reference(MdlItem &item, IdList *predicates, RefType ref_type,
-            PhaseExpr *phase_expr, int cycles, int micro_ops,
-            RefFlags::Item fu_flags, ResourceRef *unit)
-      : MdlItem(item), predicates_(predicates), ref_type_(ref_type),
-        phase_expr_(phase_expr), use_cycles_(cycles), repeat_(0), delay_(0),
-        micro_ops_(micro_ops), fu_flags_(fu_flags),
-        resources_(new ResourceRefList(1, unit)) {}
+  Reference(MdlItem &Item, IdList *Predicates, RefType Type,
+            PhaseExpr *Phase, int Cycles, int MicroOps,
+            RefFlags::Item FuFlags, ResourceRef *Unit)
+      : MdlItem(Item), Predicates(Predicates), Type(Type),
+        Phase(Phase), UseCycles(Cycles), Repeat(0), Delay(0),
+        MicroOps(MicroOps), FuFlags(FuFlags),
+        Resources(new ResourceRefList(1, Unit)) {}
   // This constructor creates a RefFus entry that -only- has a micro-op.
-  Reference(MdlItem &item, IdList *predicates, int micro_ops,
-            RefFlags::Item fu_flags)
-      : MdlItem(item), predicates_(predicates), ref_type_(RefTypes::kFus),
-        phase_expr_(new PhaseExpr(new PhaseName("E1"))), phase_value_(1),
-        use_cycles_(0), repeat_(0), delay_(0), micro_ops_(micro_ops),
-        fu_flags_(fu_flags), resources_(new ResourceRefList) {}
-
+  Reference(MdlItem &Item, IdList *Predicates, int MicroOps,
+            RefFlags::Item FuFlags)
+      : MdlItem(Item), Predicates(Predicates), Type(RefTypes::kFus),
+        Phase(new PhaseExpr(new PhaseName("E1"))), PhaseValue(1),
+        UseCycles(0), Repeat(0), Delay(0), MicroOps(MicroOps),
+        FuFlags(FuFlags), Resources(new ResourceRefList) {}
   // This constructor creates default references to a "pseudo" functional unit
   // for instructions which have no functional unit specifications.
-  Reference(RefType ref_type, PhaseName *phase, std::string func_unit_name)
-      : MdlItem(), ref_type_(ref_type), phase_expr_(new PhaseExpr(phase)),
-        resources_(new ResourceRefList(1, new ResourceRef(func_unit_name))) {}
-
+  Reference(RefType Type, PhaseName *Phase, std::string FuName)
+      : MdlItem(), Type(Type), Phase(new PhaseExpr(Phase)),
+        Resources(new ResourceRefList(1, new ResourceRef(FuName))) {}
   // This constructor is used while instantiating subunits to create a
   // copy of a latency reference. We don't copy normal resources at this
   // point, since they need to be bound to template parameters, and this is
   // done in the caller.  We do copy functional unit resource references tho.
-  Reference(Reference *item, PhaseExpr *phase)
-      : MdlItem(*item), predicates_(item->predicates()),
-        conditional_ref_(item->conditional_ref()), ref_type_(item->ref_type()),
-        phase_expr_(phase ? phase : item->phase_expr()),
-        use_cycles_(item->use_cycles()), repeat_(item->repeat()),
-        delay_(item->delay()), micro_ops_(item->micro_ops()),
-        fu_flags_(item->fu_flags()), operand_(item->operand()),
-        resources_(new ResourceRefList), port_(nullptr), base_(item) {
-    if (item->IsFuncUnitRef() && !item->resources_->empty())
-      resources_->push_back(new ResourceRef(*(*item->resources_)[0]));
+  Reference(Reference *Item, PhaseExpr *Phase)
+      : MdlItem(*Item), Predicates(Item->getPredicates()),
+        CondRef(Item->getConditionalRef()),
+        Type(Item->getRefType()),
+        Phase(Phase ? Phase : Item->getPhaseExpr()),
+        UseCycles(Item->getUseCycles()), Repeat(Item->getRepeat()),
+        Delay(Item->getDelay()), MicroOps(Item->getMicroOps()),
+        FuFlags(Item->getFuFlags()), Operand(Item->getOperand()),
+        Resources(new ResourceRefList), Port(nullptr), Base(Item) {
+    if (Item->isFuncUnitRef() && !Item->Resources->empty())
+      Resources->push_back(new ResourceRef(*(*Item->Resources)[0]));
   }
-
   // This constructor is used while instantiating subunits to create a copy
   // of a conditional latency reference.
-  Reference(Reference *item, ConditionalRef *cond)
-      : MdlItem(*item), predicates_(item->predicates()), conditional_ref_(cond),
-        ref_type_(item->ref_type()), phase_expr_(item->phase_expr()),
-        resources_(new ResourceRefList) {}
-
+  Reference(Reference *Item, ConditionalRef *Cond)
+      : MdlItem(*Item), Predicates(Item->getPredicates()),
+        CondRef(Cond), Type(Item->getRefType()),
+        Phase(Item->getPhaseExpr()), Resources(new ResourceRefList) {}
   // This constructor is used when creating the instruction database, and
   // we want to specialize operand references to the instruction they are
   // associated with. Note that we don't need to copy repeat and delay values.
-  Reference(Reference &item, int delay)
-      : MdlItem(item), predicates_(item.predicates()),
-        conditional_ref_(item.conditional_ref()), ref_type_(item.ref_type()),
-        phase_expr_(item.phase_expr() ? item.phase_expr()->increment(delay)
-                                      : nullptr),
-        use_cycles_(item.use_cycles()), micro_ops_(item.micro_ops()),
-        fu_flags_(item.fu_flags()),
-        operand_(item.operand() ? new OperandRef(*item.operand()) : nullptr),
-        resources_(new ResourceRefList), port_(item.port()), base_(&item) {
-    for (auto *ref : *item.resources())
-      resources_->push_back(new ResourceRef(*ref));
+  Reference(Reference &Item, int Delay)
+      : MdlItem(Item), Predicates(Item.getPredicates()),
+        CondRef(Item.getConditionalRef()), Type(Item.getRefType()),
+        Phase(Item.getPhaseExpr() ?
+                    Item.getPhaseExpr()->increment(Delay) : nullptr),
+        UseCycles(Item.getUseCycles()), MicroOps(Item.getMicroOps()),
+        FuFlags(Item.getFuFlags()),
+        Operand(Item.getOperand() ?
+                 new OperandRef(*Item.getOperand()) : nullptr),
+        Resources(new ResourceRefList), Port(Item.getPort()), Base(&Item) {
+    for (auto *Ref : *Item.getResources())
+      Resources->push_back(new ResourceRef(*Ref));
   }
-
-  Reference(RefType ref_type, PhaseExpr *phase, OperandRef *operand)
-      : MdlItem(), ref_type_(ref_type), phase_expr_(phase->clone()),
-        operand_(operand), resources_(new ResourceRefList) {}
-  Reference(RefType ref_type, PhaseName *phase, OperandRef *operand)
-      : MdlItem(), ref_type_(ref_type), phase_expr_(new PhaseExpr(phase)),
-        operand_(operand), resources_(new ResourceRefList) {}
+  Reference(RefType Type, PhaseExpr *Phase, OperandRef *Operand)
+      : MdlItem(), Type(Type), Phase(Phase->clone()),
+        Operand(Operand), Resources(new ResourceRefList) {}
+  Reference(RefType Type, PhaseName *Phase, OperandRef *Operand)
+      : MdlItem(), Type(Type), Phase(new PhaseExpr(Phase)),
+        Operand(Operand), Resources(new ResourceRefList) {}
 
   std::string ToString() const;
-  IdList *predicates() const { return predicates_; }
-  ConditionalRef *conditional_ref() const { return conditional_ref_; }
-  bool IsConditionalRef() const { return conditional_ref_ != nullptr; }
+  IdList *getPredicates() const { return Predicates; }
+  ConditionalRef *getConditionalRef() const { return CondRef; }
+  bool isConditionalRef() const { return CondRef != nullptr; }
 
-  PhaseExpr *phase_expr() const { return phase_expr_; }
-  void set_phase_expr(PhaseName *name) { phase_expr_ = new PhaseExpr(name); }
+  PhaseExpr *getPhaseExpr() const { return Phase; }
+  void setPhaseExpr(PhaseName *Name) { Phase = new PhaseExpr(Name); }
 
-  int use_cycles() const { return use_cycles_; }
-  int repeat() const { return repeat_; }
-  int delay() const { return delay_; }
-  int micro_ops() const { return micro_ops_; }
-  void set_micro_ops(int micro_ops) { micro_ops_ = micro_ops; }
-  int fu_flags() const { return fu_flags_; }
-  void set_fu_flags(RefFlags::Item fu_flags) { fu_flags_ = fu_flags; }
-  bool is_unbuffered() const { return buffer_size_ == 0; }
-  bool is_in_order() const { return buffer_size_ == 1; }
-  bool is_out_of_order() const { return buffer_size_ > 1; }
-  void set_buffer_size(int buffer_size) { buffer_size_ = buffer_size; }
-  int get_buffer_size() const { return buffer_size_; }
+  int getUseCycles() const { return UseCycles; }
+  int getRepeat() const { return Repeat; }
+  int getDelay() const { return Delay; }
+  int getMicroOps() const { return MicroOps; }
+  void setMicroOps(int Ops) { MicroOps = Ops; }
+  int getFuFlags() const { return FuFlags; }
+  void setFuFlags(RefFlags::Item Flags) { FuFlags = Flags; }
+  bool isUnbuffered() const { return BufferSize == 0; }
+  bool isInOrder() const { return BufferSize == 1; }
+  bool isOutOfOrder() const { return BufferSize > 1; }
+  void setBufferSize(int Size) { BufferSize = Size; }
+  int getBufferSize() const { return BufferSize; }
 
-  OperandRef *operand() const { return operand_; }
-  ResourceRefList *resources() const { return resources_; }
+  OperandRef *getOperand() const { return Operand; }
+  ResourceRefList *getResources() const { return Resources; }
 
-  RefType ref_type() const { return ref_type_; }
-  void set_ref_type(RefType type) { ref_type_ = type; }
+  RefType getRefType() const { return Type; }
+  void setRefType(RefType NewType) { Type = NewType; }
 
-  bool IsOperandRefType() const {
-    return ref_type_ > RefTypes::kNull && ref_type_ < RefTypes::kHold;
+  bool isOperandRefType() const {
+    return Type > RefTypes::kNull && Type < RefTypes::kHold;
   }
-  bool IsResourceRef() const {
-    return ref_type_ == RefTypes::kHold || ref_type_ == RefTypes::kReserve;
+  bool isResourceRef() const {
+    return Type == RefTypes::kHold || Type == RefTypes::kReserve;
   }
-  bool IsDef() const { return ref_type_ & RefTypes::kDef; }
-  bool IsUse() const { return ref_type_ & RefTypes::kUse; }
-  bool IsFuncUnitRef() const { return ref_type_ == RefTypes::kFus; }
+  bool isDef() const { return Type & RefTypes::kDef; }
+  bool isUse() const { return Type & RefTypes::kUse; }
+  bool isFuncUnitRef() const { return Type == RefTypes::kFus; }
 
-  RefType AdjustResourceReferenceType() const {
-    if (ref_type_ & (RefTypes::kHold | RefTypes::kReserve | RefTypes::kFus))
-      return ref_type_;
-    return !operand() ? ref_type_ : RefTypes::kUse;
+  RefType adjustResourceReferenceType() const {
+    if (Type & (RefTypes::kHold | RefTypes::kReserve | RefTypes::kFus))
+      return Type;
+    return !getOperand() ? Type : RefTypes::kUse;
   }
-  bool IsDefaultOperandRef() {
-    return operand_ && operand_->operand_index() == -1;
+  bool isDefaultOperandRef() {
+    return Operand && Operand->getOperandIndex() == -1;
   }
 
-  void add_resource(ResourceRef *res) { resources_->push_back(res); }
-  void add_port(ResourceDef *port) { port_ = port; }
-  ResourceDef *port() const { return port_; }
-  void set_used() {
-    this->used_ = true;
-    for (auto *item = this; item->base_; item = item->base_)
-      item->base_->used_ = true;
+  void addResource(ResourceRef *Res) { Resources->push_back(Res); }
+  void addPort(ResourceDef *Def) { Port = Def; }
+  ResourceDef *getPort() const { return Port; }
+  void setUsed() {
+    this->Used = true;
+    for (auto *Item = this; Item->Base; Item = Item->Base)
+      Item->Base->Used = true;
   }
-  bool used() const { return used_; }
-  void set_seen() {
-    this->seen_ = true;
-    for (auto *item = this; item->base_; item = item->base_)
-      item->base_->seen_ = true;
+  bool getUsed() const { return Used; }
+  void setSeen() {
+    this->Seen = true;
+    for (auto *Item = this; Item->Base; Item = Item->Base)
+      Item->Base->Seen = true;
   }
-  bool seen() const { return seen_; }
+  bool getSeen() const { return Seen; }
 
   // References are ordered by pipeline phase, then by reference type.
   // If the pipeline phase is non-trivial, its value is -1, and ordered last.
-  bool operator<(const Reference &item) const {
-    if (phase_value_ != item.phase_value_) {
-      if (phase_value_ == -1)
+  bool operator<(const Reference &Item) const {
+    if (PhaseValue != Item.PhaseValue) {
+      if (PhaseValue == -1)
         return false;
-      if (item.phase_value_ == -1)
+      if (Item.PhaseValue == -1)
         return true;
-      return phase_value_ < item.phase_value_;
+      return PhaseValue < Item.PhaseValue;
     }
-    if (phase_expr_ != nullptr && item.phase_expr_ != nullptr)
-      return phase_expr_->ToString() < item.phase_expr_->ToString();
+    if (Phase != nullptr && Item.Phase != nullptr)
+      return Phase->ToString() < Item.Phase->ToString();
 
-    if (ref_type() != item.ref_type())
-      return ref_type_ < item.ref_type_;
+    if (Type != Item.getRefType())
+      return Type < Item.Type;
 
-    if (operand() != nullptr && item.operand() != nullptr &&
-        operand()->operand_index() != item.operand()->operand_index())
-      return operand()->operand_index() < item.operand()->operand_index();
+    if (Operand != nullptr && Item.getOperand() != nullptr &&
+        Operand->getOperandIndex() != Item.getOperand()->getOperandIndex())
+      return Operand->getOperandIndex() < Item.getOperand()->getOperandIndex();
 
-    return ToString() < item.ToString();
+    return ToString() < Item.ToString();
   }
-  bool operator>(const Reference &item) const { return item < *this; }
+  bool operator>(const Reference &Item) const { return Item < *this; }
 
-  void SetConstantPhase() { phase_value_ = phase_expr_->ConstantPhase(); }
-  bool IsProtected() const { return phase_expr_->IsProtected(); }
-  bool IsUnprotected() const { return phase_expr_->IsUnprotected(); }
-  bool IsDuplicate() const { return is_duplicate_; }
-  void SetDuplicate() { is_duplicate_ = true; }
-
-private:
-  IdList *const predicates_ = nullptr;         // list of predicates for rule
-  ConditionalRef *conditional_ref_ = nullptr;  // if/then/else reference
-  RefType ref_type_ = RefTypes::kNull;         // type of reference
-  PhaseExpr *phase_expr_ = nullptr;            // pipeline phase of reference
-  int32_t phase_value_ = -1;                   // phase if expression is const
-  int use_cycles_ = 1;                         // # cycles resource is used
-  int repeat_ = 1;                             // default repeat count
-  int delay_ = 1;                              // default repeat delay cycles
-  int micro_ops_ = 0;                          // Fus entry micro ops
-  int buffer_size_ = -1;                       // Fus reference is buffered
-  RefFlags::Item fu_flags_ = RefFlags::kNone;  // Fus reference attributes
-  OperandRef *const operand_ = nullptr;        // operand we are referencing
-  ResourceRefList *const resources_ = nullptr; // resources we are referencing
-  ResourceDef *port_ = nullptr;                // port we are referencing
-  Reference *base_ = nullptr;                  // base ref for copied objects
-  bool used_ = false;                          // was this reference ever used?
-  bool seen_ = false;                          // ever considered for a SU?
-  bool is_duplicate_ = false;                  // duplicate resource reference?
+  void setConstantPhase() { PhaseValue = Phase->getConstantPhase(); }
+  bool isProtected() const { return Phase->isProtected(); }
+  bool isUnprotected() const { return Phase->isUnprotected(); }
+  bool isDuplicate() const { return IsDuplicate; }
+  void setDuplicate() { IsDuplicate = true; }
 };
 
 //---------------------------------------------------------------------------
@@ -1902,107 +1820,108 @@ private:
 // latency statement.
 //---------------------------------------------------------------------------
 class ConditionalRef : public MdlItem {
+  Identifier *Predicate = nullptr;           // named predicate
+  PredExpr *InstrPredicate = nullptr;        // predicate expression
+  ReferenceList Refs;                        // list of conditional refs
+  ConditionalRef *ElseClause = nullptr;      // else clause of if stmt
+
 public:
-  ConditionalRef(MdlItem &item, Identifier *predicate, ReferenceList *refs,
-                 ConditionalRef *else_clause)
-      : MdlItem(item), predicate_(predicate), refs_(*refs),
-        else_clause_(else_clause) {}
+  ConditionalRef(MdlItem &Item, Identifier *Predicate, ReferenceList *Refs,
+                 ConditionalRef *ElseClause)
+      : MdlItem(Item), Predicate(Predicate), Refs(*Refs),
+        ElseClause(ElseClause) {}
   // This constructor is used to copy conditional references when we
   // instantiate a latency reference.
-  explicit ConditionalRef(ConditionalRef *item, ConditionalRef *else_clause)
-      : MdlItem(*item), predicate_(item->predicate_),
-        instr_predicate_(item->instr_predicate_), else_clause_(else_clause) {}
+  explicit ConditionalRef(ConditionalRef *Item, ConditionalRef *ElseClause)
+      : MdlItem(*Item), Predicate(Item->Predicate),
+        InstrPredicate(Item->InstrPredicate), ElseClause(ElseClause) {}
 
-  Identifier *predicate() const { return predicate_; }
-  PredExpr *instr_predicate() const { return instr_predicate_; }
-  void SetInstrPredicate(PredExpr *pred) { instr_predicate_ = pred; }
+  Identifier *getPredicate() const { return Predicate; }
+  PredExpr *getInstrPredicate() const { return InstrPredicate; }
+  void setInstrPredicate(PredExpr *Pred) { InstrPredicate = Pred; }
 
-  ReferenceList &refs() { return refs_; }
-  ConditionalRef *else_clause() const { return else_clause_; }
+  ReferenceList &getRefs() { return Refs; }
+  ConditionalRef *getElseClause() const { return ElseClause; }
 
   // Determine if there is a single operand ref in a conditional clause.
   // We don't support anything in the clause except Uses, Defs, and Fus.
   // If found, return it.
-  Reference *FindSingleRef() const {
-    Reference *found = nullptr;
-    for (auto *ref : refs_)
-      if (ref->IsDef() || ref->IsUse()) {
-        if (found) return nullptr;
-        if (!ref->operand()) return nullptr;
-        if (ref->use_cycles() != 1) return nullptr;
-        if (!ref->resources()->empty()) return nullptr;
-        found = ref;
-      } else if (!ref->IsFuncUnitRef()) return nullptr;
-    return found;
+  Reference *findSingleRef() const {
+    Reference *Found = nullptr;
+    for (auto *Ref : Refs)
+      if (Ref->isDef() || Ref->isUse()) {
+        if (Found) return nullptr;
+        if (!Ref->getOperand()) return nullptr;
+        if (Ref->getUseCycles() != 1) return nullptr;
+        if (!Ref->getResources()->empty()) return nullptr;
+        Found = Ref;
+      } else if (!Ref->isFuncUnitRef()) return nullptr;
+    return Found;
   }
 
-  bool IsSingleOperand(Reference *ref) const {
-    if (auto *found = FindSingleRef()) {
-      if (found->ref_type() != ref->ref_type()) return false;
-      if (found->operand()->name() != ref->operand()->name()) return false;
-      if (!else_clause()) return true;
-      return else_clause()->IsSingleOperand(ref);
+  bool isSingleOperand(Reference *Ref) const {
+    if (auto *Found = findSingleRef()) {
+      if (Found->getRefType() != Ref->getRefType()) return false;
+      if (Found->getOperand()->getName() != Ref->getOperand()->getName())
+        return false;
+      if (!ElseClause) return true;
+      return ElseClause->isSingleOperand(Ref);
     }
     return false;
   }
 
   // Return true if all ConditionalRefs in this object reference same operand.
   // We need at least one else clause to make this worthwhile.
-  bool IsSingleOperand() const {
-    if (auto *ref = FindSingleRef())
-      if (else_clause())
-        return else_clause()->IsSingleOperand(ref);
+  bool isSingleOperand() const {
+    if (auto *Ref = findSingleRef())
+      if (ElseClause)
+        return ElseClause->isSingleOperand(Ref);
     return false;
   }
 
   // Return true if a conditional reference contains any operand refs.
-  bool HasOperandRefs() {
-    if (HasOperandRefs(refs_))
+  bool hasOperandRefs() {
+    if (hasOperandRefs(Refs))
       return true;
-    if (else_clause_ != nullptr)
-      return else_clause_->HasOperandRefs();
+    if (ElseClause != nullptr)
+      return ElseClause->hasOperandRefs();
     return false;
   }
   // Return true if a set of references contains any operand refs.
-  bool HasOperandRefs(ReferenceList &refs) {
-    for (auto *ref : refs_) {
-      if (ref->IsConditionalRef() && ref->conditional_ref()->HasOperandRefs())
+  bool hasOperandRefs(ReferenceList &refs) {
+    for (auto *Ref : Refs) {
+      if (Ref->isConditionalRef() && Ref->getConditionalRef()->hasOperandRefs())
         return true;
-      if (ref->operand() != nullptr)
+      if (Ref->getOperand() != nullptr)
         return true;
     }
     return false;
   }
 
   // Return true if a conditional reference contains any resource refs.
-  bool HasResourceRefs() {
-    if (HasResourceRefs(refs_))
+  bool hasResourceRefs() {
+    if (hasResourceRefs(Refs))
       return true;
-    if (else_clause_ != nullptr)
-      return else_clause_->HasResourceRefs();
+    if (ElseClause != nullptr)
+      return ElseClause->hasResourceRefs();
     return false;
   }
 
   // Return true if a set of references contains any operand refs.
-  bool HasResourceRefs(ReferenceList &refs) {
-    for (auto *ref : refs_) {
-      if (ref->IsFuncUnitRef())
+  bool hasResourceRefs(ReferenceList &refs) {
+    for (auto *Ref : Refs) {
+      if (Ref->isFuncUnitRef())
         return true;
-      if (ref->IsConditionalRef() && ref->conditional_ref()->HasResourceRefs())
+      if (Ref->isConditionalRef() &&
+          Ref->getConditionalRef()->hasResourceRefs())
         return true;
-      if (!ref->resources()->empty())
+      if (!Ref->getResources()->empty())
         return true;
     }
     return false;
   }
 
-  std::string ToString(bool is_else);
-
-private:
-  Identifier *predicate_ = nullptr;       // Named predicate
-  PredExpr *instr_predicate_ = nullptr;   // predicate expression
-  ReferenceList refs_;                    // list of conditional refs
-  ConditionalRef *else_clause_ = nullptr; // else clause of if stmt
+  std::string ToString(bool IsElse);
 };
 
 //---------------------------------------------------------------------------
@@ -2038,85 +1957,83 @@ private:
 // Description of a single operand declaration.
 //----------------------------------------------------------------------------
 class OperandDecl : public MdlItem {
-public:
-  OperandDecl(const MdlItem &item, Identifier *type, Identifier *name,
-              bool ellipsis, bool input, bool output)
-      : MdlItem(item), types_(new IdList({type})), names_(new IdList({name})),
-        ellipsis_(ellipsis), input_(input), output_(output) {}
+  IdList *Types = nullptr;           // type(s) of operand
+  IdList *Names = nullptr;           // name(s) of operand
+  bool IsImpliedRegister = false;    // is this operand an implied register?
+  bool Ellipsis = false;             // was this operand an ellipsis?
+  bool Input = false;                // was the operand tagged as an input?
+  bool Output = false;               // was the operand tagged as an output?
 
-  OperandDecl(OperandDecl *item, OperandDecl *parent)
+  OperandDef *Operand = nullptr;      // pointer to associated operand type
+  RegisterClass *RegClass = nullptr; // pointer to associated register class
+
+public:
+  OperandDecl(const MdlItem &Item, Identifier *Type, Identifier *Name,
+              bool Ellipsis, bool Input, bool Output)
+      : MdlItem(Item), Types(new IdList({Type})), Names(new IdList({Name})),
+        Ellipsis(Ellipsis), Input(Input), Output(Output) {}
+
+  OperandDecl(OperandDecl *Item, OperandDecl *Parent)
       : MdlItem(),
-        types_(new IdList((*parent->types_).begin(), (*parent->types_).end())),
-        names_(new IdList((*parent->names_).begin(), (*parent->names_).end())),
-        is_implied_register_(item->is_implied_register_),
-        ellipsis_(parent->ellipsis_), input_(parent->input_),
-        output_(parent->output_), operand_(item->operand_),
-        reg_class_(item->reg_class_) {}
+        Types(new IdList((*Parent->Types).begin(), (*Parent->Types).end())),
+        Names(new IdList((*Parent->Names).begin(), (*Parent->Names).end())),
+        IsImpliedRegister(Item->IsImpliedRegister),
+        Ellipsis(Parent->Ellipsis), Input(Parent->Input),
+        Output(Parent->Output), Operand(Item->Operand),
+        RegClass(Item->RegClass) {}
 
   // Set this to true if we want to see more detail (for debugging).
-  const bool print_fully_qualified_declaration_ = true;
+  const bool PrintFullyQualifiedDeclaration = true;
   std::string ToString() const;
 
-  std::string const &name() const { return (*names_)[0]->name(); }
-  std::string const type_name() const { return (*types_)[0]->name(); }
-  Identifier *type() const { return (*types_)[0]; }
-  IdList *types() const { return types_; }
-  Identifier *base_type() const { return types_->back(); }
-  Identifier *op_name() const { return (*names_)[0]; }
-  IdList *op_names() const { return names_; }
-  void add_type(Identifier *type) { types_->push_back(type); }
-  void add_name(Identifier *name) { names_->push_back(name); }
-  bool is_implied_register() const { return is_implied_register_; }
-  bool is_ellipsis() const { return ellipsis_; }
-  bool is_input() const { return input_; }
-  bool is_output() const { return output_; }
+  std::string const &getName() const { return (*Names)[0]->getName(); }
+  std::string const getTypeName() const { return (*Types)[0]->getName(); }
+  Identifier *getType() const { return (*Types)[0]; }
+  IdList *getTypes() const { return Types; }
+  Identifier *getBaseType() const { return Types->back(); }
+  Identifier *getOpName() const { return (*Names)[0]; }
+  IdList *getOpNames() const { return Names; }
+  void addType(Identifier *Type) { Types->push_back(Type); }
+  void addName(Identifier *Name) { Names->push_back(Name); }
+  bool isImpliedRegister() const { return IsImpliedRegister; }
+  bool isEllipsis() const { return Ellipsis; }
+  bool isInput() const { return Input; }
+  bool isOutput() const { return Output; }
 
-  OperandDef *operand() const { return operand_; }
-  RegisterClass *reg_class() const { return reg_class_; }
-  void set_operand(OperandDef *operand) { operand_ = operand; }
-  void set_regclass(RegisterClass *reg_class) { reg_class_ = reg_class; }
-  void set_is_implied_register() { is_implied_register_ = true; }
-
-private:
-  IdList *types_ = nullptr;          // type(s) of operand
-  IdList *names_ = nullptr;          // name(s) of operand
-  bool is_implied_register_ = false; // is this operand an implied register?
-  bool ellipsis_ = false;            // was this operand an ellipsis?
-  bool input_ = false;               // was the operand tagged as an input?
-  bool output_ = false;              // was the operand tagged as an output?
-
-  OperandDef *operand_ = nullptr;      // pointer to associated operand type
-  RegisterClass *reg_class_ = nullptr; // pointer to associated register class
+  OperandDef *getOperand() const { return Operand; }
+  RegisterClass *getRegClass() const { return RegClass; }
+  void setOperand(OperandDef *opnd) { Operand = opnd; }
+  void setRegclass(RegisterClass *regs) { RegClass = regs; }
+  void setIsImpliedRegister() { IsImpliedRegister = true; }
 };
 
 //----------------------------------------------------------------------------
 // Description of a single operand definition.
 //----------------------------------------------------------------------------
 class OperandDef : public MdlItem {
+  Identifier *Name = nullptr;                 // name of the operand
+  IdList *Bases = nullptr;                    // base operands (for derived)
+  OperandDeclList *Operands = nullptr;        // list of operand declarations
+  Identifier *Type = nullptr;                 // type of operand
+  OperandAttributeList *Attributes = nullptr; // attributes defined
+  OperandDefList *BaseOperands = nullptr;     // base, if this opnd has one
+
 public:
-  OperandDef(const MdlItem &item, Identifier *name, OperandDeclList *operands,
-             Identifier *type, OperandAttributeList *attributes, IdList *bases)
-      : MdlItem(item), name_(name), bases_(bases), operands_(operands),
-        type_(type), attributes_(attributes),
-        base_operands_(new OperandDefList) {}
+  OperandDef(const MdlItem &Item, Identifier *Name, OperandDeclList *Operands,
+             Identifier *Type, OperandAttributeList *Attributes, IdList *Bases)
+      : MdlItem(Item), Name(Name), Bases(Bases), Operands(Operands),
+        Type(Type), Attributes(Attributes),
+        BaseOperands(new OperandDefList) {}
 
   std::string ToString() const;
-  std::string const &name() const { return name_->name(); }
-  OperandDeclList *operands() const { return operands_; }
-  Identifier const *type() const { return type_; }
-  IdList *bases() const { return bases_; }
-  OperandDefList *base_operands() const { return base_operands_; }
-  void add_base_operand(OperandDef *base) { base_operands_->push_back(base); }
-  OperandAttributeList *attributes() const { return attributes_; }
-  bool IsDerivedOperand() const { return bases_ != nullptr; }
-
-private:
-  Identifier *name_ = nullptr;                 // name of the operand
-  IdList *bases_ = nullptr;                    // base operands (for derived)
-  OperandDeclList *operands_ = nullptr;        // list of operand declarations
-  Identifier *type_ = nullptr;                 // type of operand
-  OperandAttributeList *attributes_ = nullptr; // attributes defined
-  OperandDefList *base_operands_ = nullptr;    // base, if this opnd has one
+  std::string const &getName() const { return Name->getName(); }
+  OperandDeclList *getOperands() const { return Operands; }
+  Identifier const *getType() const { return Type; }
+  IdList *getBases() const { return Bases; }
+  OperandDefList *getBaseOperands() const { return BaseOperands; }
+  void addBaseOperand(OperandDef *Base) { BaseOperands->push_back(Base); }
+  OperandAttributeList *getAttributes() const { return Attributes; }
+  bool isDerivedOperand() const { return Bases != nullptr; }
 };
 
 //----------------------------------------------------------------------------
@@ -2125,27 +2042,26 @@ private:
 // necessary.
 //----------------------------------------------------------------------------
 class OperandAttribute : public MdlItem {
+  Identifier *Name = nullptr;                // name of attribute
+  std::vector<int> *Values;                  // integer values of attribute
+  std::string Type;                          // type of operand value
+  PredValueList *PredicateValues = nullptr;  // predicate values (if any)
+  IdList *Predicate = nullptr;               // attribute predicate
+
 public:
-  OperandAttribute(MdlItem &item, Identifier *name, std::vector<int> *values,
-                   std::string type, PredValueList *predicate_values,
-                   IdList *predicate)
-      : MdlItem(item), name_(name), values_(values), type_(type),
-        predicate_values_(predicate_values), predicate_(predicate) {}
+  OperandAttribute(MdlItem &Item, Identifier *Name, std::vector<int> *Values,
+                   std::string Type, PredValueList *PredicateValues,
+                   IdList *Predicate)
+      : MdlItem(Item), Name(Name), Values(Values), Type(Type),
+        PredicateValues(PredicateValues), Predicate(Predicate) {}
 
   std::string ToString() const;
-  std::string const &name() const { return name_->name(); }
-  std::vector<int> *values() const { return values_; }
-  int values(int i) const { return (*values_)[i]; }
-  std::string type() const { return type_; }
-  IdList *predicate() const { return predicate_; }
-  PredValueList *predicate_values() const { return predicate_values_; }
-
-private:
-  Identifier *name_ = nullptr;                // name of attribute
-  std::vector<int> *values_;                  // integer values of attribute
-  std::string type_;                          // type of operand value
-  PredValueList *predicate_values_ = nullptr; // predicate values (if any)
-  IdList *predicate_ = nullptr;               // attribute predicate
+  std::string const &getName() const { return Name->getName(); }
+  std::vector<int> *getValues() const { return Values; }
+  int getValues(int I) const { return (*Values)[I]; }
+  std::string getType() const { return Type; }
+  IdList *getPredicate() const { return Predicate; }
+  PredValueList *getPredicateValues() const { return PredicateValues; }
 };
 
 //----------------------------------------------------------------------------
@@ -2153,84 +2069,82 @@ private:
 // is an integer, a range of values, or a mask.
 //----------------------------------------------------------------------------
 class PredValue : public MdlItem {
-public:
   enum PredValueType { kValue, kRange, kMask };
 
-  PredValue(MdlItem &item, uint64_t mask)
-      : MdlItem(item), type_(kMask), mask_(mask) {}
-  PredValue(MdlItem &item, int64_t low, int64_t high)
-      : MdlItem(item), type_(kRange), low_(low), high_(high) {
-    if (low == high)
-      type_ = kValue;
+  PredValueType Type;               // is this a value, range, or mask
+  uint64_t Mask = 0;                // mask bits
+  int64_t Low = 0, High = 0;        // range of values (or value if same)
+
+public:
+  PredValue(MdlItem &Item, uint64_t Mask)
+      : MdlItem(Item), Type(kMask), Mask(Mask) {}
+  PredValue(MdlItem &Item, int64_t Low, int64_t High)
+      : MdlItem(Item), Type(kRange), Low(Low), High(High) {
+    if (Low == High)
+      Type = kValue;
   }
 
   std::string ToString() const;
-  bool IsRange() const { return type_ == kRange; }
-  bool IsValue() const { return type_ == kValue; }
-  bool IsMask() const { return type_ == kMask; }
+  bool isRange() const { return Type == kRange; }
+  bool isValue() const { return Type == kValue; }
+  bool isMask() const { return Type == kMask; }
 
   // Pretty print a predicate value.
-  std::string FormatValue(int64_t value) const;
+  std::string formatValue(int64_t value) const;
 
-  int64_t value() const { return low_; }
-  int64_t low() const { return low_; }
-  int64_t high() const { return high_; }
-  uint64_t mask() const { return mask_; }
-
-private:
-  PredValueType type_;         // is this a value, range, or mask
-  uint64_t mask_ = 0;          // mask bits
-  int64_t low_ = 0, high_ = 0; // range of values (or value if same)
+  int64_t getValue() const { return Low; }
+  int64_t getLow() const { return Low; }
+  int64_t getHigh() const { return High; }
+  uint64_t getMask() const { return Mask; }
 };
 
 //----------------------------------------------------------------------------
 // Description of a single instruction.
 //----------------------------------------------------------------------------
 class InstructionDef : public MdlItem {
+  Identifier *Name = nullptr;                // name of the instruction
+  OperandDeclList *Operands = nullptr;       // list of operand declarations
+  OperandDeclList *FlatOperands = nullptr;   // flattened operand declarations
+  IdList *Subunits = nullptr;                // subunits this instr uses
+  IdList *Derived = nullptr;                 // instrs derived from this one
+  bool HasEllipsis = false;                  // true if instruction has varargs
+
 public:
   InstructionDef(const MdlItem &item, Identifier *name,
                  OperandDeclList *operands, IdList *subunits, IdList *derived,
                  bool has_ellipsis)
-      : MdlItem(item), name_(name), operands_(operands),
-        subunits_(subunits ? subunits : new IdList), derived_(derived),
-        has_ellipsis_(has_ellipsis) {}
+      : MdlItem(item), Name(name), Operands(operands),
+        Subunits(subunits ? subunits : new IdList), Derived(derived),
+        HasEllipsis(has_ellipsis) {}
 
   std::string ToString() const;
-  std::string const &name() const { return name_->name(); }
-  IdList *subunits() const { return subunits_; }
-  OperandDeclList *operands() const { return operands_; }
-  OperandDeclList *flat_operands() const { return flat_operands_; }
-  IdList *derived() const { return derived_; }
-  void set_flat_operands(OperandDeclList *opnds) { flat_operands_ = opnds; }
-  bool has_ellipsis() const { return has_ellipsis_; }
-  int num_operands() const { return operands()->size(); }
-  int num_flat_operands() const { return flat_operands()->size(); }
+  std::string const &getName() const { return Name->getName(); }
+  IdList *getSubunits() const { return Subunits; }
+  OperandDeclList *getOperands() const { return Operands; }
+  OperandDeclList *getFlatOperands() const { return FlatOperands; }
+  IdList *getDerived() const { return Derived; }
+  void setFlatOperands(OperandDeclList *Opnds) { FlatOperands = Opnds; }
+  bool hasEllipsis() const { return HasEllipsis; }
+  int getNumOperands() const { return Operands->size(); }
+  int getNumFlatOperands() const { return FlatOperands->size(); }
 
   // Get the operand declaratopm of the nth operand.
   // Note: variable arguments never have declared types.
-  OperandDecl *GetOperandDecl(unsigned index) const {
-    if (index >= flat_operands_->size())
+  OperandDecl *getOperandDecl(unsigned Index) const {
+    if (Index >= FlatOperands->size())
       return nullptr;
-    return (*flat_operands_)[index];
+    return (*FlatOperands)[Index];
   }
 
   // Get the operand type of the nth operand.
-  OperandDef *GetOperandType(int index) const {
-    return GetOperandDecl(index)->operand();
+  OperandDef *getOperandType(int Index) const {
+    return getOperandDecl(Index)->getOperand();
   }
-  void add_subunit(SubUnitTemplate *subunit) {
-    if (FindItem(*subunits_, subunit->name()))
+  void addSubunit(SubUnitTemplate *subunit) {
+    if (FindItem(*Subunits, subunit->getName()))
       return;
-    subunits_->push_back(new Identifier(subunit->name()));
+    Subunits->push_back(new Identifier(subunit->getName()));
   }
-
-private:
-  Identifier *name_ = nullptr;               // name of the instruction
-  OperandDeclList *operands_ = nullptr;      // list of operand declarations
-  OperandDeclList *flat_operands_ = nullptr; // flattened operand declarations
-  IdList *subunits_ = nullptr;               // subunits this instr uses
-  IdList *derived_ = nullptr;                // instrs derived from this one
-  bool has_ellipsis_ = false;                // true if instruction has varargs
 };
 
 //----------------------------------------------------------------------------
@@ -2238,126 +2152,124 @@ private:
 // it was instantiated (CPU, Cluster, Parent FU).
 //----------------------------------------------------------------------------
 class FuncUnitInstantiation {
+  MdlSpec *Spec;                       // pointer to entire file description
+  CpuInstance *Cpu;                    // the parent CPU
+  ClusterInstance *Cluster;            // the parent cluster
+  FuncUnitInstance *Instance;          // the functional unit instance
+  FuncUnitTemplate *FuncType;          // the functional unit type, or base
+  ResourceRefDict ResourceArgs;        // resource arguments to instance
+  RegisterClassRefDict ClassArgs;      // register class arguments to instance
+  ResourceDefList Resources;           // resources defined for this instance
+  ResourceDefList Ports;               // ports defined for this instance
+  ResourceDef *FuResource = nullptr;   // implicit resource for this FU
+  FuncUnitInstantiation *Parent = nullptr; // Parent functional unit
+
 public:
   // This constructor is for instantiating top-level functional units.
-  FuncUnitInstantiation(MdlSpec *spec, CpuInstance *cpu,
-                        ClusterInstance *cluster, FuncUnitInstance *instance)
-      : spec_(spec), cpu_(cpu), cluster_(cluster), instance_(instance),
-        func_type_(instance->get_template()) {
-    InstantiateLocalDefs();
+  FuncUnitInstantiation(MdlSpec *Spec, CpuInstance *Cpu,
+                        ClusterInstance *Cluster, FuncUnitInstance *Instance)
+      : Spec(Spec), Cpu(Cpu), Cluster(Cluster), Instance(Instance),
+        FuncType(Instance->getTemplate()) {
+    instantiateLocalDefs();
   }
-
   // This constructor is for instantiating base functional units, which
   // reuse ports, resources, and the instance of the parent functional unit.
-  FuncUnitInstantiation(FuncUnitInstantiation *fu, FuncUnitTemplate *base)
-      : spec_(fu->spec()), cpu_(fu->cpu()), cluster_(fu->cluster()),
-        instance_(fu->instance()),
-        func_type_(base), // Note - not instance->get_template()!!
-        resource_args_(fu->resource_args()), class_args_(fu->class_args()),
-        parent_(fu) {
-    InstantiateLocalDefs();
+  FuncUnitInstantiation(FuncUnitInstantiation *Fu, FuncUnitTemplate *Base)
+      : Spec(Fu->getSpec()), Cpu(Fu->getCpu()), Cluster(Fu->getCluster()),
+        Instance(Fu->getInstance()),
+        FuncType(Base),      // Note - not instance->get_template()!!
+        ResourceArgs(Fu->getResourceArgs()), ClassArgs(Fu->getClassArgs()),
+        Parent(Fu) {
+    instantiateLocalDefs();
   }
 
   // Error check a merged resource reference that has an allocation.
-  ResourceRef *CheckAllocation(ResourceRef *def, ResourceRef *ref);
+  ResourceRef *checkAllocation(ResourceRef *Def, ResourceRef *Ref);
   // Create a merged resource reference from a definition and a reference.
-  ResourceRef *MergeRefs(ResourceRef *def, ResourceRef *ref);
-  // Return the template for this instantiation.
-  FuncUnitTemplate *get_template() { return func_type_; }
+  ResourceRef *mergeRefs(ResourceRef *Def, ResourceRef *Ref);
   // Create definition objects for locally define references and ports.
-  void InstantiateLocalDefs();
+  void instantiateLocalDefs();
   // Look up a register class in the templates parameter list.
-  RegisterClass *FindRegClass(Identifier *item);
+  RegisterClass *findRegClass(Identifier *Item);
   // Bind a functional unit instantiation parameter to a register class.
-  void BindClassArg(ResourceRef *arg);
+  void bindClassArg(ResourceRef *Arg);
   // Bind a functional unit instantiation parameter to a resource reference.
-  void BindResourceArg(ResourceRef *arg);
+  void bindResourceArg(ResourceRef *Arg);
   // Map a functional unit instantiation parameter id to its bound resource.
-  ResourceRef *GetResourceArg(int param_id);
+  ResourceRef *getResourceArg(int ParmId);
   // Map a functional unit instantation parameter id to its bound class.
-  RegisterClassRef *GetClassArg(int param_id);
+  RegisterClassRef *getClassArg(int ParmId);
   // Determine if a predicate matches the instantiation context's cpu name or
   // functional unit name.  Return true if its valid.
-  bool ValidPredicate(IdList *predicates) const;
+  bool isValidPredicate(IdList *Predicates) const;
   // For each subunit instance in a functional unit instantiation, create a
   // subunit instantiation, bind its instance parameters, and instantiate
   // all of its latency instances.
-  void InstantiateSubunits();
+  void instantiateSubunits();
   // For each connect statement, find the connected resources and register
   // classes, annotate the associated port.
-  void ProcessConnects();
+  void processConnects();
   // Bind a subunit port argument to its definition.
   // Return the definition if found, otherwise return nullptr.
-  ResourceDef *BindSubUnitPort(ResourceRef *arg);
+  ResourceDef *bindSubUnitPort(ResourceRef *Arg);
   // Bind a subunit resource argument to its definition.
   // Return the definition if found, otherwise return nullptr.
-  ResourceRef *BindSubUnitResource(ResourceRef *arg);
+  ResourceRef *bindSubUnitResource(ResourceRef *Arg);
   // Bind a functional unit instance resource argument to its definition.
   // Return the definition if found, otherwise return nullptr.
-  ResourceRef *BindFuncUnitResource(ResourceRef *arg);
+  ResourceRef *bindFuncUnitResource(ResourceRef *Arg);
   // Bind a functional unit instance register class argument to its definition.
   // Return the definition if found, otherwise return nullptr.
-  RegisterClassRef *BindFuncUnitClass(ResourceRef *arg);
-
+  RegisterClassRef *bindFuncUnitClass(ResourceRef *Arg);
   // Bind functional unit instantiation parameters to resources and classes.
-  void BindFuncUnitParameters();
+  void bindFuncUnitParameters();
   // Bind any slot pinning resources.
-  void BindFuncUnitSlotResources();
+  void bindFuncUnitSlotResources();
   // Bind subunit instantiation parameters to ports and resources.
-  void BindSubUnitParameters(SubUnitInstantiation *su);
+  void bindSubUnitParameters(SubUnitInstantiation *Su);
 
   // Error logging - forward error messages to MdlSpec logger.
   template <typename... Ts>
-  bool ErrorLog(const MdlItem *item, const char *fmt, Ts... params) const;
+  bool ErrorLog(const MdlItem *Item, const char *Fmt, Ts... Args) const;
   template <typename... Ts>
-  void WarningLog(const MdlItem *item, const char *fmt, Ts... params) const;
+  void WarningLog(const MdlItem *Item, const char *Fmt, Ts... Args) const;
   int ErrorsSeen() const;
 
   // Debug - dump a functional unit instantiation.
-  void DumpFuncUnitInstantiation();
+  void dumpFuncUnitInstantiation();
 
-  std::string const &name() const { return instance_->name(); }
-  MdlSpec *spec() const { return spec_; }
-  CpuInstance *cpu() const { return cpu_; }
-  ClusterInstance *cluster() const { return cluster_; }
-  FuncUnitInstance *instance() const { return instance_; }
-  FuncUnitTemplate *func_type() const { return func_type_; }
-  ResourceRefDict &resource_args() { return resource_args_; }
-  RegisterClassRefDict &class_args() { return class_args_; }
-  ResourceDefList &resources() { return resources_; }
-  ResourceDefList &ports() { return ports_; }
-  FuncUnitInstantiation *parent() const { return parent_; }
+  FuncUnitTemplate *getTemplate() { return FuncType; }
+  std::string const &getName() const { return Instance->getName(); }
+  MdlSpec *getSpec() const { return Spec; }
+  CpuInstance *getCpu() const { return Cpu; }
+  ClusterInstance *getCluster() const { return Cluster; }
+  FuncUnitInstance *getInstance() const { return Instance; }
+  FuncUnitTemplate *getFuncType() const { return FuncType; }
+  ResourceRefDict &getResourceArgs() { return ResourceArgs; }
+  RegisterClassRefDict &getClassArgs() { return ClassArgs; }
+  ResourceDefList &getResources() { return Resources; }
+  ResourceDefList &getPorts() { return Ports; }
+  FuncUnitInstantiation *getParent() const { return Parent; }
 
   // Create an implicit resource for this instance.
-  void set_resource() { fu_resource_ = new ResourceDef(instance_->id(), this); }
-  ResourceDef *get_resource() const { return fu_resource_; }
-  ResourceDef *get_root_resource() const {
-    auto *item = this;
-    for (; item->parent_ != nullptr; item = item->parent_)
+  void setResource() {
+    FuResource = new ResourceDef(Instance->getId(), this);
+  }
+  ResourceDef *getFuResource() const { return FuResource; }
+  ResourceDef *getRootResource() const {
+    auto *Item = this;
+    for (; Item->Parent != nullptr; Item = Item->Parent)
       ;
-    return item->fu_resource_;
+    return Item->FuResource;
   }
   // Get this instance's implied resource, and all of its parents' resource.
-  ResourceDefList get_resources() const {
-    ResourceDefList resources;
-    resources.push_back(fu_resource_);
-    for (auto *parent = parent_; parent; parent = parent->parent_)
-      resources.push_back(parent->fu_resource_);
-    return resources;
+  ResourceDefList getFuncUnitResources() const {
+    ResourceDefList ResList;
+    ResList.push_back(FuResource);
+    for (auto *ParentFu = Parent; ParentFu; ParentFu = ParentFu->Parent)
+      ResList.push_back(ParentFu->FuResource);
+    return ResList;
   }
-
-private:
-  MdlSpec *spec_;                      // pointer to entire file description
-  CpuInstance *cpu_;                   // the parent CPU
-  ClusterInstance *cluster_;           // the parent cluster
-  FuncUnitInstance *instance_;         // the functional unit instance
-  FuncUnitTemplate *func_type_;        // the functional unit type, or base
-  ResourceRefDict resource_args_;      // resource arguments to instance
-  RegisterClassRefDict class_args_;    // register class arguments to instance
-  ResourceDefList resources_;          // resources defined for this instance
-  ResourceDefList ports_;              // ports defined for this instance
-  ResourceDef *fu_resource_ = nullptr; // implicit resource for this FU
-  FuncUnitInstantiation *parent_ = nullptr; // Parent functional unit
 };
 
 
@@ -2366,89 +2278,87 @@ private:
 // instantiated.
 //----------------------------------------------------------------------------
 class SubUnitInstantiation {
+  MdlSpec *Spec;                    // pointer to entire file description
+  FuncUnitInstantiation *FuncUnit; // context of this subunits instantiation
+  SubUnitInstance *SubUnit;         // the subunit instance
+  SubUnitTemplate *SuTemplate;     // the template for this subunit
+  ResourceRefDict ResourceArgs;    // resource arguments to this instance
+  ResourceDefDict PortArgs;        // port arguments to this instance
+  ReferenceList References;         // instantiated list of references
+
 public:
-  SubUnitInstantiation(FuncUnitInstantiation *func, SubUnitInstance *subunit)
-      : spec_(func->spec()), func_unit_(func), subunit_(subunit) {
-    su_template_ = subunit->get_template();
+  SubUnitInstantiation(FuncUnitInstantiation *Func, SubUnitInstance *Subunit)
+      : Spec(Func->getSpec()), FuncUnit(Func), SubUnit(Subunit) {
+    SuTemplate = Subunit->getTemplate();
   }
 
   // Return the implicit functional unit resource associated with this instance.
-  ResourceDefList GetFuncUnitResources() const {
-    return func_unit()->get_resources();
+  ResourceDefList getFuncUnitResources() const {
+    return FuncUnit->getFuncUnitResources();
   }
-
   // Return slots resources associated with this subunit.
-  ResourceRefList *GetSlotResourcesAny() const {
-    return func_unit()->instance()->get_resource_slots_any();
+  ResourceRefList *getSlotResourcesAny() const {
+    return FuncUnit->getInstance()->getResourceSlotsAny();
   }
-  ResourceRefList *GetSlotResourcesAll() const {
-    return func_unit()->instance()->get_resource_slots_all();
+  ResourceRefList *getSlotResourcesAll() const {
+    return FuncUnit->getInstance()->getResourceSlotsAll();
   }
   // Bind a port definition to the associated instantiation parameter.
-  void BindPortArg(ResourceRef *arg);
+  void bindPortArg(ResourceRef *Arg);
   // Bind a resource definition to the associated instantiation parameter.
-  void BindResourceArg(ResourceRef *arg);
+  void bindResourceArg(ResourceRef *Arg);
   // Map a subunit instantiation parameter id to its bound resource.
-  ResourceRef *GetResourceArg(int param_id);
+  ResourceRef *getResourceArg(int ParamId);
   // Map a subunit instantiation parameter id to its bound port.
-  ResourceDef *GetPortArg(int param_id);
+  ResourceDef *getPortArg(int ParamId);
 
   // Determine if a latency predicate matches the instantiation context's
   // cpu name or functional unit name.
-  bool ValidPredicate(IdList *predicates) const;
+  bool isValidPredicate(IdList *Predicates) const;
   // Bind a latency latency instance port argument to its definition.
   // Return the definition if found, otherwise return nullptr.
-  ResourceDef *BindLatPort(ResourceRef *arg);
+  ResourceDef *bindLatPort(ResourceRef *Arg);
   // Bind a latency resource argument to its definition.
   // Return the definition if found, otherwise return nullptr.
-  ResourceRef *BindLatResource(ResourceRef *arg);
+  ResourceRef *bindLatResource(ResourceRef *Arg);
   // Bind latency instantation parameters to ports and resources.
-  void BindLatencyParams(LatencyInstantiation *lat);
+  void bindLatencyParams(LatencyInstantiation *Lat);
   // Bind latency reference resources to latency template parameters.
-  void BindLatencyResources(LatencyInstantiation &lat, Reference *reference,
-                            ResourceRefList *resources);
-  ConditionalRef *CopyLatencyCondReference(LatencyInstantiation &lat,
-                                           ConditionalRef *cond);
-  void CopyLatencyReference(LatencyInstantiation &lat,
-                            ReferenceList &references, Reference *ref);
+  void bindLatencyResources(LatencyInstantiation &Lat, Reference *Reference,
+                            ResourceRefList *Resources);
+  ConditionalRef *copyLatencyCondReference(LatencyInstantiation &Lat,
+                                           ConditionalRef *Cond);
+  void copyLatencyReference(LatencyInstantiation &Lat,
+                            ReferenceList &References, Reference *Ref);
   // Add references from a single latency template to a subunit instantiation.
-  void InstantiateLatency(LatencyInstantiation &lat,
-                          LatencyTemplate *lat_template);
+  void instantiateLatency(LatencyInstantiation &Lat,
+                          LatencyTemplate *LatTemplate);
   // Add references from a parent latency to a subunit instantiation, then
   // add all of its bases, recursively.
-  void InstantiateLatencyBases(LatencyInstantiation &lat,
-                               LatencyTemplate *parent, LatencyList &bases);
+  void instantiateLatencyBases(LatencyInstantiation &Lat,
+                               LatencyTemplate *Parent, LatencyList &Bases);
   // Instantiation all the latencies (and latency bases) associated with
   // a subunit instantiation.
-  void InstantiateLatencies();
+  void instantiateLatencies();
 
   // Error logging - forward error messages to MdlSpec logger.
   template <typename... Ts>
-  bool ErrorLog(const MdlItem *item, const char *fmt, Ts... params) const;
+  bool ErrorLog(const MdlItem *Item, const char *Fmt, Ts... Args) const;
   template <typename... Ts>
-  void WarningLog(const MdlItem *item, const char *fmt, Ts... params) const;
+  void WarningLog(const MdlItem *Item, const char *Fmt, Ts... Args) const;
   int ErrorsSeen() const;
 
   // Debug: dump all subunit instantiations.
-  void DumpSubUnitInstantiation();
+  void dumpSubUnitInstantiation();
 
-  MdlSpec *spec() const { return spec_; }
-  CpuInstance *cpu() const { return func_unit_->cpu(); }
-  FuncUnitInstantiation *func_unit() const { return func_unit_; }
-  SubUnitInstance *subunit() const { return subunit_; }
-  SubUnitTemplate *su_template() const { return su_template_; }
-  ResourceRefDict &resource_args() { return resource_args_; }
-  ResourceDefDict &port_args() { return port_args_; }
-  ReferenceList &references() { return references_; }
-
-private:
-  MdlSpec *spec_;                    // pointer to entire file description
-  FuncUnitInstantiation *func_unit_; // context of this subunits instantiation
-  SubUnitInstance *subunit_;         // the subunit instance
-  SubUnitTemplate *su_template_;     // the template for this subunit
-  ResourceRefDict resource_args_;    // resource arguments to this instance
-  ResourceDefDict port_args_;        // port arguments to this instance
-  ReferenceList references_;         // instantiated list of references
+  MdlSpec *getSpec() const { return Spec; }
+  CpuInstance *getCpu() const { return FuncUnit->getCpu(); }
+  FuncUnitInstantiation *getFuncUnit() const { return FuncUnit; }
+  SubUnitInstance *getSubunit() const { return SubUnit; }
+  SubUnitTemplate *getSuTemplate() const { return SuTemplate; }
+  ResourceRefDict &getResourceArgs() { return ResourceArgs; }
+  ResourceDefDict &getPortArgs() { return PortArgs; }
+  ReferenceList &getReferences() { return References; }
 };
 
 //----------------------------------------------------------------------------
@@ -2456,35 +2366,32 @@ private:
 // instantiated.
 //----------------------------------------------------------------------------
 class LatencyInstantiation {
+  SubUnitInstantiation *Subunit;      // context of this instantiation
+  LatencyInstance *Latency;           // latency instance
+  LatencyTemplate *LatTemplate;      // template for this latency
+  ResourceRefDict ResourceArgs;      // resource arguments to this instance
+  ResourceDefDict PortArgs;          // port arguments to this instance
+
 public:
-  LatencyInstantiation(SubUnitInstantiation *su, LatencyInstance *latency)
-      : subunit_(su), latency_(latency) {
-    lat_template_ = latency_->get_template();
-  }
+  LatencyInstantiation(SubUnitInstantiation *Su, LatencyInstance *Latency)
+      : Subunit(Su), Latency(Latency), LatTemplate(Latency->getTemplate()) {}
 
   // Bind a resource definition to the associated instantiation parameter.
-  void BindResourceArg(ResourceRef *arg);
+  void bindResourceArg(ResourceRef *Arg);
   // Bind a port definition to the associated instantiation parameter.
-  void BindPortArg(ResourceRef *arg);
+  void bindPortArg(ResourceRef *Arg);
   // Map a latency instantiation parameter to its bound resource.
-  ResourceRef *GetResourceArg(int param_id);
+  ResourceRef *getResourceArg(int ParamId);
   // Map a latency instantiation parameter to its bound resource.
-  ResourceDef *GetPortArg(int param_id);
+  ResourceDef *getPortArg(int ParamId);
   // Debug: dump this latency instantiation.
-  void DumpLatencyInstantiation();
+  void dumpLatencyInstantiation();
 
-  SubUnitInstantiation *subunit() const { return subunit_; }
-  LatencyInstance *latency() const { return latency_; }
-  LatencyTemplate *lat_template() const { return lat_template_; }
-  ResourceRefDict &resource_args() { return resource_args_; }
-  ResourceDefDict &port_args() { return port_args_; }
-
-private:
-  SubUnitInstantiation *subunit_; // context of this instantiation
-  LatencyInstance *latency_;      // latency instance
-  LatencyTemplate *lat_template_; // template for this latency
-  ResourceRefDict resource_args_; // resource arguments to this instance
-  ResourceDefDict port_args_;     // port arguments to this instance
+  SubUnitInstantiation *getSubunit() const { return Subunit; }
+  LatencyInstance *getLatency() const { return Latency; }
+  LatencyTemplate *getLatTemplate() const { return LatTemplate; }
+  ResourceRefDict &getResourceArgs() { return ResourceArgs; }
+  ResourceDefDict &getPortArgs() { return PortArgs; }
 };
 
 //----------------------------------------------------------------------------
@@ -2492,350 +2399,348 @@ private:
 // MdlSpec owns all of these vectors and their contents.
 //----------------------------------------------------------------------------
 class MdlSpec {
+  std::string FamilyName;              // Family name of processors.
+  PipeDefList PipeDefs;                // List of pipe specs defined in mdl.
+  ResourceDefList Resources;           // List of resources defined in mdl.
+  RegisterDefList Registers;           // List of registers defined in mdl.
+  RegisterClassList RegClasses;        // List of register classes defined.
+  CpuList Cpus;                        // List of CPU's defined.
+  FuncUnitList FuncUnits;              // List of functional unit templates.
+  FuncUnitGroupList FuncUnitGroups;    // List of functional unit groups.
+  SubUnitList Subunits;                // List of subunit templates defined.
+  LatencyList Latencies;               // List of latency templates defined.
+  InstructionList Instructions;        // List of instruction definitions.
+  OperandDefList Operands;             // List of operand definitions.
+
+  FuncUnitDict FuMap;                  // Dictionary of func unit templates.
+  FuncUnitGroupDict FuGroupMap;        // Dictional of func unit groups.
+  SubUnitDict SuMap;                   // Dictionary of subunit templates.
+  LatencyDict LatMap;                  // Dictionary of latency templates.
+  OperandDict OperandMap;              // Dictionary of operand definitions.
+  InstructionDict InstructionMap;      // Dictionary of instruction definitions.
+  RegisterClassDict RegisterClassMap;  // Dictionary of register classes.
+  SubUnitInstantiations SuInstantiations; // Table of all su instances.
+
+  // Set of all names that can be used as mdl predicates.
+  std::unordered_set<std::string> ValidPredicateNames;
+
+  // Dictionary of user-defined predicate expressions, indexed by name.
+  std::map<std::string, PredExpr *> PredicateTable;
+
+  // Cache the first phase name found in the spec.
+  PhaseName *FirstPhaseName = nullptr; // lowest pipeline phase.
+
+  // Objects to manage error logging.
+  std::unordered_set<std::string> ErrorMessages;
+  int ErrorCount = 0; // Fatal error count.
+  int WarningCount = 0;
+  bool PrintWarnings = true;
+  bool WarningsAreFatal = false;
+  bool HasExplicitFuRefs = false;
+
 public:
-  MdlSpec(bool print_warnings, bool warnings_are_fatal)
-      : print_warnings_(print_warnings),
-        warnings_are_fatal_(warnings_are_fatal) {
-    AddBuiltinPredicates();
+  MdlSpec(bool PrintWarnings, bool WarningsAreFatal)
+      : PrintWarnings(PrintWarnings), WarningsAreFatal(WarningsAreFatal) {
+    addBuiltinPredicates();
   }
 
-  void AddSubUnitInstantiation(SubUnitInstantiation *su) {
-    su_instantiations_[su->subunit()->name()]->push_back(su);
+  void addSubUnitInstantiation(SubUnitInstantiation *Su) {
+    SuInstantiations[Su->getSubunit()->getName()]->push_back(Su);
   }
 
   // Create default subunits to instructions that don't have subunits.
-  void CheckInstructionSubunits();
+  void checkInstructionSubunits();
 
   // Add a subunit instance to a "catchall" functional unit, and add it to the
   // specified cpu.
-  void AddSubunitToCpu(CpuInstance *cpu, SubUnitTemplate *subunit);
+  void addSubunitToCpu(CpuInstance *Cpu, SubUnitTemplate *Subunit);
 
   // Scan latency templates to find which functional units they reference,
   // then tie each client subunit to any referenced functional units.
-  void FindLatencyFuncUnits(ReferenceList *references,
-                                             LatencyFuncUnits &func_units);
-  void FindLatencyFuncUnits(LatencyTemplate *lat);
-  void FindFunctionalUnitClientCpus(FuncUnitTemplate *funit, CpuInstance *cpu);
-  void FindFunctionalUnitClientCpus();
-  void TieSubUnitsToFunctionalUnits();
+  void findLatencyFuncUnits(ReferenceList *References,
+                                             LatencyFuncUnits &FuncUnits);
+  void findLatencyFuncUnits(LatencyTemplate *Lat);
+  void findFunctionalUnitClientCpus(FuncUnitTemplate *Funit, CpuInstance *Cpu);
+  void findFunctionalUnitClientCpus();
+  void tieSubUnitsToFunctionalUnits();
 
   // Tie a subunit to a set of instructions that match a set of
   // regular expressions.
-  void TieSubUnitToInstructions(SubUnitTemplate *su, StringList *regex_bases);
+  void tieSubUnitToInstructions(SubUnitTemplate *su, StringList *RegExBases);
   // Tie a derived subunit to any instruction associated with any of its bases.
-  void TieDerivedSubUnitsToInstructions();
+  void tieDerivedSubUnitsToInstructions();
 
   // Check that the input spec has some basic required components.
-  void CheckInputStructure();
+  void checkInputStructure();
 
   // Create a function unit instance object and add to the functional unit
   // instance table.
-  FuncUnitInstantiation *AddFuncUnitInstantiation(CpuInstance *cpu,
-                                                  ClusterInstance *cluster,
-                                                  FuncUnitInstance *fu_inst);
+  FuncUnitInstantiation *addFuncUnitInstantiation(CpuInstance *Cpu,
+                                                  ClusterInstance *Cluster,
+                                                  FuncUnitInstance *FuInst);
 
   // Create a base function unit instance object and add to table.
   FuncUnitInstantiation *
-  AddFuncUnitBaseInstantiation(FuncUnitInstantiation *parent,
-                               FuncUnitTemplate *base);
+  addFuncUnitBaseInstantiation(FuncUnitInstantiation *Parent,
+                               FuncUnitTemplate *Base);
 
   // Create dictionaries for functional units, subunits, and latencies.
   // We don't care here about duplicate names (checked separately).
   // Also build instance tables for functional units and subunits.
-  void BuildDictionaries();
-  void FindImplicitFuncUnitTemplates();
-  void FindValidPredicateNames();
-  void IsValidPredicateName(const Identifier *name);
+  void buildDictionaries();
+  void findImplicitFuncUnitTemplates();
+  void findValidPredicateNames();
+  void isValidPredicateName(const Identifier *Name);
 
   // First-round semantic checking of the input machine description.
-  void SameParams(const ParamsList *params, const ParamsList *base_params,
-                  MdlItem *item);
-  void ValidateArgs(const ParamsList *params, const ResourceRefList *instance,
-                    MdlItem *item);
-  void CheckForDuplicateDefs();
-  void CheckTemplateBases();
+  void sameParams(const ParamsList *TempParams, const ParamsList *BaseParams,
+                  MdlItem *Item);
+  void validateArgs(const ParamsList *Args,
+                    const ResourceRefList *Instance, MdlItem *Item);
+  void checkForDuplicateDefs();
+  void checkTemplateBases();
 
-  bool ExpandGroup(FuncUnitGroup *group, IdList *members, unsigned depth);
-  void CheckInstantiations();
-  void CheckIssueSlots();
-  void CheckInstructions();
-  void CheckOperand(OperandDecl *operand_decl);
-  bool CheckRecursiveOperands(OperandDef *opnd, OperandDefList &seen);
-  void CheckOperandDerivations(OperandDef *opnd);
-  void CheckOperands();
-  void CheckConditionalReferences(ConditionalRef *cond_ref);
-  void CheckReferences();
-  void CheckReferenceUse();                      // Look for unused references.
-  void CheckSubunitUse();                        // Look for unused subunits.
-  void CheckResourceDef(const ResourceDef *def); // Check a single resource.
-  void CheckResourceDefs(); // Make sure shared pools are properly declared.
-  void CheckResourceUse();  // Look for suspect resource use.
+  bool expandGroup(FuncUnitGroup *Group, IdList *Members, unsigned Depth);
+  void checkInstantiations();
+  void checkIssueSlots();
+  void checkInstructions();
+  void checkOperand(OperandDecl *Opnd);
+  bool checkRecursiveOperands(OperandDef *Opnd, OperandDefList &Seen);
+  void checkOperandDerivations(OperandDef *Opnd);
+  void checkOperands();
+  void checkConditionalReferences(ConditionalRef *CondRef);
+  void checkReferences();
+  void checkReferenceUse();                      // Look for unused references.
+  void checkSubunitUse();                        // Look for unused subunits.
+  void checkResourceDef(const ResourceDef *Def); // Check a single resource.
+  void checkResourceDefs(); // Make sure shared pools are properly declared.
+  void checkResourceUse();  // Look for suspect resource use.
 
   // Add global resource definitions to each CPU.
-  void PromoteGlobalResources();
+  void promoteGlobalResources();
   // Scan resource definitions for CPUs, Clusters, and Functional Unit
   // Templates and promote any group member to a general resource.
-  void PromoteResourceGroupMembers(ResourceDefList *resources,
-                                   ResourceDefList *outer_scope,
-                                   ResourceRefDict *args);
-  void PromoteFuncUnitGroupAregs(ClusterInstance *cluster);
-  void PromoteResourceGroups();
-  void CheckPromotedMember(ResourceDef *group, Identifier *member,
-                           ResourceDef *promoted);
+  void promoteResourceGroupMembers(ResourceDefList *Resources,
+                                   ResourceDefList *OuterScope,
+                                   ResourceRefDict *Args);
+  void promoteResourceGroups();
+  void checkPromotedMember(ResourceDef *Group, Identifier *Member,
+                           ResourceDef *Promoted);
 
-  void FlattenOperand(OperandDecl *opnd, OperandDeclList *flat_ops);
-  void FlattenInstructionOperands();
-  void CheckPhaseDefinitions(PipeDefList *pipes);
-  void SpecializePhaseExpr(PhaseExpr *expr, CpuInstance *cpu);
-  void CheckReferencePhases(ReferenceList *refs);
-  void CheckPipeReferences();
-  void CheckPipeReference(ResourceDef *def, CpuInstance *cpu);
-  bool CheckSubOperands(OperandRef *ref, const Identifier *opnd, int idx);
-  PhaseName *SearchPipeReference(Identifier *phase, CpuInstance *cpu);
-  PhaseName *FindPipeReference(Identifier *phase, CpuInstance *cpu);
+  void flattenOperand(OperandDecl *Opnd, OperandDeclList *FlatOps);
+  void flattenInstructionOperands();
+  void checkPhaseDefinitions(PipeDefList *Pipes);
+  void specializePhaseExpr(PhaseExpr *Expr, CpuInstance *Cpu);
+  void checkReferencePhases(ReferenceList *Refs);
+  void checkPipeReferences();
+  void checkPipeReference(ResourceDef *Def, CpuInstance *Cpu);
+  bool checkSubOperands(OperandRef *Ref, const Identifier *Opnd, int Idx);
+  PhaseName *searchPipeReference(Identifier *Phase, CpuInstance *Cpu);
+  PhaseName *findPipeReference(Identifier *Phase, CpuInstance *Cpu);
 
   // Return the first phase of the first pipeline definition.
-  PhaseName *FindFirstPhase();
+  PhaseName *findFirstPhase();
   // Return the first phase identified as an "execute" phase.
-  PhaseName *FindFirstExecutePhase(CpuInstance *cpu);
+  PhaseName *findFirstExecutePhase(CpuInstance *Cpu);
 
   // Instantiate base functional unit instances.
-  void AddFunctionalUnitBases(FuncUnitInstantiation *parent);
+  void addFunctionalUnitBases(FuncUnitInstantiation *Parent);
   // Instantiate a single functional unit instance.
-  void InstantiateFunctionalUnit(CpuInstance *cpu, ClusterInstance *cluster,
-                                 FuncUnitInstance *fu);
+  void instantiateFunctionalUnit(CpuInstance *Cpu, ClusterInstance *Cluster,
+                                 FuncUnitInstance *Fu);
   // Iterate over the spec and instantiate every functional unit instance.
-  void InstantiateFunctionalUnits();
+  void instantiateFunctionalUnits();
   // For every CPU, build a map of instances for each functional unit template.
-  void BuildFuncUnitInstancesMap();
+  void buildFuncUnitInstancesMap();
   // Assign ids to every resource.
-  void AssignResourceIds();
+  void assignResourceIds();
   // Assign ids to each pooled resource.
-  void AssignPoolIds();
+  void assignPoolIds();
   // Debug: Dump every resource id and its context.
-  void DumpResourceIds();
+  void dumpResourceIds();
 
   // Print out the entire specification.
   std::string ToString() const;
   // Debug: dump out all subunit instantiations.
-  void DumpSubUnitInstantiations();
+  void dumpSubUnitInstantiations();
   // Debug: dump out all functional unit instantiations.
-  void DumpFuncUnitInstantiations();
+  void dumpFuncUnitInstantiations();
   // Debug: dump out all user-defined predicates.
-  void DumpPredicates();
+  void dumpPredicates();
 
-  void AddBuiltinPredicates() {
-    std::string ktrue = "TruePred", kfalse = "FalsePred";
-    EnterPredicate(ktrue, new PredExpr(PredOp::kTrue));
-    EnterPredicate(kfalse, new PredExpr(PredOp::kFalse));
+  void addBuiltinPredicates() {
+    std::string Ktrue = "TruePred", Kfalse = "FalsePred";
+    enterPredicate(Ktrue, new PredExpr(PredOp::kTrue));
+    enterPredicate(Kfalse, new PredExpr(PredOp::kFalse));
   }
 
 public:
   // Template function to check for duplicate entries in two symbol definition
   // lists. Print an error message for each duplicate found.
   template <typename A, typename B>
-  void FindDuplicates(const std::vector<A *> &a, const std::vector<B *> &b) {
-    for (auto *a_item : a)
-      for (auto *b_item : b)
-        if (a_item->name() == b_item->name())
+  void findDuplicates(const std::vector<A *> &Va, const std::vector<B *> &Vb) {
+    for (auto *AItem : Va)
+      for (auto *BItem : Vb)
+        if (AItem->getName() == BItem->getName())
           ErrorLog(
-              a_item,
+              AItem,
               "Duplicate definition of {0}\n     Previously defined at {1}",
-              a_item->name(), b_item->Location());
+              AItem->getName(), BItem->getLocation());
   }
 
   // Template function to check a vector of definitions to make sure
   // each name is unique. Print an error message for each duplicate found.
   // Don't bother checking empty names associated with implied operands.
-  template <typename A> void FindDuplicates(const std::vector<A *> &items) {
-    for (unsigned i = 0; i < items.size(); i++)
-      for (unsigned j = i + 1; j < items.size(); j++)
-        if (!items[i]->name().empty() && items[i]->name() == items[j]->name()) {
+  template <typename A> void findDuplicates(const std::vector<A *> &Items) {
+    for (unsigned I = 0; I < Items.size(); I++)
+      for (unsigned J = I + 1; J < Items.size(); J++)
+        if (!Items[I]->getName().empty() &&
+            Items[I]->getName() == Items[J]->getName()) {
           ErrorLog(
-              items[j],
+              Items[J],
               "Duplicate definition of {0}\n     Previously defined at {1}",
-              items[j]->name(), items[i]->Location());
+              Items[J]->getName(), Items[I]->getLocation());
           break; // We only need to find the first duplicate for each item.
         }
   }
 
   // Check the member list of a resource definition for duplicate members.
-  void FindDuplicateMembers(ResourceDefList &items) {
-    for (auto *item : items)
-      if (item->IsGroupDef())
-        FindDuplicates(item->members());
+  void findDuplicateMembers(ResourceDefList &Items) {
+    for (auto *Item : Items)
+      if (Item->isGroupDef())
+        findDuplicates(Item->getMembers());
   }
 
   // Methods for looking up and matching operands in instructions.
-  int GetOperandIndex(const InstructionDef *instr, const OperandRef *operand,
-                      RefType ref_type);
-  bool CompareOpndNames(const OperandDecl *opnd, const IdList &names);
-  int FindOperandName(const InstructionDef *instruct, const IdList &names,
-                      RefType type);
-  int FindOperand(const InstructionDef *instr, const IdList &name,
-                  const std::string &type, RefType ref_type);
-  bool FindOperandDerivation(const OperandDef *derived,
-                             const OperandDef *operand) const;
-
-  // Accessors (all return references, so can't be const).
-  PipeDefList &pipe_phases() { return pipe_phases_; }
-  ResourceDefList &resources() { return resources_; }
-  RegisterDefList &registers() { return registers_; }
-  RegisterClassList &reg_classes() { return reg_classes_; }
-  CpuList &cpus() { return cpus_; }
-  FuncUnitList &func_units() { return func_units_; }
-  FuncUnitGroupList &func_unit_groups() { return func_unit_groups_; }
-  SubUnitList &subunits() { return subunits_; }
-  LatencyList &latencies() { return latencies_; }
-  InstructionList &instructions() { return instructions_; }
-  OperandDefList &operands() { return operands_; }
-
-  FuncUnitDict &fu_map() { return fu_map_; }
-  FuncUnitGroupDict &fu_group_map() { return fu_group_map_; }
-  SubUnitDict &su_map() { return su_map_; }
-  LatencyDict &lat_map() { return lat_map_; }
-  OperandDict &operand_map() { return operand_map_; }
-  InstructionDict &instruction_map() { return instruction_map_; }
-  RegisterClassDict &reg_class_map() { return register_class_map_; }
-  SubUnitInstantiations &su_instantiations() { return su_instantiations_; }
-
-  bool IsFuncUnitTemplate(const std::string &name) const {
-    return fu_map_.count(name);
-  }
-  bool IsFuncUnitGroup(const std::string &name) const {
-    return fu_group_map_.count(name);
-  }
-
-  void set_family_name(const Identifier *name) {
-    if (!family_name_.empty() && family_name_ != name->name())
-      ErrorLog(name, "Incompatible family name specification");
-    else
-      family_name_ = name->name();
-  }
-  std::string family_name() const { return family_name_; }
+  int getOperandIndex(const InstructionDef *Instr, const OperandRef *Operand,
+                      RefType Type);
+  bool compareOpndNames(const OperandDecl *Opnd, const IdList &Names);
+  int findOperandName(const InstructionDef *Instruct, const IdList &Names,
+                      RefType Type);
+  int findOperand(const InstructionDef *Instr, const IdList &Name,
+                  const std::string &OpndType, RefType Type);
+  bool findOperandDerivation(const OperandDef *Derived,
+                             const OperandDef *Operand) const;
 
   // Error and Warning management.
   template <typename... Ts>
-  bool ErrorLog(const MdlItem *item, const char *fmt, Ts... params);
-  bool ErrorLog(const MdlItem *item, const std::string &msg) {
-    WriteMessage(item, msg);
-    error_count_++;
+  bool ErrorLog(const MdlItem *Item, const char *Fmt, Ts... Args);
+  bool ErrorLog(const MdlItem *Item, const std::string &Msg) {
+    writeMessage(Item, Msg);
+    ErrorCount++;
     return true;
   }
-
   template <typename... Ts>
-  void WarningLog(const MdlItem *item, const char *fmt, Ts... params);
-  void WarningLog(const MdlItem *item, const std::string &msg) {
-    if (print_warnings_ || warnings_are_fatal_) {
-      std::string prefix = !warnings_are_fatal_ ? "Warning: " : "";
-      WriteMessage(item, prefix + msg);
-      warning_count_++;
+  void WarningLog(const MdlItem *Item, const char *Fmt, Ts... Args);
+  void WarningLog(const MdlItem *Item, const std::string &Msg) {
+    if (PrintWarnings || WarningsAreFatal) {
+      std::string Prefix = !WarningsAreFatal ? "Warning: " : "";
+      writeMessage(Item, Prefix + Msg);
+      WarningCount++;
     }
   }
 
   int ErrorsSeen() const {
-    return error_count_ + (warnings_are_fatal_ ? warning_count_ : 0);
+    return ErrorCount + (WarningsAreFatal ? WarningCount : 0);
   }
-  int WarningsSeen() const { return warning_count_; }
+  int WarningsSeen() const { return WarningCount; }
 
   // Error logging: Avoid printing identical error messages.
-  void WriteMessage(const MdlItem *item, const std::string &msg);
-
-  int PredOperandIndex(const PredExpr *pred, const InstructionDef *instr);
+  void writeMessage(const MdlItem *Item, const std::string &Msg);
 
   // Functions to manipulate user-defined predicates. Predicates are defined
   // in an instruction-independent manner, yet in the MDL compiler we apply
   // each predicate to each associated instruction, so that we can partially
   // (and often completely) eliminate the predicate at compiler-build time.
-  PredExpr *EvaluatePredicate(std::string name, const InstructionDef *instr);
-  PredExpr *EvaluatePredicate(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredSimple(PredExpr *pred, const InstructionDef *instr) {
-    return pred;
+  int predOperandIndex(const PredExpr *Pred, const InstructionDef *Instr);
+
+  PredExpr *evaluatePredicate(std::string Name, const InstructionDef *Instr);
+  PredExpr *evaluatePredicate(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predSimple(PredExpr *Pred, const InstructionDef *Instr) {
+    return Pred;
   }
-  PredExpr *PredEvalName(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredCheckAny(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredCheckAll(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredCheckNot(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredCheckOpcode(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredCheckIsReg(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredCheckReg(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredCheckInvalidReg(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredCheckSameReg(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredCheckNumOperand(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredCheckIsImm(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredCheckImm(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredCheckZero(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredOpcodeSwitchStmt(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredOpcodeSwitchCase(PredExpr *pred, const InstructionDef *instr);
-  PredExpr *PredReturnStatement(PredExpr *pred, const InstructionDef *instr);
+  PredExpr *predEvalName(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predCheckAny(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predCheckAll(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predCheckNot(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predCheckOpcode(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predCheckIsReg(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predCheckReg(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predCheckInvalidReg(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predCheckSameReg(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predCheckNumOperand(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predCheckIsImm(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predCheckImm(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predCheckZero(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predOpcodeSwitchStmt(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predOpcodeSwitchCase(PredExpr *Pred, const InstructionDef *Instr);
+  PredExpr *predReturnStatement(PredExpr *Pred, const InstructionDef *Instr);
 
   // Functions to simpify predicates (this largely implements De Morgan's laws
   // on predicate expressions.
-  void SimplifyPredicates();
-  PredExpr *PredSimplify(PredExpr *expr);
+  void simplifyPredicates();
+  PredExpr *predSimplify(PredExpr *Expr);
 
   // Interfaces to the instruction predicate table.
-  bool IsValidInstructionPredicate(const std::string &name) const {
-    return predicate_table_.count(name);
+  bool isValidInstructionPredicate(const std::string &Name) const {
+    return PredicateTable.count(Name);
   }
   // Look up a predicate by name, and return the associated predicate.
   // If the predicate maps to a name, recur on that name.
-  PredExpr *LookupPredicate(PredExpr *pred);
+  PredExpr *lookupPredicate(PredExpr *Pred);
 
-  void EnterPredicate(const std::string &name, PredExpr *pred) {
-    if (!IsValidInstructionPredicate(name)) {
-      predicate_table_[name] = pred;
+  void enterPredicate(const std::string &Name, PredExpr *Pred) {
+    if (!isValidInstructionPredicate(Name)) {
+      PredicateTable[Name] = Pred;
       return;
     }
-    if (name == "TruePred" || name == "FalsePred")
+    if (Name == "TruePred" || Name == "FalsePred")
       return;
-    ErrorLog(pred, "Redefinition of predicate: {0}", name);
+    ErrorLog(Pred, "Redefinition of predicate: {0}", Name);
   }
-  std::map<std::string, PredExpr *> &predicate_table() {
-    return predicate_table_;
+
+  // Class member accessors
+  std::map<std::string, PredExpr *> &getPredicateTable() {
+    return PredicateTable;
   }
-  bool has_explicit_fu_refs() const { return has_explicit_fu_refs_; }
-  void set_explicit_fu_refs() { has_explicit_fu_refs_ = true; }
+  PipeDefList &getPipePhases() { return PipeDefs; }
+  ResourceDefList &getResources() { return Resources; }
+  RegisterDefList &getRegisters() { return Registers; }
+  RegisterClassList &getRegClasses() { return RegClasses; }
+  CpuList &getCpus() { return Cpus; }
+  FuncUnitList &getFuncUnits() { return FuncUnits; }
+  FuncUnitGroupList &getFuncUnitGroups() { return FuncUnitGroups; }
+  SubUnitList &getSubunits() { return Subunits; }
+  LatencyList &getLatencies() { return Latencies; }
+  InstructionList &getInstructions() { return Instructions; }
+  OperandDefList &getOperands() { return Operands; }
 
-private:
-  std::string family_name_;            // Family name of processors.
-  PipeDefList pipe_phases_;            // List of pipe specs defined in mdl.
-  ResourceDefList resources_;          // List of resources defined in mdl.
-  RegisterDefList registers_;          // List of registers defined in mdl.
-  RegisterClassList reg_classes_;      // List of register classes defined.
-  CpuList cpus_;                       // List of CPU's defined.
-  FuncUnitList func_units_;            // List of functional unit templates.
-  FuncUnitGroupList func_unit_groups_; // List of functional unit groups.
-  SubUnitList subunits_;               // List of subunit templates defined.
-  LatencyList latencies_;              // List of latency templates defined.
-  InstructionList instructions_;       // List of instruction definitions.
-  OperandDefList operands_;            // List of operand definitions.
+  FuncUnitDict &getFuMap() { return FuMap; }
+  FuncUnitGroupDict &getFuGroupMap() { return FuGroupMap; }
+  SubUnitDict &getSuMap() { return SuMap; }
+  LatencyDict &getLatMap() { return LatMap; }
+  OperandDict &getOperandMap() { return OperandMap; }
+  InstructionDict &getInstructionMap() { return InstructionMap; }
+  RegisterClassDict &getRegClassMap() { return RegisterClassMap; }
+  SubUnitInstantiations &getSuInstantiations() { return SuInstantiations; }
 
-  FuncUnitDict fu_map_;             // Dictionary of functional unit templates.
-  FuncUnitGroupDict fu_group_map_;  // Dictional of functional unit groups.
-  SubUnitDict su_map_;              // Dictionary of subunit templates.
-  LatencyDict lat_map_;             // Dictionary of latency templates.
-  OperandDict operand_map_;         // Dictionary of operand definitions.
-  InstructionDict instruction_map_; // Dictionary of instruction definitions.
-  RegisterClassDict register_class_map_;    // Dictionary of register classes.
-  SubUnitInstantiations su_instantiations_; // Table of all su instances.
+  bool isFuncUnitTemplate(const std::string &Name) const {
+    return FuMap.count(Name);
+  }
+  bool isFuncUnitGroup(const std::string &Name) const {
+    return FuGroupMap.count(Name);
+  }
 
-  // Set of all names that can be used as mdl predicates.
-  std::unordered_set<std::string> valid_predicate_names_;
+  void setFamilyName(const Identifier *Name) {
+    if (!FamilyName.empty() && FamilyName != Name->getName())
+      ErrorLog(Name, "Incompatible family name specification");
+    else
+      FamilyName = Name->getName();
+  }
+  std::string getFamilyName() const { return FamilyName; }
 
-  // Dictionary of user-defined predicate expressions, indexed by name.
-  std::map<std::string, PredExpr *> predicate_table_;
-
-  // Cache the first phase name found in the spec.
-  PhaseName *first_phase_name_ = nullptr; // lowest pipeline phase.
-
-  // Objects to manage error logging.
-  std::unordered_set<std::string> error_messages_;
-  int error_count_ = 0; // Fatal error count.
-  int warning_count_ = 0;
-  bool print_warnings_ = true;
-  bool warnings_are_fatal_ = false;
-  bool has_explicit_fu_refs_ = false;
+  bool hasExplicitFuRefs() const { return HasExplicitFuRefs; }
+  void setExplicitFuRefs() { HasExplicitFuRefs = true; }
 };
 
 //----------------------------------------------------------------------------
@@ -2849,24 +2754,24 @@ inline std::string formatv(const char *fmt, Ts &&...vals) {
 template <typename... Ts>
 bool SubUnitInstantiation::ErrorLog(const MdlItem *item, const char *fmt,
                                     Ts... params) const {
-  return spec()->ErrorLog(item, fmt, params...);
+  return getSpec()->ErrorLog(item, fmt, params...);
 }
 
 template <typename... Ts>
 void SubUnitInstantiation::WarningLog(const MdlItem *item, const char *fmt,
                                       Ts... params) const {
-  spec()->WarningLog(item, fmt, params...);
+  getSpec()->WarningLog(item, fmt, params...);
 }
 
 template <typename... Ts>
 bool FuncUnitInstantiation::ErrorLog(const MdlItem *item, const char *fmt,
                                      Ts... params) const {
-  return spec()->ErrorLog(item, fmt, params...);
+  return getSpec()->ErrorLog(item, fmt, params...);
 }
 template <typename... Ts>
 void FuncUnitInstantiation::WarningLog(const MdlItem *item, const char *fmt,
                                        Ts... params) const {
-  spec()->WarningLog(item, fmt, params...);
+  getSpec()->WarningLog(item, fmt, params...);
 }
 
 template <typename... Ts>
@@ -2888,9 +2793,9 @@ extern ResourceRef *NullResourceRef;
 extern RegisterClass *NullRegisterClass;
 extern ResourceDef *NullPortDef;
 
-bool FindDerivation(OperandDef *ref, const OperandDef *decl,
-                    OperandDefList &opnds);
-OperandAttribute *FindAttribute(const std::string &name, const OperandDef *opnd,
+bool findDerivation(OperandDef *ref, const OperandDef *decl,
+                    OperandDefList &Opnds);
+OperandAttribute *findAttribute(const std::string &name, const OperandDef *Opnd,
                                 const SubUnitInstantiation *subunit);
 
 } // namespace mdl
