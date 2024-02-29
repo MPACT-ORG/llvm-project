@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Definitions for parsing the machine description language.
+// Definitions for lexing and parsing the machine description language.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -27,7 +27,7 @@
 namespace mpact {
 namespace mdl {
 
-enum TokenType {
+enum TokenKind {
   TK_NONE = 0,
   TK_ENDOFFILE,
 
@@ -59,16 +59,14 @@ enum TokenType {
   TK_VIA,
 
   // Keywords that can probably not be keywords
-  TK_BEGINGROUP, TK_ENDGROUP, TK_SINGLEISSUE, TK_RETIREOOO,   // TODO
+  TK_BEGINGROUP, TK_ENDGROUP, TK_SINGLEISSUE, TK_RETIREOOO,
   TK_USE, TK_DEF, TK_KILL, TK_RES, TK_HOLD,
   TK_FUS, TK_USEDEF, TK_IF, TK_ELSE,
 
-  // Tokens with 1, 2, or 3 special characters
+  // Delimiters
   TK_SEMI,
   TK_COLON,
   TK_SHARP,
-
-  // Delimters
   TK_COMMA,
   TK_LPAREN, TK_RPAREN,
   TK_LBRACKET, TK_RBRACKET,
@@ -90,11 +88,11 @@ enum TokenType {
 //----------------------------------------------------------------------------
 // Define a single Token, which independently records its location info.
 //----------------------------------------------------------------------------
-struct Token : public MdlItem {
-  Token() : MdlItem(), type(TK_NONE), value(0) {}
-  TokenType type = TK_NONE; // Type of current token
-  std::string text;         // Text of current token
-  long value;               // Numerical value of token
+struct TokenType : public MdlItem {
+  TokenType() : MdlItem(), Type(TK_NONE), Value(0) {}
+  TokenKind Type = TK_NONE;         // Type of current token
+  std::string Text;                 // Text of current token
+  long Value = 0;                   // Numerical value of a NUMBER token
 };
 
 //----------------------------------------------------------------------------
@@ -105,104 +103,102 @@ struct Token : public MdlItem {
 // implement lookahead for the parser.
 //----------------------------------------------------------------------------
 class MdlLexer {
+  MdlSpec &Spec;
+  std::fstream &Stream;           // Input stream
+  std::string *FileName;          // Input file name.
+  int LineNumber = 0;             // Current line number in the input file.
+  int ColumnNumber = -1;          // Current column number in the current line.
+  std::string CurrentLine;        // Text of current line in the input file.
+
+  TokenType Token;                // Current token.
+  std::queue<TokenType> Tokens;   // Used for lookahead
+  TokenType Accepted;             // TODO? - maybe implement this
+
  public:
-   MdlLexer(MdlSpec &spec, std::string *file_name,
-            std::fstream *stream)
-       : spec(spec), stream(*stream), file_name(file_name),
-         line_number(0), column_number(-1)
+   MdlLexer(MdlSpec &Spec, std::string *FileName, std::fstream *Stream)
+       : Spec(Spec), Stream(*Stream), FileName(FileName),
+         LineNumber(0), ColumnNumber(-1)
          { getLine(); getNext(); }
-  ~MdlLexer() { stream.close(); }
-
- private:
-  MdlSpec &spec;
-  std::fstream &stream;       // Input stream
-  std::string *file_name;     // Input file name.
-  int line_number = 0;        // Current line number in the input file.
-  int column_number = -1;     // Current column number in the current line.
-  std::string current_line;   // Text of current line in the input file.
-
-  Token token;                // Current token.
-  std::queue<Token> tokens;   // Used for lookahead
-  Token accepted;             // TODO - maybe implement this
+  ~MdlLexer() { Stream.close(); }
 
  public:
   // Overload a lexer's () operator to get a reference to the token.
-  MdlItem &operator() () { return token; }
+  MdlItem &operator() () { return Token; }
 
   // Fetch the next input line.
   bool getLine();
   bool skipSpace();
   // Get the next token;
-  void getNext() { getNext(token);}
-  void getNext(Token &token, bool peeking = false);
+  void getNext() { getNext(Token);}
+  void getNext(TokenType &Token, bool Peeking = false);
 
   // Return the type, text, or  numerical value of the current token.
-  TokenType getType() const { return token.type; }
-  std::string getText() const { return token.text; }
-  long getValue() const { return token.value; }
-  std::string TokenString(TokenType t);
+  TokenKind getType() const { return Token.Type; }
+  std::string getText() const { return Token.Text; }
+  long getValue() const { return Token.Value; }
+  std::string TokenString(TokenKind T);
 
-  void getString(Token &token);
-  void getIdent(Token &token);
-  void checkKeywords(Token &token);
-  void getNumber(Token &token);
+  void getString(TokenType &Token);
+  void getIdent(TokenType &Token);
+  void checkKeywords(TokenType &Token);
+  void getNumber(TokenType &Token);
   bool getCodeEscape();
 
   template <typename ... Ts>
-  void Error(const char *fmt, Ts... params) {
-    spec.ErrorLog(&token, fmt, params...);
+  void Error(const char *Fmt, Ts... Args) {
+    Spec.ErrorLog(&Token, Fmt, Args...);
   }
   template <typename ... Ts>
-  void Error(MdlItem &item, const char *fmt, Ts... params) {
-    spec.ErrorLog(&item, fmt, params...);
+  void Error(MdlItem &Item, const char *Fmt, Ts... Args) {
+    Spec.ErrorLog(&Item, Fmt, Args...);
   }
 
   // Return true if the current token is one of specified token types.
-  bool check(TokenType t) { return check(token, t); }
-  template <typename... T2>
-     bool check(TokenType t1, T2... t2) {
-       return check(token, t1) || check(token, t2...); }
+  bool check(TokenKind T) { return check(Token, T); }
+  template <typename... Ts>
+     bool check(TokenKind T1, Ts... T2) {
+       return check(Token, T1) || check(Token, T2...); }
 
-  bool check(Token &token, TokenType t) { return token.type == t; }
-  template <typename... T2>
-     bool check(Token &token, TokenType t1, T2... t2) {
-       return check(token, t1) || check(token, t2...); }
+  bool check(TokenType &Token, TokenKind T) { return Token.Type == T; }
+  template <typename... Ts>
+     bool check(TokenType &Token, TokenKind T1, Ts... T2) {
+       return check(Token, T1) || check(Token, T2...); }
 
   // Accept a token if it is one of the specified types.
-  TokenType accept(TokenType t) {
-    if (t != token.type) return TK_NONE;
+  TokenKind accept(TokenKind T) {
+    if (T != Token.Type) return TK_NONE;
     getNext();
-    return t;
+    return T;
   }
-  template <typename... T2> TokenType accept(TokenType t1, T2... t2) {
-    return accept(t1) ? t1 : accept(t2...);
+  template <typename... Ts> TokenKind accept(TokenKind T1, Ts... T2) {
+    return accept(T1) ? T1 : accept(T2...);
   }
 
   // Accept a token if it is the proper type, otherwise issue an error message.
-  bool expect(const TokenType& t) {
-    if (t == token.type) { getNext(); return true; }
-    Error(token, "{0} expected", TokenString(t));
+  bool expect(const TokenKind& T) {
+    if (T == Token.Type) { getNext(); return true; }
+    Error(Token, "{0} expected", TokenString(T));
     return false;
   }
 
   // Skip tokens until one of an input set is found.  Recur on braces and
-  // parens to handle nested objects.
+  // parens to handle nested constructs.
   template <typename... Ts>
-  void SkipUntil(Ts... params) {
-    for (; !check(params...); getNext()) {
-      if (token.type == TK_LBRACE) {
+  void skipUntil(Ts... Args) {
+    for (; !check(Args...); getNext()) {
+      if (Token.Type == TK_LBRACE) {
         getNext();
-        SkipUntil(TK_RBRACE);
+        skipUntil(TK_RBRACE);
         continue;
       }
-      if (token.type == TK_2LBRACE) {
+      if (Token.Type == TK_2LBRACE) {
         getNext();
-        SkipUntil(TK_2RBRACE);
+        skipUntil(TK_2RBRACE);
         continue;
       }
-      if (token.type == TK_LPAREN) {
+      if (Token.Type == TK_LPAREN) {
         getNext();
-        SkipUntil(TK_RPAREN);
+        skipUntil(TK_RPAREN);
         continue;
       }
     }
@@ -211,24 +207,24 @@ class MdlLexer {
   //-------------------------------------------------------------------------
   // Implement a lookahead capability to peek at future tokens.
   //-------------------------------------------------------------------------
-  bool peek(TokenType t) {
+  bool peek(TokenKind T) {
     // Push token into queue
-    Token next;
-    getNext(next, true);                // Don't peek at current queue!
-    tokens.push(next);
-    return check(tokens.back(), t);     // Check the last item in the queue.
+    TokenType Next;
+    getNext(Next, true);                // Don't peek at current queue!
+    Tokens.push(Next);
+    return check(Tokens.back(), T);     // Check the last item in the queue.
   }
-  template <typename... T> bool peek(T... t) {
+  template <typename... T> bool peek(T... Args) {
     // Push token into queue
-    Token next;
-    getNext(next, true);                // Don't peek at current queue!
-    tokens.push(next);
-    return check(tokens.back(), t...);  // Check the last item in the queue.
+    TokenType Next;
+    getNext(Next, true);                // Don't peek at current queue!
+    Tokens.push(Next);
+    return check(Tokens.back(), Args...);  // Check the last item in the queue.
   }
 
   MdlLexer &operator++() { getNext(); return *this; }     // Prefix operator
 
-  bool EndOfFile() { return token.type == TK_ENDOFFILE; }
+  bool EndOfFile() { return Token.Type == TK_ENDOFFILE; }
 };
 
 //----------------------------------------------------------------------------
@@ -236,141 +232,142 @@ class MdlLexer {
 // the input is returned in spec.  Return false if syntax errors found.
 // This function is called recursively for imported input files.
 //----------------------------------------------------------------------------
-bool ProcessInputFile(MdlSpec &spec, std::string import_path,
-                      std::string file_name);
+bool ProcessInputFile(MdlSpec &Spec, std::string ImportPath,
+                      std::string FileName);
 
 //----------------------------------------------------------------------------
 // Define a parser class that implements a recursive descent parser.
 //----------------------------------------------------------------------------
 class MdlParser {
 private:
-  MdlSpec &spec_;
-  std::string import_path_;
-  MdlLexer Token;             // The lexical analyser
+  MdlSpec &Spec;
+  std::string ImportPath;
+  MdlLexer Token;                 // The lexical analyser
 
  public:
-  explicit MdlParser(MdlSpec &spec, std::string import_path,
-                     std::string *file_name, std::fstream *mdl_stream)
-      : spec_(spec), import_path_(import_path),
-        Token(spec, file_name, mdl_stream) {}
+  explicit MdlParser(MdlSpec &Spec, std::string ImportPath,
+                     std::string *FileName, std::fstream *MdlStream)
+      : Spec(Spec), ImportPath(ImportPath),
+        Token(Spec, FileName, MdlStream) {}
 
   template <typename ... Ts>
-  void Error(const char *fmt, Ts... params) {
-    spec_.ErrorLog(&Token(), fmt, params...);
+  void ParseError(const char *Fmt, Ts... Args) {
+    Spec.ErrorLog(&Token(), Fmt, Args...);
   }
   template <typename ... Ts>
-  void Error(const MdlItem *item, const char *fmt, Ts... params) {
-    spec_.ErrorLog(item, fmt, params...);
+  void ParseError(const MdlItem *Item, const char *Fmt, Ts... Args) {
+    Spec.ErrorLog(Item, Fmt, Args...);
   }
+  int ErrorsSeen() { return Spec.ErrorsSeen(); }
 
   // Parser methods for all rules in the grammar.
-  bool ParseArchitectureSpec();
-  Identifier *ParseFamilySpec();
-  bool ParseImportFile();
+  bool parseArchitectureSpec();
+  Identifier *parseFamilySpec();
+  bool parseImportFile();
 
   // Functions that parse components of a CPU definition.
-  CpuInstance *ParseCpuDef();
-  std::vector<std::string> ParseCpuDefNames();
-  ClusterInstance *ParseClusterInstantiation();
-  std::tuple<Identifier *, int, bool> ParseFuncUnitInstType(std::string type);
-  std::pair<IdList *, IdList *> ParsePins();
-  FuncUnitInstance *ParseFuncUnitInstantiation(ResourceDefList *resources);
-  ForwardStmt *ParseForwardStmt();
+  CpuInstance *parseCpuDef();
+  std::vector<std::string> parseCpuDefNames();
+  ClusterInstance *parseClusterInstantiation();
+  std::tuple<Identifier *, int, bool> parseFuncUnitInstType(std::string Type);
+  std::pair<IdList *, IdList *> parsePins();
+  FuncUnitInstance *parseFuncUnitInstantiation(ResourceDefList *Resources);
+  ForwardStmt *parseForwardStmt();
 
   // Functions that parse components of a functional unit template.
-  FuncUnitTemplate *ParseFuncUnitTemplate();
-  FuncUnitGroup *ParseFuncUnitGroup();
-  ParamsList *ParseFuncUnitParams();
-  ParamsList *ParseFuDeclItem();
-  IdList *ParsePortDef(ConnectList *connects);
-  Identifier *ParsePortDecl(ConnectList *connects);
-  Connect *ParseConnectStmt();
-  SubUnitInstList *ParseSubunitInstantiation(ResourceDefList *resources);
-  SubUnitInstList *ParseSubunitStatement(IdList *predicate,
-                                         ResourceDefList *resources);
+  FuncUnitTemplate *parseFuncUnitTemplate();
+  FuncUnitGroup *parseFuncUnitGroup();
+  ParamsList *parseFuncUnitParams();
+  ParamsList *parseFuDeclItem();
+  IdList *parsePortDef(ConnectList *Connects);
+  Identifier *parsePortDecl(ConnectList *Connects);
+  Connect *parseConnectStmt();
+  SubUnitInstList *parseSubunitInstantiation(ResourceDefList *Resources);
+  SubUnitInstList *parseSubunitStatement(IdList *Predicate,
+                                         ResourceDefList *Resources);
 
   // Functions that parse components of subunit templates.
-  SubUnitTemplate *ParseSubunitTemplate();
-  ParamsList *CopySuDeclItems(ParamsList *params);
-  ParamsList *ParseSuDeclItems();
-  ParamsList *ParseSuDeclItem();
-  LatencyInstList *ParseLatencyInstance();
-  LatencyInstance *ParseLatencyStatement(IdList *predicates);
+  SubUnitTemplate *parseSubunitTemplate();
+  ParamsList *copySuDeclItems(ParamsList *Parameters);
+  ParamsList *parseSuDeclItems();
+  ParamsList *parseSuDeclItem();
+  LatencyInstList *parseLatencyInstance();
+  LatencyInstance *parseLatencyStatement(IdList *Predicates);
 
   // Functions that parse components of latency templates.
-  LatencyTemplate *ParseLatencyTemplate();
-  ReferenceList *ParseLatencyBlock(IdList *predicates);
-  ReferenceList *ParseLatencyItems(IdList *predicates);
-  ReferenceList *ParseLatencyItem(IdList *predicates);
-  ConditionalRef *ParseConditionalRef(IdList *predicates);
+  LatencyTemplate *parseLatencyTemplate();
+  ReferenceList *parseLatencyBlock(IdList *Predicates);
+  ReferenceList *parseLatencyItems(IdList *Predicates);
+  ReferenceList *parseLatencyItem(IdList *Predicates);
+  ConditionalRef *parseConditionalRef(IdList *Predicates);
 
   // Functions that parse resource references.
-  Reference *ParseLatencyRef(IdList *predicates);
-  RefType ParseRefType();
-  ResourceRefList *ParseLatencyResourceRefs();
-  ResourceRef *ParseLatencyResourceRef();
-  ResourceRefList *ParseResourceRefs(ResourceDefList *resources = nullptr);
-  ResourceRef *ParseResourceRef(ResourceDefList *resources = nullptr);
-  ReferenceList *ParseFusStatement(IdList *predicates);
-  Reference *ParseFusItem(IdList *predicates, MdlItem &item);
+  Reference *parseLatencyRef(IdList *Predicates);
+  RefType parseRefType();
+  ResourceRefList *parseLatencyResourceRefs();
+  ResourceRef *parseLatencyResourceRef();
+  ResourceRefList *parseResourceRefs(ResourceDefList *Resources = nullptr);
+  ResourceRef *parseResourceRef(ResourceDefList *Resources = nullptr);
+  ReferenceList *parseFusStatement(IdList *Predicates);
+  Reference *parseFusItem(IdList *Predicates, MdlItem &Item);
 
   // Phase expression parser functions.
-  PhaseExpr *ParseExpr();
-  PhaseExpr *ParseTerm();
-  PhaseExpr *ParseFactor();
-  OperandRef *ParseOperand();
+  PhaseExpr *parseExpr();
+  PhaseExpr *parseTerm();
+  PhaseExpr *parseFactor();
+  OperandRef *parseOperand();
   bool isOperand();
 
   // Functions that parse pipeline definitions.
-  PipePhases *ParsePipeDef();
-  PhaseNameList *ParsePipePhases(bool is_protected,
-                                 bool is_hard, PhaseName *&exe_phase);
-  PhaseNameList *ParsePhaseId(bool is_protected, bool is_hard, bool &is_first);
+  PipePhases *parsePipeDef();
+  PhaseNameList *parsePipePhases(bool IsProtected,
+                                 bool IsHard, PhaseName *&ExePhase);
+  PhaseNameList *parsePhaseId(bool IsProtected, bool IsHard, bool &IsFirst);
 
   // Functions that parse resource definitions.
-  ResourceDefList *ParseResourceDef();
-  ResourceDef *ParseResourceDecl(Identifier *start, Identifier *end);
-  ResourceDefList *ParseIssueStatement();
-  int ParseReorder();
+  ResourceDefList *parseResourceDef();
+  ResourceDef *parseResourceDecl(Identifier *Start, Identifier *End);
+  ResourceDefList *parseIssueStatement();
+  int parseReorder();
 
   // Parsers for various lists of things.
-  bool ParseRange(long &first, long &last);
-  bool ParsePhaseRange(Identifier *&start, Identifier *&end);
-  IdList *ParseNameList(std::string type, TokenType separator);
-  IdList *ParsePredicateList();
-  IdList *ParseGroupList(GroupType &group_type);
-  IdList *ParseBaseList(std::string type);
-  void ParseSuBaseList(IdList *&bases, StringList *&regex);
+  bool parseRange(long &First, long &Last);
+  bool parsePhaseRange(Identifier *&Start, Identifier *&End);
+  IdList *parseNameList(std::string Type, TokenKind Separator);
+  IdList *parsePredicateList();
+  IdList *parseGroupList(GroupType &GroupType);
+  IdList *parseBaseList(std::string Type);
+  void parseSuBaseList(IdList *&Bases, StringList *&Regex);
 
   // Functions that parse register definitions.
-  RegisterDefList *ParseRegisterDef();
-  RegisterClass *ParseRegisterClass();
-  RegisterDefList *ParseRegisterDecl();
-  RegisterDefList *ParseRegisterList();
+  RegisterDefList *parseRegisterDef();
+  RegisterClass *parseRegisterClass();
+  RegisterDefList *parseRegisterDecl();
+  RegisterDefList *parseRegisterList();
 
   // Helpers for parsing terminals.
   bool isIdent();
-  Identifier *ParseIdent(std::string type);
-  std::string ParseString(std::string type);
-  bool ParseNumber(long &value, std::string type);
-  bool ParseSignedNumber(long &value, std::string type);
+  Identifier *parseIdent(std::string Type);
+  std::string parseString(std::string Type);
+  bool parseNumber(long &value, std::string Type);
+  bool parseSignedNumber(long &value, std::string Type);
 
   // Functions for parsing instruction and operand definitions.
-  InstructionDef *ParseInstructionDef();
-  OperandDecl *ParseOperandDecl(int opnd_id);
-  bool ParseInputOutput(bool &is_input, bool &is_output);
-  OperandDef *ParseOperandDef();
-  Identifier *ParseOperandType(Identifier *type);
-  OperandAttributeList *ParseOperandAttribute();
-  OperandAttribute *ParseOperandAttributeStmt(IdList *predicate);
-  PredValue *ParsePredValue();
+  InstructionDef *parseInstructionDef();
+  OperandDecl *parseOperandDecl(int OpndId);
+  bool parseInputOutput(bool &IsInput, bool &IsOutput);
+  OperandDef *parseOperandDef();
+  Identifier *parseOperandType(Identifier *Type);
+  OperandAttributeList *parseOperandAttribute();
+  OperandAttribute *parseOperandAttributeStmt(IdList *Predicate);
+  PredValue *parsePredValue();
 
-  bool ParsePredicateDef();
-  PredExpr *ParsePredicateOp();
-  PredExpr *ParsePredicateOpnd();
-  std::string ParseCodeEscape();
+  bool parsePredicateDef();
+  PredExpr *parsePredicateOp();
+  PredExpr *parsePredicateOpnd();
+  std::string parseCodeEscape();
 
-  MdlSpec &spec() { return spec_; }
+  MdlSpec &spec() { return Spec; }
 };
 
 } // namespace mdl
