@@ -26,636 +26,640 @@ namespace mdl {
 // the input machine description.
 //----------------------------------------------------------------------------
 // Stringify a reference to an Identifier.
-std::string Identifier::ToString() const { return name(); }
+std::string Identifier::ToString() const { return getName(); }
 
 // Stringify a phase name definition.
-std::string PhaseName::ToString() const { return name(); }
+std::string PhaseName::ToString() const { return getName(); }
 
 // Stringify a register definition.
-std::string RegisterDef::ToString() const { return name(); }
+std::string RegisterDef::ToString() const { return getName(); }
 
 // Stringify a register class definition.
 std::string RegisterClass::ToString() const {
-  std::string hdr = formatv("\nRegister class: {0}", name());
-  std::string members = StringVec<RegisterDef *>(members_, " { ", ", ", " }");
-  return hdr + members;
+  std::string Hdr = formatv("\nRegister class: {0}", getName());
+  std::string Regs = StringVec<RegisterDef *>(Members, " { ", ", ", " }");
+  return Hdr + Regs;
 }
 
 // Stringify a reference to a register class.
-std::string RegisterClassRef::ToString() const { return id_->ToString(); }
+std::string RegisterClassRef::ToString() const { return Id->ToString(); }
 
 // Stringify a pipe phase set definition.
 std::string PipePhases::ToString() const {
-  std::string type;
-  if (is_hard_)
-    type = "(hard):";
-  else if (is_protected_)
-    type = "(protected):";
+  std::string Type;
+  if (IsHard)
+    Type = "(hard):";
+  else if (IsProtected)
+    Type = "(protected):";
   else
-    type = "(unprotected):";
-  return formatv("Pipe Phases {0}{1}", id_->ToString(),
-                 StringVec<PhaseName *>(phase_names_, type, ", "));
+    Type = "(unprotected):";
+  return formatv("Pipe Phases {0}{1}", Id->ToString(),
+                 StringVec<PhaseName *>(PhaseNames, Type, ", "));
 }
 
 // Stringify a resource definition.
 std::string ResourceDef::ToString() const {
-  std::string out = formatv("Resource {0}", id_->ToString());
-  if (get_resource_id() > 0)
-    out += formatv("{{{0}}", get_resource_id());
-  if (start_phase_)
-    out += formatv("({0}", start_phase_->ToString());
-  if (end_phase_)
-    out += formatv("..{0}", end_phase_->ToString());
-  if (start_phase_)
-    out += ")";
-  if (bit_size_ > 0)
-    out += formatv(":{0}", bit_size_);
-  if (pool_size_ > 0)
-    out += formatv("[{0}]", pool_size_);
-  if (!members_.empty()) {
-    auto sep = group_type() == GroupType::kUseAll ? " & " : " , ";
-    out += StringVec<Identifier *>(&members_, " {", sep, "}");
+  std::string Out = formatv("Resource {0}", Id->ToString());
+  if (getResourceId() > 0)
+    Out += formatv("{{{0}}", getResourceId());
+  if (StartPhase)
+    Out += formatv("({0}", StartPhase->ToString());
+  if (EndPhase)
+    Out += formatv("..{0}", EndPhase->ToString());
+  if (StartPhase)
+    Out += ")";
+  if (BitSize > 0)
+    Out += formatv(":{0}", BitSize);
+  if (PoolSize > 0)
+    Out += formatv("[{0}]", PoolSize);
+  if (!Members.empty()) {
+    auto Sep = getGroupType() == GroupType::kUseAll ? " & " : " , ";
+    Out += StringVec<Identifier *>(&Members, " {", Sep, "}");
   }
-
-  if (reg_class_)
-    out += formatv(" <{0}>", reg_class()->id()->ToString());
-  if (port_resource() != nullptr)
-    out += formatv("<{0}>", port_resource()->ToString());
-  return out;
+  if (RegClass)
+    Out += formatv(" <{0}>", getRegClass()->getId()->ToString());
+  if (getPortResource() != nullptr)
+    Out += formatv("<{0}>", getPortResource()->ToString());
+  return Out;
 }
 
 // Format a string that summarizes the refs we've seen to this resource.
-std::string ResourceDef::ref_summary() const {
-  if (earliest_ref_ == -1 && latest_ref_ == -1 && !phase_expr_seen_)
+std::string ResourceDef::getRefSummary() const {
+  if (EarliestRef == -1 && LatestRef == -1 && !PhaseExprSeen)
     return "";
-  return formatv(",\tcycles: [{0}..{1}]{2}{3}", earliest_ref_, latest_ref_,
-                 phase_expr_seen_ ? " (expr) " : " ",
-                 FormatReferenceTypes(ref_types_));
+  return formatv(",\tcycles: [{0}..{1}]{2}{3}", EarliestRef, LatestRef,
+                 PhaseExprSeen ? " (expr) " : " ",
+                 formatReferenceTypes(Types));
 }
 
 // Stringify a reference to a resource.
 std::string ResourceRef::ToString() const {
-  std::string out = id_->ToString();
+  std::string Out = Id->ToString();
 
-  if (IsGroupRef()) {
-    std::string ids;
-    auto sep = definition_->group_type() == GroupType::kUseAll ? "&" : ",";
-    for (auto *member : definition_->member_defs()) {
-      if (!ids.empty())
-        ids += sep;
-      ids += std::to_string(member->get_resource_id());
+  if (isGroupRef()) {
+    std::string Ids;
+    auto Sep = Definition->getGroupType() == GroupType::kUseAll ? "&" : ",";
+    for (auto *Member : Definition->getMemberDefs()) {
+      if (!Ids.empty())
+        Ids += Sep;
+      Ids += std::to_string(Member->getResourceId());
     }
-    out += "{" + ids + "}";
+    Out += "{" + Ids + "}";
   }
 
-  if (get_resource_id() > 0)
-    out += formatv("{{{0}}", get_resource_id());
+  if (getResourceId() > 0)
+    Out += formatv("{{{0}}", getResourceId());
 
-  if (member_)
-    out += formatv(".{0}{{{1}}", member_->ToString(), member_id());
-  if (first_ != -1 && last_ != -1) {
-    if (last_ != first_)
-      out += formatv("[{0}..{1}]", first_, last_);
+  if (Member)
+    Out += formatv(".{0}{{{1}}", Member->ToString(), getMemberId());
+  if (First != -1 && Last != -1) {
+    if (Last != First)
+      Out += formatv("[{0}..{1}]", First, Last);
     else
-      out += formatv("[{0}]", first_);
+      Out += formatv("[{0}]", First);
   }
-  if (pool_count_ != -1)
-    out += formatv(":{0}", pool_count_);
-  if (pool_count_name_)
-    out += formatv(":{0}", pool_count_name_->ToString());
-  if (value_name_)
-    out += formatv(":{0}", value_name_->ToString());
-  if (operand_index_ != -1)
-    out += formatv("-->{0}", operand_index_);
-  return out;
+  if (PoolCount != -1)
+    Out += formatv(":{0}", PoolCount);
+  if (PoolCountName)
+    Out += formatv(":{0}", PoolCountName->ToString());
+  if (ValueName)
+    Out += formatv(":{0}", ValueName->ToString());
+  if (OperandIndex != -1)
+    Out += formatv("-->{0}", OperandIndex);
+  return Out;
 }
 
-static const char *divider =
+static const char *Divider =
     "===========================================================\n";
 
 // Stringify a CPU instance.
 std::string CpuInstance::ToString() const {
-  std::string out =
-      formatv("{0}Cpu Definition:{1}\n\n", divider, id_->ToString());
+  std::string Out =
+      formatv("{0}Cpu Definition:{1}\n\n", Divider, Id->ToString());
 
-  return out + formatv("{0}{1}{2}{3}{4}", StringVec<PipePhases *>(pipe_phases_),
-                       StringVec<ResourceDef *>(issues_, "Issue Slots:", ", "),
-                       StringVec<ResourceDef *>(resources_),
-                       StringVec<ClusterInstance *>(clusters_),
-                       StringVec<ForwardStmt *>(forward_stmts_));
+  return Out + formatv("{0}{1}{2}{3}{4}", StringVec<PipePhases *>(Phases),
+                       StringVec<ResourceDef *>(Issues, "Issue Slots:", ", "),
+                       StringVec<ResourceDef *>(Resources),
+                       StringVec<ClusterInstance *>(Clusters),
+                       StringVec<ForwardStmt *>(ForwardStmts));
 }
 
 // Stringify a cluster instance.
 std::string ClusterInstance::ToString() const {
-  std::string out = formatv("{0}Cluster: {1}\n\n", divider, id_->ToString());
+  std::string Out = formatv("{0}Cluster: {1}\n\n", Divider, Id->ToString());
 
-  return out + formatv("{0}{1}{2}{3}",
-                       StringVec<ResourceDef *>(issues_, "Issue Slots:", ", "),
-                       StringVec<ResourceDef *>(resources_),
-                       StringVec<FuncUnitInstance *>(func_units_),
-                       StringVec<ForwardStmt *>(forward_stmts_));
+  return Out + formatv("{0}{1}{2}{3}",
+                       StringVec<ResourceDef *>(Issues, "Issue Slots:", ", "),
+                       StringVec<ResourceDef *>(Resources),
+                       StringVec<FuncUnitInstance *>(FuncUnits),
+                       StringVec<ForwardStmt *>(ForwardStmts));
 }
 
 // Stringify a single forwarding statement.
 std::string ForwardStmt::ToString() const {
-  std::string out = formatv("Forward: {0} -> ", from_unit_->name());
-  for (auto [unit, cycles] : to_units_)
-    out += formatv("{0}({1})", unit->name(), cycles);
-  return out + "\n";
+  std::string Out = formatv("Forward: {0} -> ", FromUnit->getName());
+  for (auto [Unit, Cycles] : ToUnits)
+    Out += formatv("{0}({1})", Unit->getName(), Cycles);
+  return Out + "\n";
 }
 
 // Stringify a functional unit instance.
 std::string FuncUnitInstance::ToString() const {
-  std::string out = formatv("Func Unit: {0}", type_->ToString());
-  if (id_)
-    out += formatv(" {0}", id_->ToString());
-  out += StringVec<ResourceRef *>(args_, "(", ", ", ")");
-  if (pin_any_)
-    out += StringVec<Identifier *>(pin_any_, " -> ", " | ", "");
-  if (pin_all_)
-    out += StringVec<Identifier *>(pin_all_, " -> ", " & ", "");
-  return out;
+  std::string Out = formatv("Func Unit: {0}", Type->ToString());
+  if (Id)
+    Out += formatv(" {0}", Id->ToString());
+  Out += StringVec<ResourceRef *>(Args, "(", ", ", ")");
+  if (PinAny)
+    Out += StringVec<Identifier *>(PinAny, " -> ", " | ", "");
+  if (PinAll)
+    Out += StringVec<Identifier *>(PinAll, " -> ", " & ", "");
+  return Out;
 }
 
 // Stringify a subunit instance.
 std::string SubUnitInstance::ToString() const {
-  std::string out = StringVec<Identifier *>(predicates_, "[", ",", "] : ");
-  out += formatv("Subunit: {0}", id_->ToString());
-  if (args_ == nullptr)
-    return out + "()\n";
-  return out + StringVec<ResourceRef *>(args_, "(", ", ", ")\n");
+  std::string Out = StringVec<Identifier *>(Predicates, "[", ",", "] : ");
+  Out += formatv("Subunit: {0}", Id->ToString());
+  if (Args == nullptr)
+    return Out + "()\n";
+  return Out + StringVec<ResourceRef *>(Args, "(", ", ", ")\n");
 }
 
 // Stringify a latency instance.
 std::string LatencyInstance::ToString() const {
-  std::string out = StringVec<Identifier *>(predicates_, "[", ",", "] : ");
-  out += formatv("Latency {0}", id_->ToString());
-  if (args_ == nullptr)
-    return out + "()\n";
-  return out + StringVec<ResourceRef *>(args_, "(", ", ", ")\n");
+  std::string Out = StringVec<Identifier *>(Predicates, "[", ",", "] : ");
+  Out += formatv("Latency {0}", Id->ToString());
+  if (Args == nullptr)
+    return Out + "()\n";
+  return Out + StringVec<ResourceRef *>(Args, "(", ", ", ")\n");
 }
 
 // Stringify a parameter of a functional unit, subunit, or latency template.
 std::string Params::ToString() const {
-  const char *kinds[] = {"p", "c", "r"};
-  return formatv("{0}:{1}", kinds[static_cast<int>(type_)], id_->ToString());
+  const char *Kinds[] = {"p", "c", "r"};
+  return formatv("{0}:{1}", Kinds[static_cast<int>(Type)], Id->ToString());
 }
 
 // Stringify a functional unit template definition.
 std::string FuncUnitTemplate::ToString() const {
-  std::string out =
-      formatv("{0}Func Unit Template: {1}\n\n", divider, id_->ToString());
+  std::string Out =
+      formatv("{0}Func Unit Template: {1}\n\n", Divider, Id->ToString());
 
-  if (bases_ && !bases_->empty())
-    out +=
-        StringVec<Identifier *>(bases_, "Base Functional Unit: ", ", ", "\n");
+  if (Bases && !Bases->empty())
+    Out +=
+        StringVec<Identifier *>(Bases, "Base Functional Unit: ", ", ", "\n");
 
-  out += StringVec<Params *>(params_, "Template Parameters(", ", ", ")\n\n");
-  if (ports_ && !ports_->empty())
-    out += StringVec<Identifier *>(ports_, "Ports: ", ", ", "\n");
-  out += StringVec<ResourceDef *>(resources_);
-  out += StringVec<Connect *>(connections_, "", "", "");
-  out += StringVec<SubUnitInstance *>(subunits_, "", "", "");
-  return out;
+  Out += StringVec<Params *>(FuParams, "Template Parameters(", ", ", ")\n\n");
+  if (Ports && !Ports->empty())
+    Out += StringVec<Identifier *>(Ports, "Ports: ", ", ", "\n");
+  Out += StringVec<ResourceDef *>(Resources);
+  Out += StringVec<Connect *>(Connections, "", "", "");
+  Out += StringVec<SubUnitInstance *>(Subunits, "", "", "");
+  return Out;
 }
 
 // Stringify a connect statement in a functional unit template.
 std::string Connect::ToString() const {
-  std::string out = formatv("Connect {0}", id_->ToString());
-  if (reg_class_)
-    out += formatv(" to {0}", reg_class_->ToString());
-  if (resource_)
-    out += formatv(" via {0}", resource_->ToString());
-  return out + "\n";
+  std::string Out = formatv("Connect {0}", Id->ToString());
+  if (RegClass)
+    Out += formatv(" to {0}", RegClass->ToString());
+  if (Resource)
+    Out += formatv(" via {0}", Resource->ToString());
+  return Out + "\n";
 }
 
 // Stringify a subunit template definition.
 std::string SubUnitTemplate::ToString() const {
-  std::string out =
-      formatv("{0}Sub Unit Template: {1}\n\n", divider, type_->ToString());
+  std::string Out =
+      formatv("{0}Sub Unit Template: {1}\n\n", Divider, Type->ToString());
 
-  if (bases_ && !bases_->empty())
-    out += StringVec<Identifier *>(bases_, "Base Subunits: ", ", ", "\n");
+  if (Bases && !Bases->empty())
+    Out += StringVec<Identifier *>(Bases, "Base Subunits: ", ", ", "\n");
 
-  out += StringVec<Params *>(params_, "Template Parameters(", ", ", ")\n") +
-         StringVec<LatencyInstance *>(latencies_);
-  out += "\n";
-  return out;
+  Out += StringVec<Params *>(SuParams, "Template Parameters(", ", ", ")\n") +
+         StringVec<LatencyInstance *>(Latencies);
+  Out += "\n";
+  return Out;
 }
 
 // Stringify a latency template definition.
 std::string LatencyTemplate::ToString() const {
-  auto out = formatv(
-      "{0}Latency Template: {1}\n\n{2}{3}{4}", divider, id_->ToString(),
-      StringVec<Identifier *>(base_ids_, "Bases: ", ", ", "\n"),
-      StringVec<Params *>(params_, "Template Parameters(", ", ", ")\n"),
-      StringVec<Reference *>(references_, "   ", "\n   "));
+  auto Out = formatv(
+      "{0}Latency Template: {1}\n\n{2}{3}{4}", Divider, Id->ToString(),
+      StringVec<Identifier *>(BaseIds, "Bases: ", ", ", "\n"),
+      StringVec<Params *>(LatParams, "Template Parameters(", ", ", ")\n"),
+      StringVec<Reference *>(References, "   ", "\n   "));
 
-  for (auto &[predicate, funits] : referenced_fus_->func_units())
-    out += formatv("FUs: {0} -> {1}\n", (predicate == "" ? "<all>" : predicate),
-            StringSet<std::string>(&funits, "", ", ", ""));
-  return out;
+  for (auto &[Predicate, Funits] : ReferencedFus->getFuncUnits())
+    Out += formatv("FUs: {0} -> {1}\n", (Predicate == "" ? "<all>" : Predicate),
+            StringSet<std::string>(&Funits, "", ", ", ""));
+  return Out;
 }
 
 // Find an appropriate name for a operand reference type.
-std::string OperandRef::type_name() const {
-  if (operand_decl_)
-    return operand_decl_->type_name();
-  if (operand_)
-    return operand_->name();
-  if (reg_class_)
-    return reg_class_->name();
-  if (op_type_)
-    return op_type_->ToString();
+std::string OperandRef::getTypeName() const {
+  if (Decl)
+    return Decl->getTypeName();
+  if (Operand)
+    return Operand->getName();
+  if (RegClass)
+    return RegClass->getName();
+  if (OpType)
+    return OpType->ToString();
   return "";
 }
 
 // Stringify a single operand descriptor in a latency reference object.
 std::string OperandRef::ToString() const {
-  std::string out = type_name();
-  if (!out.empty())
-    out += ":";
-  out += "$" + StringVec<Identifier *>(op_names_, "", ".", "");
-  if (operand_index_ != -1)
-    out += formatv("[{0}]", operand_index_);
-  return out;
+  std::string Out = getTypeName();
+  if (!Out.empty())
+    Out += ":";
+  Out += "$" + StringVec<Identifier *>(OpNames, "", ".", "");
+  if (OperandIndex != -1)
+    Out += formatv("[{0}]", OperandIndex);
+  return Out;
 }
 
 // Stringify a latency expression for debug output.
 std::string PhaseExpr::ToString() const {
-  std::string left = left_ ? left_->ToString() : "";
-  std::string right = right_ ? right_->ToString() : "";
+  std::string Lstr = Left ? Left->ToString() : "";
+  std::string Rstr = Right ? Right->ToString() : "";
 
-  switch (operation_) {
+  switch (Operation) {
   case kPlus:
-    return formatv("({0}+{1})", left, right);
+    return formatv("({0}+{1})", Lstr, Rstr);
   case kMinus:
-    return formatv("({0}-{1})", left, right);
+    return formatv("({0}-{1})", Lstr, Rstr);
   case kMult:
-    return formatv("({0}*{1})", left, right);
+    return formatv("({0}*{1})", Lstr, Rstr);
   case kDiv:
-    return formatv("({0}/{1})", left, right);
+    return formatv("({0}/{1})", Lstr, Rstr);
   case kNeg:
-    return formatv("(-{0})", left);
+    return formatv("(-{0})", Lstr);
   case kPositive:
-    return formatv("{{{0}}", left);
+    return formatv("{{{0}}", Lstr);
   case kOpnd:
-    return operand_->ToString();
+    return Operand->ToString();
   case kInt:
-    return formatv("{0}", number_);
+    return formatv("{0}", Number);
   case kPhase:
-    if (phase_name_)
-      return phase_name_->ToString();
-    if (phase_)
-      return phase_->ToString();
+    if (Phase)
+      return Phase->ToString();
+    if (PhaseId)
+      return PhaseId->ToString();
   }
   return "Unknown";
 }
 
 // Create a string that briefly represents the protection type of a phase.
-std::string PhaseName::FormatProtection() const {
-  if (is_hard_)
+std::string PhaseName::formatProtection() const {
+  if (IsHard)
     return ".h";
-  if (is_protected_)
+  if (IsProtected)
     return ".p";
   return ".u";
 }
 
 // Stringify a reference argument in a latency template.
 std::string Reference::ToString() const {
-  std::string out;
-  if (IsConditionalRef()) {
-    out = conditional_ref()->ToString(false);
+  std::string Out;
+  if (isConditionalRef()) {
+    Out = getConditionalRef()->ToString(false);
   } else {
-    out = RefTypeToString(ref_type());
+    Out = convertRefTypeToString(getRefType());
 
-    if (ref_type() == RefTypes::kFus) {
-      out += "(";
-      ResourceRef *res = nullptr;
-      if (!resources_->empty()) {
-        res = (*resources_)[0];
-        out += res->name();
+    if (getRefType() == RefTypes::kFus) {
+      Out += "(";
+      ResourceRef *Res = nullptr;
+      if (!Resources->empty()) {
+        Res = (*Resources)[0];
+        Out += Res->getName();
       }
-      if (phase_expr_ != nullptr)
-        out += formatv("<{0}:{1}> ", phase_expr_->ToString(), use_cycles());
+      if (Phase != nullptr)
+        Out += formatv("<{0}:{1}> ", Phase->ToString(), getUseCycles());
       else
-        out += formatv("<{0}> ", use_cycles());
+        Out += formatv("<{0}> ", getUseCycles());
 
-      if (micro_ops() != 0)
-        out += formatv("Mops={0} ", micro_ops());
-      if (get_buffer_size() != -1)
-        out += formatv("Buffersize={0} ", get_buffer_size());
-      if (RefFlags::is_begin_group(fu_flags()))
-        out += "BeginGroup ";
-      if (RefFlags::is_end_group(fu_flags()))
-        out += "EndGroup ";
-      if (RefFlags::is_single_issue(fu_flags()))
-        out += "SingleIssue ";
-      if (RefFlags::is_retire_ooo(fu_flags()))
-        out += "RetireOOO ";
-      out += ")";
-      if (predicates_)
-         out += StringVec<Identifier *>(predicates_, "  {", ",", "}");
-      return out;
+      if (getMicroOps() != 0)
+        Out += formatv("Mops={0} ", getMicroOps());
+      if (getBufferSize() != -1)
+        Out += formatv("Buffersize={0} ", getBufferSize());
+      if (RefFlags::isBeginGroup(getFuFlags()))
+        Out += "BeginGroup ";
+      if (RefFlags::isEndGroup(getFuFlags()))
+        Out += "EndGroup ";
+      if (RefFlags::isSingleIssue(getFuFlags()))
+        Out += "SingleIssue ";
+      if (RefFlags::isRetireOOO(getFuFlags()))
+        Out += "RetireOOO ";
+      Out += ")";
+      if (Predicates)
+         Out += StringVec<Identifier *>(Predicates, "  {", ",", "}");
+      return Out;
     }
-    out += formatv("{0}({1}", phase_expr_->FormatProtection(),
-                   phase_expr_->ToString());
-    if (use_cycles() != 1)
-      out += formatv(":{0}", use_cycles());
-    if (repeat() > 1)
-      out += formatv("[{0},{1}]", repeat(), delay());
-    if (operand_)
-      out += formatv(", {0}", operand_->ToString());
-    if (ref_type() != RefTypes::kFus && !resources_->empty())
-      out += StringVec<ResourceRef *>(resources_, ", <", ", ", ">");
-    if (port_ && port_->reg_class())
-      out +=
-          formatv(", port {0}<{1}>", port_->name(), port_->reg_class()->name());
-    out += ")";
+    Out += formatv("{0}({1}", Phase->formatProtection(),
+                   Phase->ToString());
+    if (getUseCycles() != 1)
+      Out += formatv(":{0}", getUseCycles());
+    if (getRepeat() > 1)
+      Out += formatv("[{0},{1}]", getRepeat(), getDelay());
+    if (Operand)
+      Out += formatv(", {0}", Operand->ToString());
+    if (getRefType() != RefTypes::kFus && !Resources->empty())
+      Out += StringVec<ResourceRef *>(Resources, ", <", ", ", ">");
+    if (Port && Port->getRegClass())
+      Out += formatv(", port {0}<{1}>", Port->getName(),
+                     Port->getRegClass()->getName());
+    Out += ")";
   }
-  if (predicates_)
-    out += StringVec<Identifier *>(predicates_, "  {", ",", "}");
-  return out;
+  if (Predicates)
+    Out += StringVec<Identifier *>(Predicates, "  {", ",", "}");
+  return Out;
 }
 
 // Stringify an if/then/else reference.
-std::string ConditionalRef::ToString(bool is_else) {
-  std::string pred = predicate_ ? " if " + predicate_->name() : " ";
-  std::string out = (is_else ? " else " : "") + pred + "\n";
-  for (auto *ref : refs())
-    out += "           " + ref->ToString() + "\n";
-  if (else_clause())
-    out += else_clause()->ToString(true);
-  if (out.back() == '\n')
-    out.pop_back();
-  return out + "\n";
+std::string ConditionalRef::ToString(bool IsElse) {
+  std::string Pred = Predicate ? " if " + Predicate->getName() : " ";
+  std::string Out = (IsElse ? " else " : "") + Pred + "\n";
+  for (auto *Ref : getRefs())
+    Out += "           " + Ref->ToString() + "\n";
+  if (getElseClause())
+    Out += getElseClause()->ToString(true);
+  if (Out.back() == '\n')
+    Out.pop_back();
+  return Out + "\n";
 }
 
 // Stringify a single operand declaration for an instruction or operand.
 std::string OperandDecl::ToString() const {
-  if (print_fully_qualified_declaration_ && types_->size() > 1)
-    return StringVec<Identifier *>(types_, "(", ".", ") ") +
-           StringVec<Identifier *>(names_, "(", ".", ")");
-  return formatv("{0} {1}", types_->back()->name(), names_->back()->name());
+  if (PrintFullyQualifiedDeclaration && Types->size() > 1)
+    return StringVec<Identifier *>(Types, "(", ".", ") ") +
+           StringVec<Identifier *>(Names, "(", ".", ")");
+  return formatv("{0} {1}", Types->back()->getName(), Names->back()->getName());
 }
 
 // Stringify a single operand definition.
 std::string OperandDef::ToString() const {
-  std::string out = formatv("Operand: {0}", name());
-  std::string type = type_ ? formatv("type({0});", type_->ToString()) : "";
+  std::string Out = formatv("Operand: {0}", getName());
+  std::string Tstr = Type ? formatv("type({0});", Type->ToString()) : "";
 
-  // For LLVM operands, write out a short form of the operand.
-  if (operands_ && type_ && !bases_)
-    return out + StringVec<OperandDecl *>(operands_, "(", ", ", ")") +
-           formatv(" {{ {0} }\n", type);
-  if (bases_)
-    out += StringVec<Identifier *>(bases_, ": ", ": ", "");
-  out += " {\n";
-  if (type_)
-    out += formatv("    {0}\n", type);
-  return out + StringVec<OperandAttribute *>(attributes_) + "}\n";
+  // For LLVM operands, write Out a short form of the operand.
+  if (Operands && Type && !Bases)
+    return Out + StringVec<OperandDecl *>(Operands, "(", ", ", ")") +
+           formatv(" {{ {0} }\n", Tstr);
+  if (Bases)
+    Out += StringVec<Identifier *>(Bases, ": ", ": ", "");
+  Out += " {\n";
+  if (Type)
+    Out += formatv("    {0}\n", Tstr);
+  return Out + StringVec<OperandAttribute *>(Attributes) + "}\n";
 }
 
 // Stringify an operand attribute.
 std::string OperandAttribute::ToString() const {
-  std::string out = formatv("    attribute {0} = ", name_->ToString());
-  if (values()->size() == 1) {
-    out += formatv("{0}", values(0));
+  std::string Out = formatv("    attribute {0} = ", Name->ToString());
+  if (getValues()->size() == 1) {
+    Out += formatv("{0}", getValues(0));
   } else {
-    out += "[";
-    for (auto value : *values())
-      out += formatv("{0},", value);
-    out += "]";
+    Out += "[";
+    for (auto Value : *getValues())
+      Out += formatv("{0},", Value);
+    Out += "]";
   }
-  if (!predicate_values_->empty())
-    out += "\n      ";
-  if (!type().empty())
-    out += formatv(" if {0}", type());
-  if (!predicate_values_->empty())
-    out += StringVec<PredValue *>(predicate_values_, " [", ", ", "]");
-  if (predicate_)
-    out += StringVec<Identifier *>(predicate_, "  {", ",", "}");
-  return out;
+  if (!PredicateValues->empty())
+    Out += "\n      ";
+  if (!getType().empty())
+    Out += formatv(" if {0}", getType());
+  if (!PredicateValues->empty())
+    Out += StringVec<PredValue *>(PredicateValues, " [", ", ", "]");
+  if (Predicate)
+    Out += StringVec<Identifier *>(Predicate, "  {", ",", "}");
+  return Out;
 }
 
 // Format an operand predicate value. Mostly we want to avoid printing
 // out long decimal numbers.
-std::string PredValue::FormatValue(int64_t value) const {
+std::string PredValue::formatValue(int64_t Value) const {
   constexpr int kMinValue = 0;
   constexpr int kMaxValue = 9999;
-  if (value >= kMinValue && value <= kMaxValue)
-    return std::to_string(value);
+  if (Value >= kMinValue && Value <= kMaxValue)
+    return std::to_string(Value);
   else
-    return formatv("{0:X8}UL", static_cast<uint64_t>(value));
+    return formatv("{0:X8}UL", static_cast<uint64_t>(Value));
 }
 
 // Stringify an operand attribute predicate value.
 std::string PredValue::ToString() const {
-  if (IsValue())
-    return FormatValue(value());
-  if (IsRange())
-    return formatv("{0}..{1}", FormatValue(low()), FormatValue(high()));
-  if (IsMask())
-    return formatv("{{ {0:X8}UL }", mask());
+  if (isValue())
+    return formatValue(getValue());
+  if (isRange())
+    return formatv("{0}..{1}", formatValue(getLow()), formatValue(getHigh()));
+  if (isMask())
+    return formatv("{{ {0:X8}UL }", getMask());
   return "empty";
 }
 
 // Stringify a single instruction definition.
 std::string InstructionDef::ToString() const {
   return formatv(
-      "Instruction: {0}{1}{2}{3}{4}", name(),
-      StringVec<OperandDecl *>(operands_, "(", ", ", ")\n"),
-      StringVec<OperandDecl *>(flat_operands_, "\t\tflat(", ", ", ")\n"),
-      StringVec<Identifier *>(subunits_, "\t\t{ subunit(", ",", "); }\n"),
-      StringVec<Identifier *>(derived_, "\t\t{ derived(", ",", "); }\n"));
+      "Instruction: {0}{1}{2}{3}{4}", getName(),
+      StringVec<OperandDecl *>(Operands, "(", ", ", ")\n"),
+      StringVec<OperandDecl *>(FlatOperands, "\t\tflat(", ", ", ")\n"),
+      StringVec<Identifier *>(Subunits, "\t\t{ subunit(", ",", "); }\n"),
+      StringVec<Identifier *>(Derived, "\t\t{ derived(", ",", "); }\n"));
 }
 
 // Stringify all the instruction definitions.
 // We organize the list by subunit, so that instructions sharing a subunit are
 // dumped next to each other.  The purpose of this is to help the user write
 // and debug the machine description for similar instructions.
-std::string DumpInstructionDefs(const InstructionList &instructions) {
+std::string DumpInstructionDefs(const InstructionList &Instructions) {
   // build a map of instruction lists indexed by the first subunit name.
-  std::string out;
-  std::map<std::string, InstructionList> instruction_map;
-  for (auto *instruct : instructions)
-    if (!instruct->subunits()->empty())
-      instruction_map[(*instruct->subunits())[0]->name()].push_back(instruct);
+  std::string Out;
+  std::map<std::string, InstructionList> InstrMap;
+  for (auto *Instr : Instructions)
+    if (!Instr->getSubunits()->empty())
+      InstrMap[(*Instr->getSubunits())[0]->getName()].push_back(Instr);
 
-  for (auto &entries : instruction_map) {
-    auto [subunit_name, instructions] = entries;
-    for (auto *instruction : instructions)
-      out += instruction->ToString();
+  for (auto &Entries : InstrMap) {
+    auto [SuName, Instructions] = Entries;
+    for (auto *Instr : Instructions)
+      Out += Instr->ToString();
   }
 
-  return out;
+  return Out;
 }
 
 // Stringify the entire machine description.
 std::string MdlSpec::ToString() const {
-  return formatv("{0}Machine Description\n\n", divider) +
-         StringVec<PipePhases *>(&pipe_phases_) +
-         StringVec<ResourceDef *>(&resources_) +
-         StringVec<RegisterDef *>(&registers_, "", ", ", "\n") +
-         StringVec<RegisterClass *>(&reg_classes_) +
-         StringVec<CpuInstance *>(&cpus_) +
-         StringVec<FuncUnitTemplate *>(&func_units_) +
-         StringVec<SubUnitTemplate *>(&subunits_) +
-         StringVec<LatencyTemplate *>(&latencies_) +
-         StringVec<OperandDef *>(&operands_) +
-         DumpInstructionDefs(instructions_);
+  return formatv("{0}Machine Description\n\n", Divider) +
+         StringVec<PipePhases *>(&PipeDefs) +
+         StringVec<ResourceDef *>(&Resources) +
+         StringVec<RegisterDef *>(&Registers, "", ", ", "\n") +
+         StringVec<RegisterClass *>(&RegClasses) +
+         StringVec<CpuInstance *>(&Cpus) +
+         StringVec<FuncUnitTemplate *>(&FuncUnits) +
+         StringVec<SubUnitTemplate *>(&Subunits) +
+         StringVec<LatencyTemplate *>(&Latencies) +
+         StringVec<OperandDef *>(&Operands) +
+         DumpInstructionDefs(Instructions);
 }
 
 // Print details of a single functional unit instantiation.
-void FuncUnitInstantiation::DumpFuncUnitInstantiation() {
-  auto out = formatv("{0}: {{{1}} {2} {3}(", cpu()->name(), cluster()->name(),
-                     func_type()->name(), instance()->name());
-  if (ResourceRefList *args = instance()->args()) {
-    int params = std::min(func_type()->params()->size(), args->size());
-    for (int argid = 0; argid < params; argid++) {
-      if ((*func_type()->params())[argid]->IsResource())
-        out += GetResourceArg(argid)->ToString();
+void FuncUnitInstantiation::dumpFuncUnitInstantiation() {
+  auto Out = formatv("{0}: {{{1}} {2} {3}(", Cpu->getName(),
+                     Cluster->getName(), FuncType->getName(),
+                     Instance->getName());
+  if (ResourceRefList *Args = Instance->getArgs()) {
+    int FuParams = std::min(FuncType->getParams()->size(), Args->size());
+    for (int ArgId = 0; ArgId < FuParams; ArgId++) {
+      if ((*FuncType->getParams())[ArgId]->isResource())
+        Out += getResourceArg(ArgId)->ToString();
       else
-        out += GetClassArg(argid)->ToString();
-      if (argid < params - 1)
-        out += ", ";
+        Out += getClassArg(ArgId)->ToString();
+      if (ArgId < FuParams - 1)
+        Out += ", ";
     }
   }
-  std::cout << out << ")\n";
+  std::cout << Out << ")\n";
 }
 
-void ClusterInstance::DumpFuncUnitInstantiations() {
-  for (auto *fu : fu_instantiations_) {
-    std::cout << "\nFunc_unit: " << fu->func_type()->name()
+// Print details of a single functional unit instance.
+void ClusterInstance::dumpFuncUnitInstantiations() {
+  for (auto *Fu : FuInstantiations) {
+    std::cout << "\nFunc_unit: " << Fu->getFuncType()->getName()
               << "---------------------------------------\n";
-    fu->DumpFuncUnitInstantiation();
+    Fu->dumpFuncUnitInstantiation();
   }
 }
 
 // Print details of all functional unit instantiations.
-void MdlSpec::DumpFuncUnitInstantiations() {
-  for (const auto *cpu : cpus())
-    for (auto *cluster : *cpu->clusters())
-      cluster->DumpFuncUnitInstantiations();
+void MdlSpec::dumpFuncUnitInstantiations() {
+  for (const auto *Cpu : Cpus)
+    for (auto *Cluster : *Cpu->getClusters())
+      Cluster->dumpFuncUnitInstantiations();
 }
 
 // Print details of a single subunit instantiation.
-void SubUnitInstantiation::DumpSubUnitInstantiation() {
-  auto out =
-      formatv("{0}: {{{1}} {2} {3} <{4}>(", func_unit()->cpu()->name(),
-              func_unit()->cluster()->name(), func_unit()->func_type()->name(),
-              func_unit()->instance()->name(), subunit()->name());
-  if (ResourceRefList *args = subunit()->args()) {
-    int params = std::min(su_template()->params()->size(), args->size());
-    for (int argid = 0; argid < params; argid++) {
-      if ((*su_template()->params())[argid]->IsResource())
-        out += GetResourceArg(argid)->ToString();
+void SubUnitInstantiation::dumpSubUnitInstantiation() {
+  auto Out =
+      formatv("{0}: {{{1}} {2} {3} <{4}>(", FuncUnit->getCpu()->getName(),
+              FuncUnit->getCluster()->getName(),
+              FuncUnit->getFuncType()->getName(),
+              FuncUnit->getInstance()->getName(), getSubunit()->getName());
+  if (ResourceRefList *Args = getSubunit()->getArgs()) {
+    int NumParams = std::min(SuTemplate->getParams()->size(), Args->size());
+    for (int ArgId = 0; ArgId < NumParams; ArgId++) {
+      if ((*SuTemplate->getParams())[ArgId]->isResource())
+        Out += getResourceArg(ArgId)->ToString();
       else
-        out += GetPortArg(argid)->ToString();
-      if (argid < params - 1)
-        out += ", ";
+        Out += getPortArg(ArgId)->ToString();
+      if (ArgId < NumParams - 1)
+        Out += ", ";
     }
   }
-  out += ")\n";
-  for (auto *ref : references())
-    out += formatv("    {0}\n", ref->ToString());
-  std::cout << out;
+  Out += ")\n";
+  for (auto *Ref : getReferences())
+    Out += formatv("    {0}\n", Ref->ToString());
+  std::cout << Out;
 }
 
 // Print details of all subunit instantiations.
-void MdlSpec::DumpSubUnitInstantiations() {
+void MdlSpec::dumpSubUnitInstantiations() {
   // Dump out all instantiations for each subunit.
-  for (const auto &subunit : su_instantiations()) {
-    auto [name, unit] = subunit;
+  for (const auto &Subunit : SuInstantiations) {
+    auto [Name, Unit] = Subunit;
     std::cout << formatv(
-        "\nSubunit: {0} ---------------------------------------\n", name);
-    for (auto *su : *unit)
-      su->DumpSubUnitInstantiation();
+        "\nSubunit: {0} ---------------------------------------\n", Name);
+    for (auto *Su : *Unit)
+      Su->dumpSubUnitInstantiation();
   }
 }
 
 // Print details of a single latency instantiation.
-void LatencyInstantiation::DumpLatencyInstantiation() {
-  auto out = formatv("{0}: {{{1}} {2} {3} <{4}>[{5}](",
-                     subunit()->func_unit()->cpu()->name(),
-                     subunit()->func_unit()->cluster()->name(),
-                     subunit()->func_unit()->func_type()->name(),
-                     subunit()->func_unit()->instance()->name(),
-                     subunit()->subunit()->name(), latency()->name());
-  if (ResourceRefList *args = latency()->args()) {
-    int params = std::min(lat_template()->params()->size(), args->size());
-    for (int argid = 0; argid < params; argid++) {
-      if ((*lat_template()->params())[argid]->IsResource())
-        out += GetResourceArg(argid)->ToString();
+void LatencyInstantiation::dumpLatencyInstantiation() {
+  auto *FuncUnit = Subunit->getFuncUnit();
+  auto Out = formatv("{0}: {{{1}} {2} {3} <{4}>[{5}](",
+                     FuncUnit->getCpu()->getName(),
+                     FuncUnit->getCluster()->getName(),
+                     FuncUnit->getFuncType()->getName(),
+                     FuncUnit->getInstance()->getName(),
+                     Subunit->getSubunit()->getName(), Latency->getName());
+  if (ResourceRefList *Args = Latency->getArgs()) {
+    int NumParams = std::min(LatTemplate->getParams()->size(), Args->size());
+    for (int ArgId = 0; ArgId < NumParams; ArgId++) {
+      if ((*LatTemplate->getParams())[ArgId]->isResource())
+        Out += getResourceArg(ArgId)->ToString();
       else
-        out += GetPortArg(argid)->ToString();
-      if (argid < params - 1)
-        out += ", ";
+        Out += getPortArg(ArgId)->ToString();
+      if (ArgId < NumParams - 1)
+        Out += ", ";
     }
   }
-  std::cout << out << ")\n";
+  std::cout << Out << ")\n";
 }
 
-void MdlSpec::DumpPredicates() {
-  for (const auto &[name, expr] : predicate_table_)
-    std::cout << formatv("Predicate {0} : {1}\n\n", name, expr->ToString(0));
+void MdlSpec::dumpPredicates() {
+  for (const auto &[Name, Expr] : PredicateTable)
+    std::cout << formatv("Predicate {0} : {1}\n\n", Name, Expr->ToString(0));
 }
 
 // Format a string that represents the ids associated with a resource.
-std::string ResourceDef::resource_format() {
-  int id = get_resource_id();
-  std::string out = formatv("{0} : ", debug_name());
-  if (!IsGroupDef() && pool_size() <= 1)
-    out += std::to_string(id);
-  if (IsGroupDef()) {
-    out += formatv("(gid={0}) ", pool_id());
-    out += "[";
-    for (auto *mem : member_defs())
-      out += std::to_string(mem->get_resource_id()) + ",";
-    out.pop_back();
-    out += "]";
+std::string ResourceDef::formatResource() {
+  int Id = getResourceId();
+  std::string Out = formatv("{0} : ", getDebugName());
+  if (!isGroupDef() && getPoolSize() <= 1)
+    Out += std::to_string(Id);
+  if (isGroupDef()) {
+    Out += formatv("(gid={0}) ", getPoolId());
+    Out += "[";
+    for (auto *Mem : getMemberDefs())
+      Out += std::to_string(Mem->getResourceId()) + ",";
+    Out.pop_back();
+    Out += "]";
   }
-  if (pool_size() > 1) {
-    out += formatv("(pid={0}) ", pool_id());
-    out += formatv("[{0}..{1}]", id, pool_size() + id - 1);
+  if (getPoolSize() > 1) {
+    Out += formatv("(pid={0}) ", getPoolId());
+    Out += formatv("[{0}..{1}]", Id, getPoolSize() + Id - 1);
   }
 
-  return out;
+  return Out;
 }
 
 std::string SubPool::ToString() const {
-  if (first() == -1 && last() == -1)
+  if (getFirst() == -1 && getLast() == -1)
     return "[group]";
-  return formatv("subrange: [{0}..{1}]", first(), last());
+  return formatv("subrange: [{0}..{1}]", getFirst(), getLast());
 }
 
 // Write out all allocation pools associate with a subpool.
 std::string SubPoolInfo::ToString(std::string subpool) const {
-  std::string out;
-  int pool_id = subpool_id();
-  for (auto rit = counts().rbegin(); rit != counts().rend(); rit++)
-    out += formatv("    Subpool:{0} size:{1} {2}\n", pool_id++, *rit, subpool);
-  return out;
+  std::string Out;
+  int PoolId = getSubpoolId();
+  for (auto Rit = Counts.rbegin(); Rit != Counts.rend(); Rit++)
+    Out += formatv("    Subpool:{0} size:{1} {2}\n", PoolId++, *Rit, subpool);
+  return Out;
 }
 
 // Dump resource ids for each resource.
-void MdlSpec::DumpResourceIds() {
-  std::string out;
-  for (auto *cpu : cpus()) {
-    out += formatv("\nResources defined for '{0}' "
-                   "---------------------------------------\n", cpu->name());
-    for (auto res : cpu->all_resources())
-      out += formatv("{0}{1}\n", res->resource_format(), res->ref_summary());
-    out += formatv("\nPooled resources defined for '{0}' "
-                   "--------------------------------\n", cpu->name());
-    for (auto *res : cpu->pool_resources())
-      if (!res->alloc_sizes().empty()) {
-        out += formatv("{0}{1}\n", res->resource_format(), res->ref_summary());
-        for (auto &[subpool, info] : res->sub_pools())
-          out += info.ToString(subpool.ToString());
+void MdlSpec::dumpResourceIds() {
+  std::string Out;
+  for (auto *Cpu : Cpus) {
+    Out += formatv("\nResources defined for '{0}' "
+                   "---------------------------------------\n", Cpu->getName());
+    for (auto Res : Cpu->getAllResources())
+      Out += formatv("{0}{1}\n", Res->formatResource(), Res->getRefSummary());
+    Out += formatv("\nPooled resources defined for '{0}' "
+                   "--------------------------------\n", Cpu->getName());
+    for (auto *Res : Cpu->getPoolResources())
+      if (!Res->getAllocSizes().empty()) {
+        Out += formatv("{0}{1}\n", Res->formatResource(),
+                       Res->getRefSummary());
+        for (auto &[Subpool, Info] : Res->getSubPools())
+          Out += Info.ToString(Subpool.ToString());
       }
   }
-  std::cout << out; // Write out the string!
+  std::cout << Out; // Write out the string!
 }
 
 } // namespace mdl

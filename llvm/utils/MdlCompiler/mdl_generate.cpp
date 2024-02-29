@@ -40,72 +40,71 @@
 namespace mpact {
 namespace mdl {
 
-// Check that each operand in the instruction is mentioned in at least
+// Check that each operand in the insteuction is mentioned in at least
 // one reference record. Unmentioned operands are a likely error.
-void InstrInfo::CheckUnreferencedOperands(bool check_all_operands) {
-  std::set<int> referenced_operands;
-  for (auto *ref : *references_)
-    if (ref->operand())
-      referenced_operands.insert(ref->operand()->operand_index());
+void InstrInfo::checkUnreferencedOperands(bool CheckAllOperands) {
+  std::set<int> ReferencedOperands;
+  for (auto *Ref : *References)
+    if (Ref->getOperand())
+      ReferencedOperands.insert(Ref->getOperand()->getOperandIndex());
 
-  for (unsigned op_id = 0; op_id < instruct_->flat_operands()->size(); op_id++)
-    if ((check_all_operands || instruct_->GetOperandDecl(op_id)->reg_class()) &&
-        !referenced_operands.count(op_id))
-      subunit_->WarningLog(
-          instruct_, "Operand{0}in instruction \"{1}\" is unreferenced",
-          StringVec(instruct_->GetOperandDecl(op_id)->op_names(), " \"", ".",
-                    "\" "),
-          instruct_->name());
+  for (int OpId = 0; OpId < Instruct->getNumFlatOperands(); OpId++)
+    if ((CheckAllOperands ||
+         Instruct->getOperandDecl(OpId)->getRegClass()) &&
+        !ReferencedOperands.count(OpId))
+      Subunit->WarningLog(
+          Instruct, "Operand{0}in instruction \"{1}\" is unreferenced",
+          StringVec(Instruct->getOperandDecl(OpId)->getOpNames(),
+                    " \"", ".", "\" "), Instruct->getName());
 }
 
 // Stringify a InstrInfo object, suitable for writing debug information.
 std::string InstrInfo::ToString() const {
-  std::string out = formatv("{0}    Subunit: {1}.{2}\n", instruct_->ToString(),
-                            subunit_->func_unit()->cpu()->name(),
-                            subunit_->func_unit()->instance()->name());
+  std::string Out = formatv("{0}    Subunit: {1}.{2}\n", Instruct->ToString(),
+                            Subunit->getFuncUnit()->getCpu()->getName(),
+                            Subunit->getFuncUnit()->getInstance()->getName());
 
-  out += "      Operand references:\n";
-  for (auto *ref : *references_)
-    if ((ref->operand() && ref->IsOperandRefType()) || ref->IsConditionalRef())
-      out += formatv("      ===>  {0}\n", ref->ToString());
+  Out += "      Operand references:\n";
+  for (auto *Ref : *References)
+    if ((Ref->getOperand() && Ref->isOperandRefType()) ||
+         Ref->isConditionalRef())
+      Out += formatv("      ===>  {0}\n", Ref->ToString());
 
-  if (!resource_refs_.empty())
-    out += "      FU references:\n";
-  for (auto *ref : resource_refs_)
-    if (ref->IsFuncUnitRef())
-      out += formatv("      --->  {0}\n", ref->ToString());
+  if (!ResourceRefs.empty())
+    Out += "      FU references:\n";
+  for (auto *Ref : ResourceRefs)
+    if (Ref->isFuncUnitRef())
+      Out += formatv("      --->  {0}\n", Ref->ToString());
 
-  if (resources_.empty())
-    return out;
-  out += "      Resources:\n";
-  for (auto &res : resources_)
-    if (!res.resource()->HasCount())
-      out += formatv("            {0}\n", res.ToString());
+  if (Resources.empty())
+    return Out;
+  Out += "      Resources:\n";
+  for (auto &Res : Resources)
+    if (!Res.getResource()->hasCount())
+      Out += formatv("            {0}\n", Res.ToString());
 
-  out += "      Pool Resources:\n";
-  for (auto &res : resources_)
-    if (res.resource()->HasCount()) {
-      out += formatv("            {0} ", res.ToString());
-      SubPool subpool(res.resource());
-      auto &subpool_info = res.resource()->definition()->sub_pool(subpool);
-      out += formatv(" subpool id: {0}", subpool_info.subpool_id());
-      out += " size requests: ";
-      auto comma = "";
-      for (auto request : subpool_info.counts()) {
-        out += formatv("{0}{1}", comma, request);
-        comma = ",";
-      }
-      out += "\n";
+  Out += "      Pool Resources:\n";
+  for (auto &Res : Resources)
+    if (Res.getResource()->hasCount()) {
+      Out += formatv("            {0} ", Res.ToString());
+      SubPool Subpool(Res.getResource());
+      auto &SpInfo = Res.getResource()->getDefinition()->getSubPool(Subpool);
+      Out += formatv(" subpool id: {0}", SpInfo.getSubpoolId());
+      Out += " size requests: ";
+      for (auto Request : SpInfo.getCounts())
+        Out += formatv("{0},", Request);
+      Out.pop_back();      // delete trailing comma
+      Out += "\n";
     }
 
-  out += "      Architectural Register Constraints:\n";
-  for (auto *ref : *references_)
-    if (auto *opnd = ref->operand())
-      if (auto *port = ref->port())
-        if (auto *reg_class = port->reg_class())
-          out += formatv("            operand {0}: {1}\n",
-                         opnd->operand_index(), reg_class->name());
-  return out;
+  Out += "      Architectural Register Constraints:\n";
+  for (auto *Ref : *References)
+    if (auto *Opnd = Ref->getOperand())
+      if (auto *Port = Ref->getPort())
+        if (auto *RegClass = Port->getRegClass())
+          Out += formatv("            operand {0}: {1}\n",
+                         Opnd->getOperandIndex(), RegClass->getName());
+  return Out;
 }
 
 //----------------------------------------------------------------------------
@@ -114,20 +113,20 @@ std::string InstrInfo::ToString() const {
 // Note that we don't include any explicit functional units specified by an
 // fus() clause, these are handled separately.
 //----------------------------------------------------------------------------
-void GetFuncUnitResources(SubUnitInstantiation *subunit, ResourceSets &res_set,
-                          PhaseName *phase) {
+void getFuncUnitResources(SubUnitInstantiation *Subunit, ResourceSets &ResSet,
+                          PhaseName *Phase) {
   // Add all the implicit functional unit resources, including parent fu ids.
   // Note: Each fu is added as an independent resource in the res set.
-  auto fu_resources = subunit->GetFuncUnitResources();
+  auto fu_resources = Subunit->getFuncUnitResources();
   for (auto *def : fu_resources) {
     // Don't write out catchall units or unreserved functional units.
-    if (is_catchall_name(def->name()) ||
-        def->get_fu()->instance()->is_unreserved())
+    if (isCatchallName(def->getName()) ||
+        def->getFu()->getInstance()->isUnreserved())
       continue;
-    auto *fu = new ResourceRef(def);
-    ResourceEvent fu_res(RefTypes::kUse, new PhaseExpr(phase), 1, fu);
-    std::vector<ResourceEvent> items{fu_res};
-    res_set.push_back(items);
+    auto *Fu = new ResourceRef(def);
+    ResourceEvent FuRes(RefTypes::kUse, new PhaseExpr(Phase), 1, Fu);
+    std::vector<ResourceEvent> Items{FuRes};
+    ResSet.push_back(Items);
   }
 }
 
@@ -135,11 +134,11 @@ void GetFuncUnitResources(SubUnitInstantiation *subunit, ResourceSets &res_set,
 // Build a resource set for this instruction instance.
 //----------------------------------------------------------------------------
 ResourceSets
-InstructionDatabase::BuildResourceSets(ResourceList &resources,
-                                       SubUnitInstantiation *subunit) {
-  ResourceSets res_set;
-  for (auto &item : resources) {
-    std::vector<ResourceEvent> items;
+InstructionDatabase::buildResourceSets(ResourceList &Resources,
+                                       SubUnitInstantiation *Subunit) {
+  ResourceSets ResSet;
+  for (auto &Item : Resources) {
+    std::vector<ResourceEvent> Items;
 
     // Resource pools can be managed along with "Normal" resources, or
     // separately. Its more computationally expensive at compile time to manage
@@ -153,65 +152,68 @@ InstructionDatabase::BuildResourceSets(ResourceList &resources,
     // TODO(tbd) - Determine what kinds of pools this makes sense for.
 #if 0
     // Handle resource pools.
-    ResourceRef *ref = item.resource();
-    if (ref->IsPool() && !has_shared_bits() &&
-        (ref->last() - ref->first()) < 4  &&
-        (ref->HasCount() == 1 || ref->operand_index() == -1)) {
-      for (int id = ref->first(); id <= ref->last(); id += ref->pool_count()) {
-        auto *newref = new ResourceRef(*ref);
-        newref->set_subrange(id, id + ref->pool_count() - 1);
-        newref->set_pool_count(-1);
-        ResourceEvent newevent(item.ref_type(), item.phase_expr(), newref);
-        items.push_back(newevent);
+    ResourceRef *Ref = Item.getResource();
+    if (Ref->IsPool() && !has_shared_bits() &&
+        (Ref->getLast() - Ref->getFirst()) < 4  &&
+        (Ref->HasCount() == 1 || Ref->getOperandIndex() == -1)) {
+      for (int Id = Ref->getFirst(); Id <= Ref->getLast();
+           Id += Ref->getPoolCount()) {
+        auto *Newref = new ResourceRef(*Ref);
+        Newref->setSubrange(Id, Id + Ref->pool_count() - 1);
+        Newref->setPoolCount(-1);
+        ResourceEvent Newevent(Item.getType(), Item.getPhaseExpr(), Newref);
+        Items.push_back(Newevent);
       }
-      res_set.push_back(items);
+      ResSet.push_back(Items);
       continue;
     }
 #endif
 #if 0
     // Handle resource groups.
-    if (item.resource()->IsGroupRef() && !has_shared_bits() &&
-        item.resource()->definition()->members().size() < 4) {
-      for (auto mem : *item.resource()->definition()->member_defs()) {
-        auto *newref = new ResourceRef(*mem);
-        ResourceEvent newevent(item.ref_type(), item.phase_expr(), newref);
-        items.push_back(newevent);
+    if (Item.getResource()->IsGroupRef() && !hasSharedBits() &&
+        Item.getResource()->getDefinition()->getMembers().size() < 4) {
+      for (auto Mem : *Item.getResource()->definition()->member_defs()) {
+        auto *Newref = new ResourceRef(*Mem);
+        ResourceEvent Newevent(Item.Type(), Item.phase_expr(), Newref);
+        Items.push_back(Newevent);
       }
-      res_set.push_back(items);
+      ResSet.push_back(Items);
       continue;
     }
 #endif
 
     // Handle single resource items.
-    items.push_back(item);
-    res_set.push_back(items);
+    Items.push_back(Item);
+    ResSet.push_back(Items);
   }
 
   // We need to identify a "default" phase to use for implicit resources.
-  auto *phase0 = spec_.FindFirstPhase();
+  auto *Phase0 = getSpec().findFirstPhase();
 
   // Add all the implicit functional unit resources, including parent fu ids.
   // Note: Each fu is added as an independent resource in the res set.
-  GetFuncUnitResources(subunit, res_set, phase0);
+  getFuncUnitResources(Subunit, ResSet, Phase0);
 
   // If we determined we don't need to model resource slots, we're done.
-  auto *cpu = subunit->cpu();
-  if (!cpu->needs_slot_resources())
-    return res_set;
+  auto *Cpu = Subunit->getCpu();
+  if (!Cpu->needsSlotResources())
+    return ResSet;
 
   // Add "any" slot resources associated with this functional unit instance.
   // Note: we add all of them as a single pooled entry in the res_set.
-  auto *slots_any = subunit->GetSlotResourcesAny();
-  if (slots_any && !slots_any->empty()) {
-    std::vector<ResourceEvent> items;
-    for (auto *pin_any : *slots_any) {
-      auto *slot = new ResourceRef(*pin_any);
-      auto *phase = phase0;
-      if (slot->definition()->start_phase())
-        phase = spec_.FindPipeReference(slot->definition()->start_phase(), cpu);
-      items.emplace_back(RefTypes::kUse, new PhaseExpr(phase), slot);
+  auto *SlotsAny = Subunit->getSlotResourcesAny();
+  if (SlotsAny && !SlotsAny->empty()) {
+    std::vector<ResourceEvent> Items;
+    for (auto *PinAny : *SlotsAny) {
+      auto *Slot = new ResourceRef(*PinAny);
+      auto *Phase = Phase0;
+      if (Slot->getDefinition()->getStartPhase())
+        Phase =
+           getSpec().findPipeReference(Slot->getDefinition()->getStartPhase(),
+                                       Cpu);
+      Items.emplace_back(RefTypes::kUse, new PhaseExpr(Phase), Slot);
     }
-    res_set.push_back(items);
+    ResSet.push_back(Items);
   }
 
   // Add "all" slot resources associated with this functional unit instance.
@@ -219,85 +221,87 @@ InstructionDatabase::BuildResourceSets(ResourceList &resources,
   // TODO: we might want to try just doing pooled allocations for these - all
   // the mechanism exists, we just need to create a pooled allocation
   // ResourceEvent, and the backend does the rest.
-  auto *slots_all = subunit->GetSlotResourcesAll();
-  if (slots_all && !slots_all->empty()) {
-    for (auto *pin_all : *slots_all) {
-      auto *slot = new ResourceRef(*pin_all);
-      auto *phase = phase0;
-      if (slot->definition()->start_phase())
-        phase = spec_.FindPipeReference(slot->definition()->start_phase(), cpu);
-      ResourceEvent pin_res(RefTypes::kUse, new PhaseExpr(phase), slot);
-      std::vector<ResourceEvent> items{pin_res};
-      res_set.push_back(items);
+  auto *SlotsAll = Subunit->getSlotResourcesAll();
+  if (SlotsAll && !SlotsAll->empty()) {
+    for (auto *PinAll : *SlotsAll) {
+      auto *Slot = new ResourceRef(*PinAll);
+      auto *Phase = Phase0;
+      if (Slot->getDefinition()->getStartPhase())
+        Phase =
+           getSpec().findPipeReference(Slot->getDefinition()->getStartPhase(),
+                                       Cpu);
+      ResourceEvent PinRes(RefTypes::kUse, new PhaseExpr(Phase), Slot);
+      std::vector<ResourceEvent> Items{PinRes};
+      ResSet.push_back(Items);
     }
   }
 
-  return res_set;
+  return ResSet;
 }
 
 //----------------------------------------------------------------------------
 // Build a set of all possible resource combinations found in the input
 // resource set.
 //----------------------------------------------------------------------------
-void BuildResourceCombos(ResourceSets &res_set, unsigned index,
-                         std::vector<ResourceEvent> &current,
-                         ResourceSets &result) {
-  if (index == res_set.size()) {
-    result.push_back(current);
+void buildResourceCombos(ResourceSets &ResSet, unsigned Index,
+                         std::vector<ResourceEvent> &Current,
+                         ResourceSets &Result) {
+  if (Index == ResSet.size()) {
+    Result.push_back(Current);
     return;
   }
 
-  for (auto &resource : res_set[index]) {
-    current.push_back(resource);
-    BuildResourceCombos(res_set, index + 1, current, result);
-    current.pop_back();
+  for (auto &resource : ResSet[Index]) {
+    Current.push_back(resource);
+    buildResourceCombos(ResSet, Index + 1, Current, Result);
+    Current.pop_back();
   }
 }
 
 //----------------------------------------------------------------------------
 // Annotate phase expressions with instruction-specific operand information.
 //----------------------------------------------------------------------------
-void AnnotatedPhaseExpr(const InstructionDef *instr, PhaseExpr *expr,
-                        MdlSpec &spec, CpuInstance *cpu) {
-  if (expr->operation() == kOpnd) {
-    int index = spec.GetOperandIndex(instr, expr->operand(), RefTypes::kUse);
-    expr->operand()->set_operand_index(index);
-    expr->operand()->set_operand_decl(instr->GetOperandDecl(index));
+void annotatedPhaseExpr(const InstructionDef *Instr, PhaseExpr *Expr,
+                        MdlSpec &Spec, CpuInstance *Cpu) {
+  if (Expr->getOperation() == kOpnd) {
+    int Index = Spec.getOperandIndex(Instr, Expr->getOperand(), RefTypes::kUse);
+    Expr->getOperand()->setOperandIndex(Index);
+    Expr->getOperand()->setOperandDecl(Instr->getOperandDecl(Index));
     return;
   }
-  if (expr->operation() == kPhase) {
-    spec.SpecializePhaseExpr(expr, cpu);
+  if (Expr->getOperation() == kPhase) {
+    Spec.specializePhaseExpr(Expr, Cpu);
     return;
   }
-  if (expr->left())
-    AnnotatedPhaseExpr(instr, expr->left(), spec, cpu);
-  if (expr->right())
-    AnnotatedPhaseExpr(instr, expr->right(), spec, cpu);
+  if (Expr->getLeft())
+    annotatedPhaseExpr(Instr, Expr->getLeft(), Spec, Cpu);
+  if (Expr->getRight())
+    annotatedPhaseExpr(Instr, Expr->getRight(), Spec, Cpu);
 }
 
 //----------------------------------------------------------------------------
 // Annotate a reference with instruction-specific operand information.
 //----------------------------------------------------------------------------
-Reference *AnnotatedReference(const InstructionDef *instr, Reference *ref,
-                              int delay, MdlSpec &spec, CpuInstance *cpu) {
-  auto *newref = new Reference(*ref, delay); // Make a private copy.
-  ref->set_used(); // Note that we used this reference.
-  if (newref->operand()) {
-    int index = spec.GetOperandIndex(instr, newref->operand(), ref->ref_type());
-    newref->operand()->set_operand_index(index);
-    newref->operand()->set_operand_decl(instr->GetOperandDecl(index));
+Reference *annotatedReference(const InstructionDef *Instr, Reference *Ref,
+                              int Delay, MdlSpec &Spec, CpuInstance *Cpu) {
+  auto *Newref = new Reference(*Ref, Delay); // Make a private copy.
+  Ref->setUsed(); // Note that we used this reference.
+  if (auto *Opnd = Newref->getOperand()) {
+    int Index = Spec.getOperandIndex(Instr, Opnd, Ref->getRefType());
+    Opnd->setOperandIndex(Index);
+    Opnd->setOperandDecl(Instr->getOperandDecl(Index));
   }
 
-  AnnotatedPhaseExpr(instr, newref->phase_expr(), spec, cpu);
-  newref->SetConstantPhase(); // Evaluate constant phase expressions.
-  return newref;
+  annotatedPhaseExpr(Instr, Newref->getPhaseExpr(), Spec, Cpu);
+  Newref->setConstantPhase(); // Evaluate constant phase expressions.
+  return Newref;
 }
 
 // Return true if two register class have any common registers.
-bool classes_overlap(const RegisterDefList *a, const RegisterDefList *b) {
+bool doClassesOverlap(const RegisterDefList *a, const RegisterDefList *b) {
   for (auto *item_a : *a)
     for (auto *item_b : *b)
-      if (item_a->name() == item_b->name())
+      if (item_a->getName() == item_b->getName())
         return true;
   return false;
 }
@@ -307,15 +311,16 @@ bool classes_overlap(const RegisterDefList *a, const RegisterDefList *b) {
 // whose port constraints are incompatible with an instruction's operand
 // constraints.  It is ok to be conservative. We skip conditional references
 // since the predicates could impact whether a reference is used or not.
-bool HasIncompatibleConstraints(const ReferenceList *references) {
-  for (const auto *ref : *references)
-    if (!ref->IsConditionalRef())
-      if (const auto *opnd = ref->operand())
-        if (const auto op_decl = opnd->operand_decl())
-          if (const auto *op_class = op_decl->reg_class())
-            if (const auto *port = ref->port())
-              if (const auto *pclass = port->reg_class())
-                if (!classes_overlap(pclass->members(), op_class->members()))
+bool hasIncompatibleConstraints(const ReferenceList *References) {
+  for (const auto *Ref : *References)
+    if (!Ref->isConditionalRef())
+      if (const auto *Opnd = Ref->getOperand())
+        if (const auto OpDecl = Opnd->getOperandDecl())
+          if (const auto *OpClass = OpDecl->getRegClass())
+            if (const auto *Port = Ref->getPort())
+              if (const auto *PClass = Port->getRegClass())
+                if (!doClassesOverlap(PClass->getMembers(),
+                                     OpClass->getMembers()))
                   return true;
   return false;
 }
@@ -327,53 +332,54 @@ bool HasIncompatibleConstraints(const ReferenceList *references) {
 //   - if its false, filter and return its "else" clause (if there is one)
 //   - if it cannot be fully evaluated, create a copy with filtered references
 //     and else clause.
-ConditionalRef *InstructionDatabase::FilterConditionalRef(
-    const InstructionDef *instr, ConditionalRef *cond, CpuInstance *cpu) {
+ConditionalRef *InstructionDatabase::filterConditionalRef(
+    const InstructionDef *Instr, ConditionalRef *Cond, CpuInstance *Cpu) {
+  auto &Spec = getSpec();
   // If the entire clause is missing, just return nullptr.
-  if (cond == nullptr)
+  if (Cond == nullptr)
     return nullptr;
-  auto *pred = cond->predicate();
+  auto *Pred = Cond->getPredicate();
   // If the predicate is missing, it evaluates to True, so return filtered refs.
-  if (pred == nullptr)
+  if (Pred == nullptr)
     return new ConditionalRef(
-        *cond, nullptr, FilterReferences(instr, cond->refs(), cpu), nullptr);
+        *Cond, nullptr, filterReferences(Instr, Cond->getRefs(), Cpu), nullptr);
 
   // Evaluate the predicate, and if it is True or False, we can simplify.
-  auto *value = spec_.EvaluatePredicate(pred->name(), instr);
-  if (value->IsTrue())
+  auto *Value = Spec.evaluatePredicate(Pred->getName(), Instr);
+  if (Value->isTrue())
     return new ConditionalRef(
-        *cond, nullptr, FilterReferences(instr, cond->refs(), cpu), nullptr);
-  if (value->IsFalse())
-    return FilterConditionalRef(instr, cond->else_clause(), cpu);
+        *Cond, nullptr, filterReferences(Instr, Cond->getRefs(), Cpu), nullptr);
+  if (Value->isFalse())
+    return filterConditionalRef(Instr, Cond->getElseClause(), Cpu);
 
   // If we can't completely evaluate the predicate, create a copy, filter its
   // references, and recur on its else clause.
-  auto *then_clause = FilterReferences(instr, cond->refs(), cpu);
-  auto *else_clause = FilterConditionalRef(instr, cond->else_clause(), cpu);
-  auto *newcond = new ConditionalRef(*cond, pred, then_clause, else_clause);
-  newcond->SetInstrPredicate(value);
-  return newcond;
+  auto *ThenClause = filterReferences(Instr, Cond->getRefs(), Cpu);
+  auto *ElseClause = filterConditionalRef(Instr, Cond->getElseClause(), Cpu);
+  auto *NewCond = new ConditionalRef(*Cond, Pred, ThenClause, ElseClause);
+  NewCond->setInstrPredicate(Value);
+  return NewCond;
 }
 
 // Given a list of references, determine if each reference is valid for the
 // specified instruction.  Return a filtered list of references.
-ReferenceList *InstructionDatabase::FilterReferences(
-    const InstructionDef *instr, ReferenceList &candidates, CpuInstance *cpu) {
-  auto *refs = new ReferenceList;
+ReferenceList *InstructionDatabase::filterReferences(
+    const InstructionDef *Instr, ReferenceList &Candidates, CpuInstance *Cpu) {
+  auto *Refs = new ReferenceList;
 
-  for (auto *ref : candidates) {
-    ref->set_seen(); // Note that we've seen a possible reference to this.
+  for (auto *Ref : Candidates) {
+    Ref->setSeen(); // Note that we've seen a possible reference to this.
 
     // If it's not a conditional reference, check to see if its valid for
     // this instruction, and if it is valid add to the reference list.
     // Expand WriteSequences to discrete references.
-    if (!ref->IsConditionalRef()) {
-      if (IsReferenceValid(instr, ref)) {
-        refs->push_back(AnnotatedReference(instr, ref, 0, spec_, cpu));
-        int delay = ref->delay();
-        for (int repeat = 1; repeat < ref->repeat(); repeat++) {
-          refs->push_back(AnnotatedReference(instr, ref, delay, spec_, cpu));
-          delay += ref->delay();
+    if (!Ref->isConditionalRef()) {
+      if (isReferenceValid(Instr, Ref)) {
+        Refs->push_back(annotatedReference(Instr, Ref, 0, Spec, Cpu));
+        int Delay = Ref->getDelay();
+        for (int Repeat = 1; Repeat < Ref->getRepeat(); Repeat++) {
+          Refs->push_back(annotatedReference(Instr, Ref, Delay, Spec, Cpu));
+          Delay += Ref->getDelay();
         }
       }
       continue;
@@ -383,16 +389,16 @@ ReferenceList *InstructionDatabase::FilterReferences(
     // single unconditional ConditionalRef object, just add all of its
     // references to the list. Otherwise, add the conditional reference to
     // the list.
-    auto *cond = FilterConditionalRef(instr, ref->conditional_ref(), cpu);
-    if (cond == nullptr)
+    auto *Cond = filterConditionalRef(Instr, Ref->getConditionalRef(), Cpu);
+    if (Cond == nullptr)
       continue;
-    if (cond->predicate() != nullptr)
-      refs->push_back(new Reference(*cond, nullptr, cond));
+    if (Cond->getPredicate() != nullptr)
+      Refs->push_back(new Reference(*Cond, nullptr, Cond));
     else
-      refs->insert(refs->end(), cond->refs().begin(), cond->refs().end());
+      Refs->insert(Refs->end(), Cond->getRefs().begin(), Cond->getRefs().end());
   }
 
-  return refs;
+  return Refs;
 }
 
 //----------------------------------------------------------------------------
@@ -404,34 +410,35 @@ ReferenceList *InstructionDatabase::FilterReferences(
 // These will provide the compiler with "default" def phases.
 // Return the number of default defs inserted.
 //----------------------------------------------------------------------------
-int AddDefaultDefs(ReferenceList &refs, CpuInstance *cpu, MdlSpec &spec) {
+int AddDefaultDefs(ReferenceList &Refs, CpuInstance *Cpu, MdlSpec &Spec) {
   ReferenceList defs;
-  int count = 0;
+  int Count = 0;
 
   // Scan conditional reference list for defs.
-  for (auto *ref : refs) {
-    for (auto *cond = ref->conditional_ref(); cond; cond = cond->else_clause())
-      count += AddDefaultDefs(cond->refs(), cpu, spec);
+  for (auto *Ref : Refs) {
+    for (auto *Cond = Ref->getConditionalRef(); Cond;
+         Cond = Cond->getElseClause())
+      Count += AddDefaultDefs(Cond->getRefs(), Cpu, Spec);
   }
 
   // Scan the references looking for the latest Def or Use. If no defs are
   // found, add a default def.
-  Reference *latest = nullptr;
-  Reference *latest_def = nullptr;
-  int latest_latency = -1;
+  Reference *Latest = nullptr;
+  Reference *LatestDef = nullptr;
+  int LatestLatency = -1;
 
-  for (auto *ref : refs) {
-    if (ref->IsDef() || ref->IsUse()) {
-      if (ref->phase_expr()->IsExpressionConstant()) {
-        auto latency = ref->phase_expr()->EvaluateConstantExpression();
-        if (!latency) {
-          spec.ErrorLog(ref, "Invalid latency: divide by zero");
+  for (auto *Ref : Refs) {
+    if (Ref->isDef() || Ref->isUse()) {
+      if (Ref->getPhaseExpr()->isExpressionConstant()) {
+        auto Latency = Ref->getPhaseExpr()->evaluateConstantExpression();
+        if (!Latency) {
+          Spec.ErrorLog(Ref, "Invalid latency: divide by zero");
           continue;
         }
-        if (latest == nullptr || *latency > latest_latency ||
-            (*latency == latest_latency && latest->IsDef())) {
-          latest = ref;
-          latest_latency = *latency;
+        if (Latest == nullptr || *Latency > LatestLatency ||
+            (*Latency == LatestLatency && Latest->isDef())) {
+          Latest = Ref;
+          LatestLatency = *Latency;
         }
       }
     }
@@ -439,42 +446,43 @@ int AddDefaultDefs(ReferenceList &refs, CpuInstance *cpu, MdlSpec &spec) {
 
   // If we haven't seen a def, create a default reference, either the latest
   // Use, or the first execute phase for the CPU.
-  if (latest_def == nullptr) {
-    auto *opnd = new OperandRef("<default_operand>");
-    if (latest)
-      refs.push_back(new Reference(RefTypes::kDef, latest->phase_expr(), opnd));
+  if (LatestDef == nullptr) {
+    auto *Opnd = new OperandRef("<default_operand>");
+    if (Latest)
+      Refs.push_back(
+               new Reference(RefTypes::kDef, Latest->getPhaseExpr(), Opnd));
     else
-      refs.push_back(
-          new Reference(RefTypes::kDef, spec.FindFirstExecutePhase(cpu), opnd));
-    count++;
+      Refs.push_back(
+          new Reference(RefTypes::kDef, Spec.findFirstExecutePhase(Cpu), Opnd));
+    Count++;
   }
-  return count;
+  return Count;
 }
 
 //----------------------------------------------------------------------------
 // Given an instruction and a reference list, create a set of referenced
 // operand indexes.
 //----------------------------------------------------------------------------
-void InstructionDatabase::FindCondReferencedOperands(
-    const InstructionDef *instr, ConditionalRef *cond, CpuInstance *cpu,
-    std::set<int> &found) {
-  if (cond == nullptr)
+void InstructionDatabase::findCondReferencedOperands(
+    const InstructionDef *Instr, ConditionalRef *Cond, CpuInstance *Cpu,
+    std::set<int> &Found) {
+  if (Cond == nullptr)
     return;
-  FindReferencedOperands(instr, &cond->refs(), cpu, found);
-  FindCondReferencedOperands(instr, cond->else_clause(), cpu, found);
+  findReferencedOperands(Instr, &Cond->getRefs(), Cpu, Found);
+  findCondReferencedOperands(Instr, Cond->getElseClause(), Cpu, Found);
 }
 
-void InstructionDatabase::FindReferencedOperands(const InstructionDef *instr,
-                                                 ReferenceList *refs,
-                                                 CpuInstance *cpu,
-                                                 std::set<int> &found) {
-  if (refs == nullptr)
+void InstructionDatabase::findReferencedOperands(const InstructionDef *Instr,
+                                                 ReferenceList *Refs,
+                                                 CpuInstance *Cpu,
+                                                 std::set<int> &Found) {
+  if (Refs == nullptr)
     return;
-  for (const auto *ref : *refs) {
-    if (ref->IsConditionalRef())
-      FindCondReferencedOperands(instr, ref->conditional_ref(), cpu, found);
-    else if (ref->operand() != nullptr)
-      found.insert(ref->operand()->operand_index());
+  for (const auto *Ref : *Refs) {
+    if (Ref->isConditionalRef())
+      findCondReferencedOperands(Instr, Ref->getConditionalRef(), Cpu, Found);
+    else if (Ref->getOperand() != nullptr)
+      Found.insert(Ref->getOperand()->getOperandIndex());
   }
 }
 
@@ -483,24 +491,24 @@ void InstructionDatabase::FindReferencedOperands(const InstructionDef *instr,
 // manage and reuse these pools. We sort and concatenate the names to create
 // a canonical name.
 //----------------------------------------------------------------------------
-std::string FuPoolName(ResourceRef *res, CpuInstance *cpu, MdlSpec &spec) {
-  std::set<std::string> names;
-  if (spec.IsFuncUnitTemplate(res->name())) {
-    auto &funits = cpu->func_unit_instances()[res->name()];
-    if (funits.size() == 1) return res->name();
+std::string fuPoolName(ResourceRef *Res, CpuInstance *Cpu, MdlSpec &Spec) {
+  std::set<std::string> Names;
+  if (Spec.isFuncUnitTemplate(Res->getName())) {
+    auto &Funits = Cpu->getFuncUnitInstances()[Res->getName()];
+    if (Funits.size() == 1) return Res->getName();
 
-    for (auto *funit : funits)
-      names.insert(funit->get_root_resource()->name());
-    return StringSet(&names, "", ":", "");
+    for (auto *Unit : Funits)
+      Names.insert(Unit->getRootResource()->getName());
+    return StringSet(&Names, "", ":", "");
   }
-  if (spec.IsFuncUnitGroup(res->name())) {
-    auto *group = spec.fu_group_map()[res->name()];
-    for (auto *fu_template : group->fu_members()) {
-      auto &funits = cpu->func_unit_instances()[fu_template->name()];
-      for (auto *funit : funits)
-        names.insert(funit->get_root_resource()->name());
+  if (Spec.isFuncUnitGroup(Res->getName())) {
+    auto *Group = Spec.getFuGroupMap()[Res->getName()];
+    for (auto *FuTemplate : Group->getFuMembers()) {
+      auto &Funits = Cpu->getFuncUnitInstances()[FuTemplate->getName()];
+      for (auto *Unit : Funits)
+        Names.insert(Unit->getRootResource()->getName());
     }
-    return StringSet(&names, "", ":", "");
+    return StringSet(&Names, "", ":", "");
   }
   return "";     // Can't get here...
 }
@@ -508,26 +516,26 @@ std::string FuPoolName(ResourceRef *res, CpuInstance *cpu, MdlSpec &spec) {
 //----------------------------------------------------------------------------
 // Helper for recording fu references.
 //----------------------------------------------------------------------------
-void InstructionDatabase::RecordConditionallyUsedFus(
-                ConditionalRef *cond, SubUnitInstantiation *subunit) {
-  RecordUsedFus(cond->refs(), subunit);
-  if (cond->else_clause())
-    RecordConditionallyUsedFus(cond->else_clause(), subunit);
+void InstructionDatabase::recordConditionallyUsedFus(
+                ConditionalRef *Cond, SubUnitInstantiation *Subunit) {
+  recordUsedFus(Cond->getRefs(), Subunit);
+  if (Cond->getElseClause())
+    recordConditionallyUsedFus(Cond->getElseClause(), Subunit);
 }
 
 //----------------------------------------------------------------------------
 // Look for FU references in resource lists, and mark those FUs as used, so
 // that they will be assigned resource ids.
 //----------------------------------------------------------------------------
-void InstructionDatabase::RecordUsedFus(ReferenceList &resource_refs,
-                                        SubUnitInstantiation *subunit) {
-  auto *cpu = subunit->cpu();
-  for (auto *ref : resource_refs) {
-    if (ref->IsConditionalRef()) {
-      RecordConditionallyUsedFus(ref->conditional_ref(), subunit);
+void InstructionDatabase::recordUsedFus(ReferenceList &ResourceRefs,
+                                        SubUnitInstantiation *Subunit) {
+  auto *Cpu = Subunit->getCpu();
+  for (auto *Ref : ResourceRefs) {
+    if (Ref->isConditionalRef()) {
+      recordConditionallyUsedFus(Ref->getConditionalRef(), Subunit);
       continue;
     }
-    if (!ref->IsFuncUnitRef()) continue;
+    if (!Ref->isFuncUnitRef()) continue;
 
     // Functional unit references that reference more than one FU are split up
     // into multiple refs, so this loop will only iterate once. We need to
@@ -535,84 +543,87 @@ void InstructionDatabase::RecordUsedFus(ReferenceList &resource_refs,
     // - a reference to a single functional unit template,
     // - a reference to an FU template that has multiple instances,
     // - a reference to a functional unit group.
-    for (auto *res : *ref->resources()) {
-      ResourceDef *pool = nullptr;
+    for (auto *Res : *Ref->getResources()) {
+      ResourceDef *Pool = nullptr;
       // Handle the case of a functional unit template.
-      if (spec_.IsFuncUnitTemplate(res->name())) {
-        auto &funits = cpu->func_unit_instances()[res->name()];
+      if (getSpec().isFuncUnitTemplate(Res->getName())) {
+        auto &Funits = Cpu->getFuncUnitInstances()[Res->getName()];
 
         // If there's just a single unit, record it as used.
-        if (funits.size() == 1) {
-          auto *def = funits[0]->get_root_resource();
-          def->RecordFuReference();
-          ref->set_buffer_size(funits[0]->instance()->buffer_size(res->name()));
+        if (Funits.size() == 1) {
+          auto *Def = Funits[0]->getRootResource();
+          Def->recordFuReference();
+          Ref->setBufferSize(
+                    Funits[0]->getInstance()->getBufferSize(Res->getName()));
           continue;
         }
 
         // If there are multiple instances of the functional unit, create a
         // create a pool of all instances of that template. If the pool
         // already exists, use the existing one.
-        auto name = FuPoolName(res, cpu, spec_);
-        if (auto *pool = FindItem(cpu->all_resources(), name)) {
-          res->set_fu_pool(pool);
-          ref->set_buffer_size(funits[0]->instance()->buffer_size(res->name()));
+        auto Name = fuPoolName(Res, Cpu, getSpec());
+        if (auto *Pool = FindItem(Cpu->getAllResources(), Name)) {
+          Res->setFuPool(Pool);
+          Ref->setBufferSize(
+                    Funits[0]->getInstance()->getBufferSize(Res->getName()));
           continue;
         }
         // Create a new ResourceDef Pool, and add it to the CPUs list of
         // FU pools (so it can be reused).
-        std::set<int> buffer_sizes;
-        int size = -1;
-        pool = new ResourceDef(name);
-        for (auto *funit : funits) {
-          auto *def = funit->get_root_resource();
-          pool->add_member_def(def);
-          pool->members().push_back(def->id());
-          size = funit->instance()->buffer_size(res->name());
-          buffer_sizes.insert(size);    // count different sizes
-          def->RecordFuReference();
+        std::set<int> BufferSizes;
+        int Size = -1;
+        Pool = new ResourceDef(Name);
+        for (auto *Funit : Funits) {
+          auto *Def = Funit->getRootResource();
+          Pool->addMemberDef(Def);
+          Pool->getMembers().push_back(Def->getId());
+          Size = Funit->getInstance()->getBufferSize(Res->getName());
+          BufferSizes.insert(Size);    // count different sizes
+          Def->recordFuReference();
         }
-        if (buffer_sizes.size() > 1)
-          spec_.WarningLog(ref, "Inconsistent functional unit buffer sizes");
-        ref->set_buffer_size(size);
+        if (BufferSizes.size() > 1)
+          getSpec().WarningLog(Ref,
+                               "Inconsistent functional unit buffer sizes");
+        Ref->setBufferSize(Size);
       }
 
       // If the reference is a functional unit group, create a pool of all
       // instances of all group members.
-      else if (spec_.IsFuncUnitGroup(res->name())) {
-        auto name = FuPoolName(res, cpu, spec_);
-        auto *group = spec_.fu_group_map()[res->name()];
-        if (auto *pool = FindItem(cpu->all_resources(), name)) {
-          res->set_fu_pool(pool);
-          ref->set_buffer_size(group->buffer_size());
+      else if (getSpec().isFuncUnitGroup(Res->getName())) {
+        auto Name = fuPoolName(Res, Cpu, getSpec());
+        auto *Group = getSpec().getFuGroupMap()[Res->getName()];
+        if (auto *Pool = FindItem(Cpu->getAllResources(), Name)) {
+          Res->setFuPool(Pool);
+          Ref->setBufferSize(Group->getBufferSize());
           continue;
         }
         // Create a new ResourceDef Pool, and add it to the CPUs list of
         // FU pools (so it can be reused), and annotate the resource reference.
-        pool = new ResourceDef(name);
-        ref->set_buffer_size(group->buffer_size());
-        for (auto *fu_template : group->fu_members()) {
-          auto &funits = cpu->func_unit_instances()[fu_template->name()];
-          for (auto *funit : funits) {
-            auto *def = funit->get_root_resource();
-            pool->add_member_def(def);
-            pool->members().push_back(def->id());
-            def->RecordFuReference();
+        Pool = new ResourceDef(Name);
+        Ref->setBufferSize(Group->getBufferSize());
+        for (auto *FuTemplate : Group->getFuMembers()) {
+          auto &Funits = Cpu->getFuncUnitInstances()[FuTemplate->getName()];
+          for (auto *Funit : Funits) {
+            auto *Def = Funit->getRootResource();
+            Pool->addMemberDef(Def);
+            Pool->getMembers().push_back(Def->getId());
+            Def->recordFuReference();
           }
         }
       }
       else continue;     // Skip CPU entries
 
       // Add the new pool to the CPU's pool table, and annotate the reference.
-      pool->add_alloc_size(1);
-      pool->RecordReference(RefTypes::kFus, ref->phase_expr(), nullptr,
-                                ref, subunit);
-      cpu->add_cpu_resource(pool, "FuncPool", nullptr, nullptr, nullptr);
-      cpu->add_fu_pool_size(pool->members().size());
-      res->set_fu_pool(pool);         // Annotate the fu reference.
+      Pool->addAllocSize(1);
+      Pool->recordReference(RefTypes::kFus, Ref->getPhaseExpr(), nullptr,
+                                Ref, Subunit);
+      Cpu->addCpuResource(Pool, "FuncPool", nullptr, nullptr, nullptr);
+      Cpu->addFuPoolSize(Pool->getMembers().size());
+      Res->setFuPool(Pool);         // Annotate the fu reference.
 
-      auto *pool_ref = new ResourceRef(pool);
-      pool_ref->set_pool_count(1);
-      pool->AddReferenceSizeToPool(pool_ref, ref, subunit);
+      auto *PoolRef = new ResourceRef(Pool);
+      PoolRef->setPoolCount(1);
+      Pool->addReferenceSizeToPool(PoolRef, Ref, Subunit);
     }
   }
 }
@@ -620,27 +631,27 @@ void InstructionDatabase::RecordUsedFus(ReferenceList &resource_refs,
 //----------------------------------------------------------------------------
 // Find unreferenced output operands, and create default references for them.
 //----------------------------------------------------------------------------
-void InstructionDatabase::AddUnreferencedOperandDefs(
-    const InstructionDef *instr, ReferenceList *refs, CpuInstance *cpu) {
+void InstructionDatabase::addUnreferencedOperandDefs(
+    const InstructionDef *Instr, ReferenceList *Refs, CpuInstance *Cpu) {
   // First find all the referenced operands.
-  std::set<int> referenced_opnds;
-  FindReferencedOperands(instr, refs, cpu, referenced_opnds);
+  std::set<int> ReferencedOpnds;
+  findReferencedOperands(Instr, Refs, Cpu, ReferencedOpnds);
 
   // Find register operands that have no references, create a vector of them.
-  std::vector<OperandRef *> opnds;
-  for (unsigned op_id = 0; op_id < instr->flat_operands()->size(); op_id++)
-    if (referenced_opnds.count(op_id) == 0) {
-      auto *opnd = instr->GetOperandDecl(op_id);
-      if (opnd->is_input())
+  std::vector<OperandRef *> Opnds;
+  for (int OpId = 0; OpId < Instr->getNumFlatOperands(); OpId++)
+    if (ReferencedOpnds.count(OpId) == 0) {
+      auto *Opnd = Instr->getOperandDecl(OpId);
+      if (Opnd->isInput())
         continue;
-      auto *back = opnd->types()->back();
-      auto *front = opnd->types()->front();
+      auto *Back = Opnd->getTypes()->back();
+      auto *Front = Opnd->getTypes()->front();
 
       // See if the operand declaration is a register or a register class.
-      if (auto *rclass = FindItem(spec_.reg_classes(), back->name())) {
-        opnds.push_back(new OperandRef(front, opnd->op_names(), rclass, op_id));
-      } else if (FindItem(spec_.registers(), back->name()) != nullptr) {
-        opnds.push_back(new OperandRef(nullptr, new IdList(1, back), op_id));
+      if (auto *Cls = FindItem(getSpec().getRegClasses(), Back->getName())) {
+        Opnds.push_back(new OperandRef(Front, Opnd->getOpNames(), Cls, OpId));
+      } else if (FindItem(getSpec().getRegisters(), Back->getName()) != nullptr) {
+        Opnds.push_back(new OperandRef(nullptr, new IdList(1, Back), OpId));
       }
     }
 
@@ -648,52 +659,52 @@ void InstructionDatabase::AddUnreferencedOperandDefs(
   // represent the worst-case pipeline phase for unspecified defs.
   // If only one default operand was added, and it's the last item in the
   // reference list, just use its latency and remove it from the list.
-  PhaseExpr *def_latency = nullptr;
-  if (!opnds.empty() && AddDefaultDefs(*refs, cpu, spec_) == 1 &&
-      refs->back()->IsDefaultOperandRef()) {
-    def_latency = refs->back()->phase_expr();
-    refs->pop_back();
+  PhaseExpr *DefLatency = nullptr;
+  if (!Opnds.empty() && AddDefaultDefs(*Refs, Cpu, getSpec()) == 1 &&
+      Refs->back()->isDefaultOperandRef()) {
+    DefLatency = Refs->back()->getPhaseExpr();
+    Refs->pop_back();
   } else {
-    def_latency = PhaseExpr::DefaultLatency();
+    DefLatency = PhaseExpr::getDefaultLatency();
   }
 
   // We found unreferenced register-based output operands, so create a
   // references for them.
-  for (auto *opnd : opnds)
-    refs->push_back(new Reference(RefTypes::kDef, def_latency, opnd));
+  for (auto *Opnd : Opnds)
+    Refs->push_back(new Reference(RefTypes::kDef, DefLatency, Opnd));
 }
 
 //----------------------------------------------------------------------------
 // Generate all instruction information records for a target instruction.
 // Instructions can have more than one subunit.  If so, instantiate them all.
 //----------------------------------------------------------------------------
-void InstructionDatabase::GenerateInstructionInfo(InstructionDef *instr) {
-  // For each subunit, create reference records for this instruction.
-  for (auto *subunit : *instr->subunits())
-    for (auto *unit : *spec_.su_instantiations()[subunit->name()]) {
+void InstructionDatabase::generateInstructionInfo(InstructionDef *Instr) {
+  // For each Subunit, create reference records for this instruction.
+  for (auto *Subunit : *Instr->getSubunits())
+    for (auto *Unit : *getSpec().getSuInstantiations()[Subunit->getName()]) {
       // Mark this subunit as used.
-      spec().su_map()[subunit->name()]->inc_use();
+      getSpec().getSuMap()[Subunit->getName()]->incUse();
 
       // Create a list of valid references for this subunit.
       // Check each reference to see if its valid for this instruction.
-      auto *cpu = unit->cpu();
-      auto *refs = FilterReferences(instr, unit->references(), cpu);
+      auto *Cpu = Unit->getCpu();
+      auto *Refs = filterReferences(Instr, Unit->getReferences(), Cpu);
 
       // Check each reference for incompatible constraints imposed
       // by ports. These are not valid subunits, and we don't want to add
       // this subunit instance to the database.
-      if (HasIncompatibleConstraints(refs))
+      if (hasIncompatibleConstraints(Refs))
         continue;
 
       // Sort the references by pipeline phase. This is primarily to order
       // operand references by type and phase for cosmetic reasons.
       std::stable_sort(
-          refs->begin(), refs->end(),
-          [](const Reference *a, const Reference *b) { return *a < *b; });
+          Refs->begin(), Refs->end(),
+          [](const Reference *A, const Reference *B) { return *A < *B; });
 
       // Add defs for unreferenced register operand defs.  This isn't
       // necessary, so its currently disabled.
-      // AddUnreferencedOperandDefs(instr, refs, cpu);
+      // AddUnreferencedOperandDefs(Instr, Refs, Cpu);
 
       // Given a list of validated references, create a list of events for
       // unconditional resource references. At this point, we don't add
@@ -705,95 +716,161 @@ void InstructionDatabase::GenerateInstructionInfo(InstructionDef *instr) {
       //      - they are always "used".
       //      - tag the resource reference with its associate operand index.
       //      - If the resource has a defined cycle id, use it.
-      ReferenceList resource_refs;
-      ResourceList resources;
-      for (auto *ref : *refs) {
+      ReferenceList ResourceRefs;
+      ResourceList Resources;
+      for (auto *Ref : *Refs) {
         // Don't add functional unit and conditional references, just add them
         // to the resource reference list for this instruction/subunit.
-        if (ref->IsFuncUnitRef() ||
-            (ref->IsConditionalRef() &&
-             ref->conditional_ref()->HasResourceRefs())) {
-          resource_refs.push_back(ref);
+        if (Ref->isFuncUnitRef() ||
+            (Ref->isConditionalRef() &&
+             Ref->getConditionalRef()->hasResourceRefs())) {
+          ResourceRefs.push_back(Ref);
           continue;
         }
         // Add all other resource references.
-        auto ref_type = ref->AdjustResourceReferenceType();
-        for (auto *res : *ref->resources()) {
-          if (!res->IsNull()) {
-            PhaseExpr *phase = ref->phase_expr();
+        auto Type = Ref->adjustResourceReferenceType();
+        for (auto *Res : *Ref->getResources()) {
+          if (!Res->isNull()) {
+            PhaseExpr *Phase = Ref->getPhaseExpr();
 
-            // If the resource definition has a specified phase, use it instead.
-            if (auto *start = res->definition()->start_phase())
-              phase = new PhaseExpr(spec_.FindPipeReference(start, cpu));
-            if (ref->operand())
-              res->set_operand_index(ref->operand()->operand_index());
-            resources.emplace_back(ref_type, phase, ref->use_cycles(), res, ref,
-                                   unit);
+            // If the resource definition has a specified Phase, use it instead.
+            if (auto *start = Res->getDefinition()->getStartPhase())
+              Phase = new PhaseExpr(getSpec().findPipeReference(start, Cpu));
+            if (Ref->getOperand())
+              Res->setOperandIndex(Ref->getOperand()->getOperandIndex());
+            Resources.emplace_back(Type, Phase, Ref->getUseCycles(), Res,
+                                   Ref, Unit);
           }
         }
       }
 
       // Create sets of reference resource combinations.
-      ResourceSets res_set = BuildResourceSets(resources, unit);
-      ResourceList current;
-      ResourceSets resource_combos;
-      BuildResourceCombos(res_set, 0, current, resource_combos);
+      ResourceSets ResSet = buildResourceSets(Resources, Unit);
+      ResourceList Current;
+      ResourceSets ResourceCombos;
+      buildResourceCombos(ResSet, 0, Current, ResourceCombos);
 
       // Find FU references, mark them as used.  If pooled, add them to
       // the CPU's resource pool list.
-      RecordUsedFus(resource_refs, unit);
+      recordUsedFus(ResourceRefs, Unit);
 
       //----------------------------------------------------------------------
       // AND FINALLY: For the current instruction, for each subunit, for each
       // resource combination, create an instruction record that captures all
       // of this information and add it to the instruction database.
       //----------------------------------------------------------------------
-      for (auto &res : resource_combos) {
-        auto *new_inst = new InstrInfo(instr, unit, res, refs, resource_refs);
-        instruction_info_[instr->name()].push_back(new_inst);
+      for (auto &Res : ResourceCombos) {
+        auto *NewInstr = new InstrInfo(Instr, Unit, Res, Refs, ResourceRefs);
+        InstructionInfo[Instr->getName()].push_back(NewInstr);
       }
     }
 }
 
 //----------------------------------------------------------------------------
+// Check all instruction records for operands that don't have explicit
+// references referring to them - these are likely errors.
+//----------------------------------------------------------------------------
+void InstructionDatabase::checkUnreferencedOperands(bool CheckAllOperands) {
+  for (auto &[Name, InfoSet] : InstructionInfo)
+    for (auto *Info : InfoSet)
+      Info->checkUnreferencedOperands(CheckAllOperands);
+}
+
+//----------------------------------------------------------------------------
+// Given a Reference operand, determine if it is valid for this instruction.
+// If the reference operand is null, its always valid.
+// Return true if its valid.
+//----------------------------------------------------------------------------
+bool InstructionDatabase::isOperandValid(const InstructionDef *Instr,
+                                         const OperandRef *Opnd,
+                                         RefType Type) const {
+  if (Opnd == nullptr) return true;
+  int OpIndex = Spec.getOperandIndex(Instr, Opnd, Type);
+  if (OpIndex == -1) return false;
+
+  // For holds and reserves, we don't have to check the reference type.
+  int IType = static_cast<int>(Type);
+  if ((IType & RefTypes::kAnyUseDef) == 0)
+    return true;
+
+  // If the reference is any use or def, make sure it matches the type of the
+  // operand declaration in the instruction.  Input operands must be "used",
+  // and output operands must be "defed".
+  // Occasionally td files give input and output operands the same name/type
+  // (in different instructions), and latency rules must provide "defs" and
+  // "uses" for those operands, but we don't have an obvious way to decide
+  // whether a particular def or use matches an operand reference. So we use
+  // an operand's I/O designator to differentiate. (These are -always- there
+  // for definitions scraped from llvm).  If an operand doesn't have an I/O
+  // designator, we can skip this check.
+  auto *Op = Instr->getOperandDecl(OpIndex);
+  if (Op == nullptr) return true;
+  if (Op->isInput() && (IType & RefTypes::kAnyUse) == 0) return false;
+  if (Op->isOutput() && (IType & RefTypes::kAnyDef) == 0) return false;
+  return true;
+}
+
+// Look for operand references in phase expressions, and make sure the
+// operand exists in the current instruction.
+// Return true if the expression is valid.
+bool InstructionDatabase::isPhaseExprValid(const InstructionDef *Instr,
+                                           const PhaseExpr *Expr) const {
+  if (!Expr) return true;
+  if (Expr->getOperation() == kOpnd)
+    return isOperandValid(Instr, Expr->getOperand(), RefTypes::kNull);
+  return isPhaseExprValid(Instr, Expr->getLeft()) &&
+         isPhaseExprValid(Instr, Expr->getRight());
+}
+
+// Return true if this reference is valid for this instruction.
+// - If it has an operand reference, then check that the instuction
+//   definition has that operand.
+// - If the phase expression contains operand references, check them too.
+bool InstructionDatabase::isReferenceValid(const InstructionDef *Instr,
+                                           const Reference *Ref) const {
+  return isOperandValid(Instr, Ref->getOperand(), Ref->getRefType()) &&
+         isPhaseExprValid(Instr, Ref->getPhaseExpr());
+}
+
+//----------------------------------------------------------------------------
 // Dump everything we know about all the instructions.
 //----------------------------------------------------------------------------
-void InstructionDatabase::DumpInstructions() {
+void InstructionDatabase::dumpInstructions() {
   std::cout << "\n---------------------------------------------------------\n";
-  std::cout << " Instruction info for \"" << file_name_ << "\"";
+  std::cout << " Instruction info for \"" << FileName << "\"";
   std::cout << "\n---------------------------------------------------------\n";
 
   // Debug: dump out all the instruction information we've generated.
-  for (auto &instruct_list : instruction_info_)
-    for (auto &instruct : instruct_list.second)
-      instruct->dump();
+  for (auto &InstrList : InstructionInfo)
+    for (auto &Instr : InstrList.second)
+      Instr->Dump();
 }
 
 //----------------------------------------------------------------------------
 // Start the process of generating the final instruction information.
 //----------------------------------------------------------------------------
-InstructionDatabase::InstructionDatabase(std::string directory_name,
-                                         std::string file_name,
-                                         bool gen_missing_info, MdlSpec &spec)
-    : directory_name_(directory_name), file_name_(file_name),
-      gen_missing_info_(gen_missing_info), spec_(spec) {
+InstructionDatabase::InstructionDatabase(std::string DirectoryName,
+                                         std::string FileName,
+                                         bool GenMissingInfo, MdlSpec &Spec)
+    : DirectoryName(DirectoryName), FileName(FileName),
+      GenMissingInfo(GenMissingInfo), Spec(Spec) {
   // Add all the target instructions to the instruction database.
-  for (auto *instr : spec.instructions())
-    if (!instr->subunits()->empty())
-      GenerateInstructionInfo(instr);
+  for (auto *Instr : Spec.getInstructions())
+    if (!Instr->getSubunits()->empty())
+      generateInstructionInfo(Instr);
 }
 
 //----------------------------------------------------------------------------
 // Write out the entire database to the output C++ file.
 //----------------------------------------------------------------------------
-void InstructionDatabase::Write(bool generate_llvm_defs) {
-  OutputState output(this, generate_llvm_defs);
-  output.WriteHeader();
-  output.WriteLLVMDefinitions();
-  // output.WriteResourceDefinitions();
-  output.WriteCpuTable();
-  output.WriteExterns();
-  output.WriteTrailer();
+void InstructionDatabase::write(bool GenerateLLVMDefs) {
+  OutputState output(this, GenerateLLVMDefs);
+  output.writeHeader();
+  output.writeLLVMDefinitions();
+  // output.writeResourceDefinitions();
+  output.writeCpuTable();
+  output.writeExterns();
+  output.writeTrailer();
 }
 
 } // namespace mdl

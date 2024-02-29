@@ -27,12 +27,12 @@ namespace mdl {
 // prune as much of the expression as possible, leaving things that we will
 // need to generate compile-time predicate code for.
 //---------------------------------------------------------------------------
-using PredFunc = PredExpr *(MdlSpec::*)(PredExpr *pred,
-                                        const InstructionDef *def);
+using PredFunc = PredExpr *(MdlSpec::*)(PredExpr *Pred,
+                                        const InstructionDef *Def);
 
 // Table mapping predicate expression types to string names.
-std::string PredExpr::PredName() {
-  static auto *pred_name = new std::unordered_map<PredOp, std::string>(
+std::string PredExpr::getPredName() {
+  static auto *PredName = new std::unordered_map<PredOp, std::string>(
       {{PredOp::kTrue, kTrue},
        {PredOp::kFalse, kFalse},
        {PredOp::kEmpty, kEmpty},
@@ -53,168 +53,169 @@ std::string PredExpr::PredName() {
        {PredOp::kOpcodeSwitchStmt, kOpcodeSwitchStmt},
        {PredOp::kOpcodeSwitchCase, kOpcodeSwitchCase},
        {PredOp::kReturnStatement, kReturnStatement}});
-  return (*pred_name)[opcode_];
+  return (*PredName)[Opcode];
 }
 
-PredExpr *MdlSpec::EvaluatePredicate(std::string name,
-                                     const InstructionDef *instr) {
-  if (predicate_table_.count(name) == 0)
+PredExpr *MdlSpec::evaluatePredicate(std::string Name,
+                                     const InstructionDef *Instr) {
+  if (PredicateTable.count(Name) == 0)
     return nullptr;
-  return EvaluatePredicate(predicate_table_[name], instr);
+  return evaluatePredicate(PredicateTable[Name], Instr);
 }
 
-PredExpr *MdlSpec::EvaluatePredicate(PredExpr *pred,
-                                     const InstructionDef *instr) {
+PredExpr *MdlSpec::evaluatePredicate(PredExpr *Pred,
+                                     const InstructionDef *Instr) {
   // Table of operation-to-evaluation functions.
-  static auto *pred_ops = new std::unordered_map<PredOp, PredFunc>({
-      {PredOp::kTrue, &MdlSpec::PredSimple},
-      {PredOp::kFalse, &MdlSpec::PredSimple},
-      {PredOp::kEmpty, &MdlSpec::PredSimple},
-      {PredOp::kName, &MdlSpec::PredEvalName},
-      {PredOp::kCheckAny, &MdlSpec::PredCheckAny},
-      {PredOp::kCheckAll, &MdlSpec::PredCheckAll},
-      {PredOp::kCheckNot, &MdlSpec::PredCheckNot},
-      {PredOp::kCheckOpcode, &MdlSpec::PredCheckOpcode},
-      {PredOp::kCheckIsRegOperand, &MdlSpec::PredCheckIsReg},
-      {PredOp::kCheckRegOperand, &MdlSpec::PredCheckReg},
-      {PredOp::kCheckInvalidRegOperand, &MdlSpec::PredCheckInvalidReg},
-      {PredOp::kCheckSameRegOperand, &MdlSpec::PredCheckSameReg},
-      {PredOp::kCheckNumOperands, &MdlSpec::PredCheckNumOperand},
-      {PredOp::kCheckIsImmOperand, &MdlSpec::PredCheckIsImm},
-      {PredOp::kCheckImmOperand, &MdlSpec::PredCheckImm},
-      {PredOp::kCheckZeroOperand, &MdlSpec::PredCheckZero},
-      {PredOp::kCheckFunctionPredicate, &MdlSpec::PredSimple},
-      {PredOp::kCheckFunctionPredicateWithTII, &MdlSpec::PredSimple},
-      {PredOp::kOpcodeSwitchStmt, &MdlSpec::PredOpcodeSwitchStmt},
-      {PredOp::kReturnStatement, &MdlSpec::PredReturnStatement},
+  static auto *PredOps = new std::unordered_map<PredOp, PredFunc>({
+      {PredOp::kTrue, &MdlSpec::predSimple},
+      {PredOp::kFalse, &MdlSpec::predSimple},
+      {PredOp::kEmpty, &MdlSpec::predSimple},
+      {PredOp::kName, &MdlSpec::predEvalName},
+      {PredOp::kCheckAny, &MdlSpec::predCheckAny},
+      {PredOp::kCheckAll, &MdlSpec::predCheckAll},
+      {PredOp::kCheckNot, &MdlSpec::predCheckNot},
+      {PredOp::kCheckOpcode, &MdlSpec::predCheckOpcode},
+      {PredOp::kCheckIsRegOperand, &MdlSpec::predCheckIsReg},
+      {PredOp::kCheckRegOperand, &MdlSpec::predCheckReg},
+      {PredOp::kCheckInvalidRegOperand, &MdlSpec::predCheckInvalidReg},
+      {PredOp::kCheckSameRegOperand, &MdlSpec::predCheckSameReg},
+      {PredOp::kCheckNumOperands, &MdlSpec::predCheckNumOperand},
+      {PredOp::kCheckIsImmOperand, &MdlSpec::predCheckIsImm},
+      {PredOp::kCheckImmOperand, &MdlSpec::predCheckImm},
+      {PredOp::kCheckZeroOperand, &MdlSpec::predCheckZero},
+      {PredOp::kCheckFunctionPredicate, &MdlSpec::predSimple},
+      {PredOp::kCheckFunctionPredicateWithTII, &MdlSpec::predSimple},
+      {PredOp::kOpcodeSwitchStmt, &MdlSpec::predOpcodeSwitchStmt},
+      {PredOp::kReturnStatement, &MdlSpec::predReturnStatement},
   });
 
-  PredOp opcode = pred->opcode();
-  if (pred_ops->count(opcode))
-    return (this->*(*pred_ops)[opcode])(pred, instr);
+  PredOp Opcode = Pred->getOpcode();
+  if (PredOps->count(Opcode))
+    return (this->*(*PredOps)[Opcode])(Pred, Instr);
 
-  return pred;
+  return Pred;
 }
 
 // Look up a predicate by name, and return the associated predicate.
 // If the predicate maps to a name, recur on that name.
-PredExpr *MdlSpec::LookupPredicate(PredExpr *pred) {
-  if (!IsValidInstructionPredicate(pred->value())) {
-    ErrorLog(pred, "Undefined predicate: {0}", pred->value());
+PredExpr *MdlSpec::lookupPredicate(PredExpr *Pred) {
+  if (!isValidInstructionPredicate(Pred->getValue())) {
+    ErrorLog(Pred, "Undefined predicate: {0}", Pred->getValue());
     return new PredExpr(PredOp::kFalse);
   }
 
-  auto *item = predicate_table_[pred->value()];
-  if (item->opcode() == PredOp::kName)
-    return LookupPredicate(item);
-  return item;
+  auto *Item = PredicateTable[Pred->getValue()];
+  if (Item->getOpcode() == PredOp::kName)
+    return lookupPredicate(Item);
+  return Item;
 }
 
 // Evaluate a named predicate.  Since CheckNots aren't propagated through
 // named predicates, we need to handle negates explicitly.
-PredExpr *MdlSpec::PredEvalName(PredExpr *pred, const InstructionDef *instr) {
-  auto *item = LookupPredicate(pred);
-  auto *result = EvaluatePredicate(item, instr);
-  if (pred->negate())
-    return PredSimplify(new PredExpr(*pred, PredOp::kCheckNot, result));
+PredExpr *MdlSpec::predEvalName(PredExpr *Pred, const InstructionDef *Instr) {
+  auto *Item = lookupPredicate(Pred);
+  auto *Result = evaluatePredicate(Item, Instr);
+  if (Pred->getNegate())
+    return predSimplify(new PredExpr(*Pred, PredOp::kCheckNot, Result));
 
-  return result;
+  return Result;
 }
 
 // Logical OR operator on child predicates:
 //   - immediately return True on a predicate that evaluates to True.
 //   - discard any predicates that evaluate to False.
 //   - if the predicate can't be completely evaluated, add to result set.
-PredExpr *MdlSpec::PredCheckAny(PredExpr *pred, const InstructionDef *instr) {
-  std::vector<PredExpr *> result;
-  for (auto *or_op : pred->operands()) {
-    auto *item = EvaluatePredicate(or_op, instr);
-    if (item->IsTrue())
-      return item;
-    if (!item->IsFalse())
-      result.push_back(item);
+PredExpr *MdlSpec::predCheckAny(PredExpr *Pred, const InstructionDef *Instr) {
+  std::vector<PredExpr *> Result;
+  for (auto *OrOp : Pred->getOperands()) {
+    auto *Item = evaluatePredicate(OrOp, Instr);
+    if (Item->isTrue())
+      return Item;
+    if (!Item->isFalse())
+      Result.push_back(Item);
   }
   // If we didn't find True or partially evaluated predicates, return False.
-  if (result.empty())
+  if (Result.empty())
     return new PredExpr(PredOp::kFalse);
   // If we only found one partially evaluated predicate, just return it.
-  if (result.size() == 1)
-    return result[0];
+  if (Result.size() == 1)
+    return Result[0];
   // If there is more than one predicate, return an OR of them.
-  return new PredExpr(*pred, PredOp::kCheckAny, result);
+  return new PredExpr(*Pred, PredOp::kCheckAny, Result);
 }
 
 // Logical AND operator on child predicates:
 //   - immediately return False on a predicate that evaluates to False.
 //   - discard any predicates that evaluate to True.
 //   - if the predicate can't be completely evaluated, add to result set.
-PredExpr *MdlSpec::PredCheckAll(PredExpr *pred, const InstructionDef *instr) {
-  std::vector<PredExpr *> result;
-  for (auto *and_op : pred->operands()) {
-    auto *item = EvaluatePredicate(and_op, instr);
-    if (item->IsFalse())
-      return item;
-    if (!item->IsTrue())
-      result.push_back(item);
+PredExpr *MdlSpec::predCheckAll(PredExpr *Pred, const InstructionDef *Instr) {
+  std::vector<PredExpr *> Result;
+  for (auto *AndOp : Pred->getOperands()) {
+    auto *Item = evaluatePredicate(AndOp, Instr);
+    if (Item->isFalse())
+      return Item;
+    if (!Item->isTrue())
+      Result.push_back(Item);
   }
   // If we didn't find True or partially evaluated predicates, return True.
-  if (result.empty())
+  if (Result.empty())
     return new PredExpr(PredOp::kTrue);
   // If we only found one partially evaluated predicate, just return it.
-  if (result.size() == 1)
-    return result[0];
+  if (Result.size() == 1)
+    return Result[0];
   // If there is more than one predicate, return an AND of them.
-  return new PredExpr(*pred, PredOp::kCheckAll, result);
+  return new PredExpr(*Pred, PredOp::kCheckAll, Result);
 }
 
 // Logical NOT operator on the child predicate.
 // kCheckNot operators are almost always simplified away, so when evaluating one
 // we need to preserve it in the expression unless the child is simplified to
 // true or false.
-PredExpr *MdlSpec::PredCheckNot(PredExpr *pred, const InstructionDef *instr) {
-  auto *item = EvaluatePredicate(pred->operands()[0], instr);
-  if (item->IsFalse())
+PredExpr *MdlSpec::predCheckNot(PredExpr *Pred, const InstructionDef *Instr) {
+  auto *Item = evaluatePredicate(Pred->getOperands()[0], Instr);
+  if (Item->isFalse())
     return new PredExpr(PredOp::kTrue);
-  if (item->IsTrue())
+  if (Item->isTrue())
     return new PredExpr(PredOp::kFalse);
-  return new PredExpr(*pred, PredOp::kCheckNot, item);
+  return new PredExpr(*Pred, PredOp::kCheckNot, Item);
 }
 
 // Check for a particular opcode.  This always return either true or false.
-PredExpr *MdlSpec::PredCheckOpcode(PredExpr *pred,
-                                   const InstructionDef *instr) {
-  std::vector<PredExpr *> result;
-  for (auto *opcode : pred->operands()) {
-    if (!opcode->IsName())
-      ErrorLog(opcode, "Instruction name expected");
-    else if (instruction_map_.count(opcode->value()) == 0)
-      ErrorLog(opcode, "Invalid instruction name: {0}", opcode->value());
-    if (opcode->value() == instr->name())
-      return new PredExpr(PredOp::kTrue, pred->negate());
+PredExpr *MdlSpec::predCheckOpcode(PredExpr *Pred,
+                                   const InstructionDef *Instr) {
+  std::vector<PredExpr *> Result;
+  for (auto *Opcode : Pred->getOperands()) {
+    if (!Opcode->isName())
+      ErrorLog(Opcode, "Instruction name expected");
+    else if (InstructionMap.count(Opcode->getValue()) == 0)
+      ErrorLog(Opcode, "Invalid instruction name: {0}", Opcode->getValue());
+    if (Opcode->getValue() == Instr->getName())
+      return new PredExpr(PredOp::kTrue, Pred->getNegate());
   }
-  return new PredExpr(PredOp::kFalse, pred->negate());
+  return new PredExpr(PredOp::kFalse, Pred->getNegate());
 }
 
 // If a predicate operand is a predicate index, look up the operand and
 // check it for validity.  Return -1 if its invalid.
 // If the operand is an operand reference, look it up and return its index.
-int MdlSpec::PredOperandIndex(const PredExpr *pred,
-                              const InstructionDef *instr) {
+int MdlSpec::predOperandIndex(const PredExpr *Pred,
+                              const InstructionDef *Instr) {
   // Predicate operand indexes are flattened operand indexes.
-  if (pred->opcode() == PredOp::kNumber) {
-    int index = pred->int_value();
-    int num_operands = instr->num_flat_operands();
-    if (index < 0) {
-      ErrorLog(pred, "Invalid operand index: {0}", index);
+  if (Pred->getOpcode() == PredOp::kNumber) {
+    int Index = Pred->getIntValue();
+    int NumOperands = Instr->getNumFlatOperands();
+    if (Index < 0) {
+      ErrorLog(Pred, "Invalid operand index: {0}", Index);
       return -1;
     }
-    return (index < num_operands || instr->has_ellipsis()) ? index : -1;
+    return (Index < NumOperands || Instr->hasEllipsis()) ? Index : -1;
   }
 
-  if (pred->opcode() == PredOp::kOperandRef)
-    return FindOperandName(instr, *pred->opnd()->op_names(), RefTypes::kNull);
+  if (Pred->getOpcode() == PredOp::kOperandRef)
+    return findOperandName(Instr, *Pred->getOpnd()->getOpNames(),
+                           RefTypes::kNull);
 
-  ErrorLog(pred, "Operand index expected");
+  ErrorLog(Pred, "Operand index expected");
   return -1;
 }
 
@@ -222,46 +223,46 @@ int MdlSpec::PredOperandIndex(const PredExpr *pred,
 // class operands or a register name. If we reference a defined operand, we
 // can always determine if it's a register or not. If it refers to a variadic
 // operand, we have to generate a compile-time test.
-PredExpr *MdlSpec::PredCheckIsReg(PredExpr *pred, const InstructionDef *instr) {
-  int index = PredOperandIndex(pred->operands()[0], instr);
-  if (index == -1)
-    return new PredExpr(PredOp::kFalse, pred->negate());
-  if (index >= instr->num_flat_operands()) {
-    if (instr->has_ellipsis())
-      return pred;
-    return new PredExpr(PredOp::kFalse, pred->negate());
+PredExpr *MdlSpec::predCheckIsReg(PredExpr *Pred, const InstructionDef *Instr) {
+  int Index = predOperandIndex(Pred->getOperands()[0], Instr);
+  if (Index == -1)
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
+  if (Index >= Instr->getNumFlatOperands()) {
+    if (Instr->hasEllipsis())
+      return Pred;
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
   }
 
   // If it's a valid operand, we can always determine whether or not it is a
   // register operand.
-  auto *opnd = (*instr->flat_operands())[index];
-  auto type = opnd->base_type()->name();
-  if (!reg_class_map().count(type) && FindItem(registers(), type) == nullptr)
-    return new PredExpr(PredOp::kFalse, pred->negate());
-  return new PredExpr(PredOp::kTrue, pred->negate());
+  auto *Opnd = (*Instr->getFlatOperands())[Index];
+  auto type = Opnd->getBaseType()->getName();
+  if (!RegisterClassMap.count(type) && FindItem(Registers, type) == nullptr)
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
+  return new PredExpr(PredOp::kTrue, Pred->getNegate());
 }
 
 // Check if a specific register operand is an invalid register.  We usually
 // need to generate a compile-time check for this, but can do some sanity
 // checking at compiler build time.
-PredExpr *MdlSpec::PredCheckInvalidReg(PredExpr *pred,
-                                       const InstructionDef *instr) {
-  int index = PredOperandIndex(pred->operands()[0], instr);
-  if (index == -1)
-    return new PredExpr(PredOp::kFalse, pred->negate());
-  if (index >= instr->num_flat_operands()) {
-    if (instr->has_ellipsis())
-      return pred;
-    return new PredExpr(PredOp::kFalse, pred->negate());
+PredExpr *MdlSpec::predCheckInvalidReg(PredExpr *Pred,
+                                       const InstructionDef *Instr) {
+  int Index = predOperandIndex(Pred->getOperands()[0], Instr);
+  if (Index == -1)
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
+  if (Index >= Instr->getNumFlatOperands()) {
+    if (Instr->hasEllipsis())
+      return Pred;
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
   }
 
   // If the operand type is a named register, then it can't be invalid.
-  auto *opnd = (*instr->flat_operands())[index];
-  auto type = opnd->base_type()->name();
-  if (FindItem(registers(), type))
-    return new PredExpr(PredOp::kFalse, pred->negate());
+  auto *Opnd = (*Instr->getFlatOperands())[Index];
+  auto Type = Opnd->getBaseType()->getName();
+  if (FindItem(Registers, Type))
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
 
-  return pred;
+  return Pred;
 }
 
 // Check if an operand is a specific register. There are several cases we
@@ -272,34 +273,34 @@ PredExpr *MdlSpec::PredCheckInvalidReg(PredExpr *pred,
 //   specified register name is NOT in that class.
 // - If it's an invalid operand index, we can return kFalse.
 // In all other cases, we need to generate a compile-time test.
-PredExpr *MdlSpec::PredCheckReg(PredExpr *pred, const InstructionDef *instr) {
-  int index = PredOperandIndex(pred->operands()[0], instr);
-  if (index == -1)
-    return new PredExpr(PredOp::kFalse, pred->negate());
-  if (index >= instr->num_flat_operands()) {
-    if (instr->has_ellipsis())
-      return pred;
-    return new PredExpr(PredOp::kFalse, pred->negate());
+PredExpr *MdlSpec::predCheckReg(PredExpr *Pred, const InstructionDef *Instr) {
+  int Index = predOperandIndex(Pred->getOperands()[0], Instr);
+  if (Index == -1)
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
+  if (Index >= Instr->getNumFlatOperands()) {
+    if (Instr->hasEllipsis())
+      return Pred;
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
   }
 
   // If we have a custom function to call, we can't evaluate it.
-  if (pred->operands().size() == 3)
-    return pred;
+  if (Pred->getOperands().size() == 3)
+    return Pred;
 
   // Check that its actually a register name, treat invalid names as an error.
-  auto reg_name = pred->operands()[1]->value();
-  if (!FindItem(registers(), reg_name)) {
-    ErrorLog(pred->operands()[1], "Invalid register name: {0}", reg_name);
-    return new PredExpr(PredOp::kFalse, pred->negate());
+  auto RegName = Pred->getOperands()[1]->getValue();
+  if (!FindItem(Registers, RegName)) {
+    ErrorLog(Pred->getOperands()[1], "Invalid register name: {0}", RegName);
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
   }
 
-  auto *opnd = (*instr->flat_operands())[index];
-  auto type = opnd->base_type()->name();
+  auto *Opnd = (*Instr->getFlatOperands())[Index];
+  auto Type = Opnd->getBaseType()->getName();
 
   // If the operand type is a register, see if it matches the specified name.
-  if (FindItem(registers(), type)) {
-    auto opcode = (type == reg_name) ? PredOp::kTrue : PredOp::kFalse;
-    return new PredExpr(opcode, pred->negate());
+  if (FindItem(Registers, Type)) {
+    auto Opcode = (Type == RegName) ? PredOp::kTrue : PredOp::kFalse;
+    return new PredExpr(Opcode, Pred->getNegate());
   }
 
   // If the operand type is a register class, see if the specified name is NOT
@@ -310,66 +311,64 @@ PredExpr *MdlSpec::PredCheckReg(PredExpr *pred, const InstructionDef *instr) {
   // information in the machine description.
   // TODO(tdb): Scrape overlapping register information from the td files,
   // and use that information here.
-  if (reg_class_map().count(type) &&
-      !FindItem(*reg_class_map()[type]->members(), reg_name))
-    return new PredExpr(PredOp::kFalse, pred->negate());
+  if (RegisterClassMap().count(type) &&
+      !FindItem(*RegisterClassMap()[type]->members(), reg_name))
+    return new PredExpr(PredOp::kFalse, Pred->negate());
 #endif
 
-  return pred;
+  return Pred;
 }
 
 // In general, we need to do a runtime test unless the indexes are invalid.
 // We -could- check for cases involving literal register operands and/or
 // non-intersecting register classes.
-PredExpr *MdlSpec::PredCheckSameReg(PredExpr *pred,
-                                    const InstructionDef *instr) {
-  int index0 = PredOperandIndex(pred->operands()[0], instr);
-  if (index0 == -1)
-    return new PredExpr(PredOp::kFalse, pred->negate());
-  if (index0 >= instr->num_flat_operands())
-    return instr->has_ellipsis() ? pred
-                                 : new PredExpr(PredOp::kFalse, pred->negate());
-  int index1 = PredOperandIndex(pred->operands()[1], instr);
-  if (index1 == -1)
-    return new PredExpr(PredOp::kFalse, pred->negate());
-  if (index1 >= instr->num_flat_operands())
-    return instr->has_ellipsis() ? pred
-                                 : new PredExpr(PredOp::kFalse, pred->negate());
+PredExpr *MdlSpec::predCheckSameReg(PredExpr *Pred,
+                                    const InstructionDef *Instr) {
+  int Index0 = predOperandIndex(Pred->getOperands()[0], Instr);
+  if (Index0 == -1)
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
+  if (Index0 >= Instr->getNumFlatOperands())
+    return Instr->hasEllipsis() ? Pred
+                      : new PredExpr(PredOp::kFalse, Pred->getNegate());
+  int Index1 = predOperandIndex(Pred->getOperands()[1], Instr);
+  if (Index1 == -1)
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
+  if (Index1 >= Instr->getNumFlatOperands())
+    return Instr->hasEllipsis() ? Pred
+                           : new PredExpr(PredOp::kFalse, Pred->getNegate());
 
   // Make sure they're both register operands.
-  auto *opnd0 = (*instr->flat_operands())[index0];
-  auto type0 = opnd0->base_type()->name();
-  auto *opnd1 = (*instr->flat_operands())[index1];
-  auto type1 = opnd1->base_type()->name();
+  auto *Opnd0 = (*Instr->getFlatOperands())[Index0];
+  auto Type0 = Opnd0->getBaseType()->getName();
+  auto *Opnd1 = (*Instr->getFlatOperands())[Index1];
+  auto Type1 = Opnd1->getBaseType()->getName();
 
-  bool reg0 = FindItem(registers(), type0) || reg_class_map().count(type0);
-  bool reg1 = FindItem(registers(), type1) || reg_class_map().count(type1);
-  if (!reg0 || !reg1)
-    return new PredExpr(PredOp::kFalse, pred->negate());
-
-  return pred;
+  bool Reg0 = FindItem(Registers, Type0) || RegisterClassMap.count(Type0);
+  bool Reg1 = FindItem(Registers, Type1) || RegisterClassMap.count(Type1);
+  if (!Reg0 || !Reg1)
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
+  return Pred;
 }
 
 // Check that an instruction has a specified number of operands.
 // If the instruction has variadic operands, we generally need to generate a
 // compile time test.
-PredExpr *MdlSpec::PredCheckNumOperand(PredExpr *pred,
-                                       const InstructionDef *instr) {
-  if (!pred->operands()[0]->IsInteger() ||
-       pred->operands()[0]->int_value() < 0) {
-    ErrorLog(pred, "Operand count expected");
-    return pred;
+PredExpr *MdlSpec::predCheckNumOperand(PredExpr *Pred,
+                                       const InstructionDef *Instr) {
+  if (!Pred->getOperands()[0]->isInteger() ||
+       Pred->getOperands()[0]->getIntValue() < 0) {
+    ErrorLog(Pred, "Operand count expected");
+    return Pred;
   }
-  int index = pred->operands()[0]->int_value();
-  int num_operands = instr->num_flat_operands();
-  bool has_ellipsis = instr->has_ellipsis();
+  int Index = Pred->getOperands()[0]->getIntValue();
+  int NumOperands = Instr->getNumFlatOperands();
 
-  if (index < num_operands)
-    return new PredExpr(PredOp::kFalse, pred->negate());
-  if (has_ellipsis)
-    return pred;
-  auto opcode = (index != num_operands) ? PredOp::kFalse : PredOp::kTrue;
-  return new PredExpr(opcode, pred->negate());
+  if (Index < NumOperands)
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
+  if (Instr->hasEllipsis())
+    return Pred;
+  auto Opcode = (Index != NumOperands) ? PredOp::kFalse : PredOp::kTrue;
+  return new PredExpr(Opcode, Pred->getNegate());
 }
 
 // Check that an operand has a specific immediate value. There are several
@@ -377,78 +376,77 @@ PredExpr *MdlSpec::PredCheckNumOperand(PredExpr *pred,
 // - If the operand is a register operand, we can return kFalse.
 // - If it's an invalid operand index, we can return kFalse.
 // Otherwise we generate a compile-time check.
-PredExpr *MdlSpec::PredCheckIsImm(PredExpr *pred, const InstructionDef *instr) {
-  int index = PredOperandIndex(pred->operands()[0], instr);
-  if (index == -1)
-    return new PredExpr(PredOp::kFalse, pred->negate());
-  if (index >= instr->num_flat_operands())
-    return instr->has_ellipsis() ? pred
-                                 : new PredExpr(PredOp::kFalse, pred->negate());
-
+PredExpr *MdlSpec::predCheckIsImm(PredExpr *Pred, const InstructionDef *Instr) {
+  int Index = predOperandIndex(Pred->getOperands()[0], Instr);
+  if (Index == -1)
+    return new PredExpr(PredOp::kFalse, Pred->getNegate());
+  if (Index >= Instr->getNumFlatOperands())
+    return Instr->hasEllipsis() ? Pred
+                            : new PredExpr(PredOp::kFalse, Pred->getNegate());
   // Check for register operands?
-  return pred;
+  return Pred;
 }
 
 // We generally need a compile-time check to look for specific immediate values,
 // so for now we just check that it's a valid immedidate operand.
-PredExpr *MdlSpec::PredCheckImm(PredExpr *pred, const InstructionDef *instr) {
-  return PredCheckIsImm(pred, instr);
+PredExpr *MdlSpec::predCheckImm(PredExpr *Pred, const InstructionDef *Instr) {
+  return predCheckIsImm(Pred, Instr);
 }
 
 // Ditto for PredCheckIsImm.
-PredExpr *MdlSpec::PredCheckZero(PredExpr *pred, const InstructionDef *instr) {
-  return PredCheckIsImm(pred, instr);
+PredExpr *MdlSpec::predCheckZero(PredExpr *Pred, const InstructionDef *Instr) {
+  return predCheckIsImm(Pred, Instr);
 }
 
 // When we evaluate an OpcodeSwitchStmt against a single instruction we can
 // trivally simplify the opcode-based switch statement to a single case and
 // return statement.
-PredExpr *MdlSpec::PredOpcodeSwitchStmt(PredExpr *pred,
-                                        const InstructionDef *instr) {
-  for (auto *opnd : pred->operands()) {
+PredExpr *MdlSpec::predOpcodeSwitchStmt(PredExpr *Pred,
+                                        const InstructionDef *Instr) {
+  for (auto *Opnd : Pred->getOperands()) {
     // If we encounter a named predicate, find its associated predicate, which
     // needs to be either a switch case or a return statement.
-    auto *cases = opnd;       // Don't overwrite the iterator.
-    if (cases->opcode() == PredOp::kName)
-      cases = LookupPredicate(cases);
+    auto *Cases = Opnd;       // Don't overwrite the iterator.
+    if (Cases->getOpcode() == PredOp::kName)
+      Cases = lookupPredicate(Cases);
 
     // We expect just SwitchCases and ReturnStatements. We handle these two
     // cases inline, since they have a particular semantic we need
     // to implement.
-    if (cases->opcode() == PredOp::kOpcodeSwitchCase) {
-      if (EvaluatePredicate(cases->operands()[0], instr)->IsTrue())
-        return EvaluatePredicate(cases->operands()[1], instr);
+    if (Cases->getOpcode() == PredOp::kOpcodeSwitchCase) {
+      if (evaluatePredicate(Cases->getOperands()[0], Instr)->isTrue())
+        return evaluatePredicate(Cases->getOperands()[1], Instr);
       continue;
     }
     // A ReturnStatement is the switch Default.  Just evaluate and return its
     // underlying predicate.
-    if (cases->opcode() == PredOp::kReturnStatement)
-      return EvaluatePredicate(cases->operands()[0], instr);
+    if (Cases->getOpcode() == PredOp::kReturnStatement)
+      return evaluatePredicate(Cases->getOperands()[0], Instr);
 
     // If the predicate isn't a SwitchCase or return statement, we have a
     // poorly defined switch statement, so complain.
-    ErrorLog(pred, "Malformed switch predicate");
+    ErrorLog(Pred, "Malformed switch predicate");
   }
-  return new PredExpr(PredOp::kFalse, pred->negate());
+  return new PredExpr(PredOp::kFalse, Pred->getNegate());
 }
 
 // Trivially return the first operand of a Return statement.
-PredExpr *MdlSpec::PredReturnStatement(PredExpr *pred,
-                                        const InstructionDef *instr) {
-  return EvaluatePredicate(pred->operands()[0], instr);
+PredExpr *MdlSpec::predReturnStatement(PredExpr *Pred,
+                                        const InstructionDef *Instr) {
+  return evaluatePredicate(Pred->getOperands()[0], Instr);
 }
 
 // Write out a predicate expression for debug.
-std::string PredExpr::ToString(int indent) {
-  auto sep = "";
-  std::string out = formatv("{0}{1}{2}", std::string(indent * 2 + 2, ' '),
-                            negate() ? "!" : "", PredName());
+std::string PredExpr::ToString(int Indent) {
+  auto Sep = "";
+  std::string Out = formatv("{0}{1}{2}", std::string(Indent * 2 + 2, ' '),
+                            getNegate() ? "!" : "", getPredName());
 
-  switch (opcode()) {
+  switch (getOpcode()) {
   case PredOp::kTrue:
   case PredOp::kFalse:
   case PredOp::kEmpty:
-    return out;
+    return Out;
 
   case PredOp::kOpcodeSwitchStmt:
   case PredOp::kOpcodeSwitchCase:
@@ -456,19 +454,19 @@ std::string PredExpr::ToString(int indent) {
   case PredOp::kCheckAny:
   case PredOp::kCheckAll:
   case PredOp::kCheckNot:
-    out += "<";
-    for (auto *opnd : operands())
-      out += formatv("\n{0}", opnd->ToString(indent + 1));
-    return out + ">";
+    Out += "<";
+    for (auto *Opnd : getOperands())
+      Out += formatv("\n{0}", Opnd->ToString(Indent + 1));
+    return Out + ">";
 
   case PredOp::kCheckOpcode:
-    out += " [";
-    for (auto *opnd : operands()) {
-      out += formatv("{0}{1}", sep, opnd->ToString(-1));
-      sep = ", ";
+    Out += " [";
+    for (auto *Opnd : getOperands()) {
+      Out += formatv("{0}{1}", Sep, Opnd->ToString(-1));
+      Sep = ", ";
     }
-    out += "]";
-    return out;
+    Out += "]";
+    return Out;
 
   case PredOp::kCheckIsRegOperand:
   case PredOp::kCheckIsImmOperand:
@@ -480,52 +478,52 @@ std::string PredExpr::ToString(int indent) {
   case PredOp::kCheckSameRegOperand:
   case PredOp::kCheckFunctionPredicate:
   case PredOp::kCheckFunctionPredicateWithTII:
-    out += "<";
-    for (auto *opnd : operands()) {
-      out += formatv("{0}{1}", sep, opnd->ToString(-1));
-      sep = ", ";
+    Out += "<";
+    for (auto *Opnd : getOperands()) {
+      Out += formatv("{0}{1}", Sep, Opnd->ToString(-1));
+      Sep = ", ";
     }
-    return out + ">";
+    return Out + ">";
 
   case PredOp::kOperandRef:
-    return opnd()->ToString();
+    return getOpnd()->ToString();
   case PredOp::kString:
   case PredOp::kNumber:
   case PredOp::kName:
   case PredOp::kCode:
-    return out + value();
+    return Out + getValue();
   }
   return "Error";
 }
 
 // Helper functions to find recusively defined predicates.
-bool FindPredicateCycle(PredExpr *root, PredExpr *pred,
-                        std::set<PredExpr *> &visited, MdlSpec *md) {
-  visited.insert(pred);
+bool findPredicateCycle(PredExpr *Root, PredExpr *Pred,
+                        std::set<PredExpr *> &Visited, MdlSpec *Spec) {
+  Visited.insert(Pred);
 
   // For predicate types that have predicate operands, recur over all
   // predicate operands. For kName operands, explicitly check for recursion.
-  switch (pred->opcode()) {
+  switch (Pred->getOpcode()) {
     case PredOp::kCheckAll:
     case PredOp::kCheckAny:
     case PredOp::kCheckNot:
     case PredOp::kReturnStatement:
     case PredOp::kOpcodeSwitchStmt:
     case PredOp::kOpcodeSwitchCase:
-      for (auto *opnd : pred->operands())
-        if (opnd->IsPred() &&
-            FindPredicateCycle(root, opnd, visited, md))
+      for (auto *Opnd : Pred->getOperands())
+        if (Opnd->isPred() &&
+            findPredicateCycle(Root, Opnd, Visited, Spec))
           return true;
       return false;
 
     case PredOp::kName: {
-        if (md->predicate_table().count(pred->value()) == 0)
+        if (Spec->getPredicateTable().count(Pred->getValue()) == 0)
           return false;
-        auto *child = md->predicate_table()[pred->value()];
-        if (child == root)
+        auto *Child = Spec->getPredicateTable()[Pred->getValue()];
+        if (Child == Root)
           return true;
-        if (visited.count(child) == 0)
-           return FindPredicateCycle(root, child, visited, md);
+        if (Visited.count(Child) == 0)
+           return findPredicateCycle(Root, Child, Visited, Spec);
         return false;
       }
     default: return false;
@@ -533,83 +531,83 @@ bool FindPredicateCycle(PredExpr *root, PredExpr *pred,
   return false;
 }
 
-bool FindPredicateCycles(std::string name, PredExpr *pred, MdlSpec *md) {
-  std::set<PredExpr *> visited;
-  if (FindPredicateCycle(pred, pred, visited, md)) {
-    md->ErrorLog(pred, "Recursively defined predicate: {0}", name);
+bool findPredicateCycles(std::string Name, PredExpr *Pred, MdlSpec *Spec) {
+  std::set<PredExpr *> Visited;
+  if (findPredicateCycle(Pred, Pred, Visited, Spec)) {
+    Spec->ErrorLog(Pred, "Recursively defined predicate: {0}", Name);
     return true;
   }
   return false;
 }
 
 // Simplify all predicates registered in the predicate table.
-void MdlSpec::SimplifyPredicates() {
-  for (auto [name, pred] : predicate_table_)
-    if (!FindPredicateCycles(name, pred, this))
-      predicate_table_[name] = PredSimplify(pred);
+void MdlSpec::simplifyPredicates() {
+  for (auto [Name, Pred] : PredicateTable)
+    if (!findPredicateCycles(Name, Pred, this))
+      PredicateTable[Name] = predSimplify(Pred);
 }
 
 // Simplify predicates if possible. In particular we want to propagate
 // negate operators (kCheckNot) down the expression.
-PredExpr *MdlSpec::PredSimplify(PredExpr *expr) {
-  auto &operands = expr->operands();
+PredExpr *MdlSpec::predSimplify(PredExpr *Expr) {
+  auto &Operands = Expr->getOperands();
 
-  switch (expr->opcode()) {
+  switch (Expr->getOpcode()) {
   // For Any/All case, if negated, reverse opcode and negate all operands.
   case PredOp::kCheckAny:
   case PredOp::kCheckAll:
-    if (expr->negate()) {
-      PredOp op = (expr->opcode() == PredOp::kCheckAll) ? PredOp::kCheckAny
+    if (Expr->getNegate()) {
+      PredOp Op = (Expr->getOpcode() == PredOp::kCheckAll) ? PredOp::kCheckAny
                                                         : PredOp::kCheckAll;
-      expr->set_opcode(op);
-      for (auto *operand : expr->operands())
-        operand->set_negate();
+      Expr->setOpcode(Op);
+      for (auto *Opnd : Expr->getOperands())
+        Opnd->setNegate();
     }
-    for (unsigned i = 0; i < operands.size(); i++)
-      operands[i] = PredSimplify(operands[i]);
-    expr->reset_negate();
+    for (unsigned I = 0; I < Operands.size(); I++)
+      Operands[I] = predSimplify(Operands[I]);
+    Expr->resetNegate();
 
     // If they only have one operand, just return the single operand.
-    if (expr->operands().size() == 1)
-      return expr->operands()[0];
-    return expr;
+    if (Expr->getOperands().size() == 1)
+      return Expr->getOperands()[0];
+    return Expr;
 
   // Note that we don't simplify across kNames, since the expressions
   // associated with names are shared across all uses of the kName.  We could,
   // but we'd have to recursively clone the predicate expression for each
   // use, and its just not particuarly compelling.
   case PredOp::kName:
-    return expr;
+    return Expr;
 
   // For NOT case, negate operand, and simplify it.
   case PredOp::kCheckNot:
-    if (!expr->negate())
-      operands[0]->set_negate();
-    expr->reset_negate();
-    return PredSimplify(operands[0]);
+    if (!Expr->getNegate())
+      Operands[0]->setNegate();
+    Expr->resetNegate();
+    return predSimplify(Operands[0]);
 
   case PredOp::kTrue:
-    if (expr->negate())
-      expr->set_opcode(PredOp::kFalse);
-    expr->reset_negate();
-    return expr;
+    if (Expr->getNegate())
+      Expr->setOpcode(PredOp::kFalse);
+    Expr->resetNegate();
+    return Expr;
   case PredOp::kFalse:
-    if (expr->negate())
-      expr->set_opcode(PredOp::kTrue);
-    expr->reset_negate();
-    return expr;
+    if (Expr->getNegate())
+      Expr->setOpcode(PredOp::kTrue);
+    Expr->resetNegate();
+    return Expr;
 
   case PredOp::kOpcodeSwitchStmt:
   case PredOp::kOpcodeSwitchCase:
   case PredOp::kReturnStatement:
-    for (unsigned i = 0; i < operands.size(); i++)
-      operands[i] = PredSimplify(operands[i]);
-    return expr;
+    for (unsigned I = 0; I < Operands.size(); I++)
+      Operands[I] = predSimplify(Operands[I]);
+    return Expr;
 
   default:
-    return expr;
+    return Expr;
   }
-  return expr;
+  return Expr;
 }
 
 //-----------------------------------------------------------------------------
@@ -617,46 +615,46 @@ PredExpr *MdlSpec::PredSimplify(PredExpr *expr) {
 //-----------------------------------------------------------------------------
 
 // Top level interface for generating a function to evaluate a predicate.
-std::string OutputState::FormatPredicateFunc(PredExpr *expr) {
-  auto &operands = expr->operands();
+std::string OutputState::formatPredicateFunc(PredExpr *Expr) {
+  auto &Operands = Expr->getOperands();
 
-  switch (expr->opcode()) {
+  switch (Expr->getOpcode()) {
   case PredOp::kCheckAny:
-    return expr->CheckCompound(this);
+    return Expr->fmtCheckCompound(this);
   case PredOp::kCheckAll:
-    return expr->CheckCompound(this);
+    return Expr->fmtCheckCompound(this);
   case PredOp::kCheckNot:
-    return formatv("!({0})", FormatPredicateFunc(operands[0]));
+    return formatv("!({0})", formatPredicateFunc(Operands[0]));
 
   case PredOp::kCheckIsRegOperand:
   case PredOp::kCheckIsImmOperand:
-    return expr->OperandType();
+    return Expr->fmtOperandType();
 
   case PredOp::kCheckInvalidRegOperand:
-    return expr->InvalidRegOperand();
+    return Expr->fmtInvalidRegOperand();
   case PredOp::kCheckRegOperand:
-    return expr->RegOperand(spec().family_name());
+    return Expr->fmtRegOperand(getSpec().getFamilyName());
   case PredOp::kCheckSameRegOperand:
-    return expr->SameRegOperand();
+    return Expr->fmtSameRegOperand();
   case PredOp::kCheckImmOperand:
-    return expr->ImmOperand();
+    return Expr->fmtImmOperand();
   case PredOp::kCheckZeroOperand:
-    return expr->ImmZeroOperand();
+    return Expr->fmtImmZeroOperand();
   case PredOp::kCheckFunctionPredicate:
-    return expr->FunctionPredicate(false, this);
+    return Expr->fmtFunctionPredicate(false, this);
   case PredOp::kCheckFunctionPredicateWithTII:
-    return expr->FunctionPredicate(true, this);
+    return Expr->fmtFunctionPredicate(true, this);
   case PredOp::kCheckNumOperands:
-    return expr->NumOperands();
+    return Expr->fmtNumOperands();
 
   case PredOp::kCode:
-    return expr->CheckCode(this);
+    return Expr->fmtCheckCode(this);
   case PredOp::kName: {
-    std::string out =
-        FormatPredicateFunc(spec().predicate_table()[expr->value()]);
-    if (expr->negate())
-      return formatv("!({0})", out);
-    return out;
+    std::string Out =
+        formatPredicateFunc(getSpec().getPredicateTable()[Expr->getValue()]);
+    if (Expr->getNegate())
+      return formatv("!({0})", Out);
+    return Out;
   }
 
   // These should be all resolved, and don't need to be formatted.
@@ -667,7 +665,7 @@ std::string OutputState::FormatPredicateFunc(PredExpr *expr) {
   case PredOp::kNumber:
   case PredOp::kString:
   default:
-    return formatv("ERROR {0}: {1}", expr->Location(), expr->ToString(0));
+    return formatv("ERROR {0}: {1}", Expr->getLocation(), Expr->ToString(0));
 
   case PredOp::kTrue:
     return "true";
@@ -676,91 +674,90 @@ std::string OutputState::FormatPredicateFunc(PredExpr *expr) {
   case PredOp::kEmpty:
     return "empty";
   }
-
   return "";
 }
 
-std::string PredExpr::GetOperand(PredExpr *index) const {
-  return formatv("MI->getOperand({0})", index->value());
+std::string PredExpr::fmtGetOperand(PredExpr *Index) const {
+  return formatv("MI->getOperand({0})", Index->getValue());
 }
 
-std::string PredExpr::OperandType() const {
-  PredExpr *index = operands_[0];
-  auto type = (opcode_ == PredOp::kCheckIsRegOperand) ? "isOpndRegister"
+std::string PredExpr::fmtOperandType() const {
+  PredExpr *Index = Operands[0];
+  auto Type = (Opcode == PredOp::kCheckIsRegOperand) ? "isOpndRegister"
                                                       : "isOpndLiteral";
-  auto op = negate() ? "!" : "";
-  return formatv("{0}MI->{1}({2})", op, type, index->value());
+  auto Op = getNegate() ? "!" : "";
+  return formatv("{0}MI->{1}({2})", Op, Type, Index->getValue());
 }
 
-std::string PredExpr::InvalidRegOperand() const {
-  PredExpr *index = operands_[0];
-  auto op = negate() ? "!=" : "==";
-  return formatv("{0} {1} 0", GetOperand(index), op);
+std::string PredExpr::fmtInvalidRegOperand() const {
+  PredExpr *Index = Operands[0];
+  auto Op = getNegate() ? "!=" : "==";
+  return formatv("{0} {1} 0", fmtGetOperand(Index), Op);
 }
 
-std::string PredExpr::RegOperand(const std::string &family) const {
-  PredExpr *index = operands_[0];
-  PredExpr *reg = operands_[1];
-  auto func = (operands_.size() == 3) ? operands_[2]->value() : "";
+std::string PredExpr::fmtRegOperand(const std::string &Family) const {
+  PredExpr *Index = Operands[0];
+  PredExpr *Reg = Operands[1];
+  auto Func = (Operands.size() == 3) ? Operands[2]->getValue() : "";
 
-  auto getReg = GetOperand(index);
-  if (!func.empty())
-    getReg = formatv("{0}({1})", func, getReg);
-  auto op = negate() ? "!=" : "==";
-  auto val = formatv("{0}::{1}", family, reg->value());
-  if (reg->value().empty())
-    val = "0";
-  return formatv("{0} {1} {2}", getReg, op, val);
+  auto GetReg = fmtGetOperand(Index);
+  if (!Func.empty())
+    GetReg = formatv("{0}({1})", Func, GetReg);
+  auto Op = getNegate() ? "!=" : "==";
+  auto Val = formatv("{0}::{1}", Family, Reg->getValue());
+  if (Reg->getValue().empty())
+    Val = "0";
+  return formatv("{0} {1} {2}", GetReg, Op, Val);
 }
 
-std::string PredExpr::SameRegOperand() const {
-  PredExpr *reg0 = operands_[0];
-  PredExpr *reg1 = operands_[1];
+std::string PredExpr::fmtSameRegOperand() const {
+  PredExpr *Reg0 = Operands[0];
+  PredExpr *Reg1 = Operands[1];
 
-  auto op = negate() ? "!=" : "==";
-  return formatv("{0} {1} {2}", GetOperand(reg0), op, GetOperand(reg1));
+  auto Op = getNegate() ? "!=" : "==";
+  return formatv("{0} {1} {2}", fmtGetOperand(Reg0), Op, fmtGetOperand(Reg1));
 }
 
-std::string PredExpr::ImmOperand() const {
-  PredExpr *index = operands_[0];
-  PredExpr *value = operands_[1];
-  auto func = (operands_.size() == 3) ? operands_[2]->value() : "";
+std::string PredExpr::fmtImmOperand() const {
+  PredExpr *Index = Operands[0];
+  PredExpr *Value = Operands[1];
+  auto Func = (Operands.size() == 3) ? Operands[2]->getValue() : "";
 
-  auto getImm = GetOperand(index);
-  if (!func.empty())
-    getImm = formatv("{0}({1})", func, getImm);
-  auto val = value->value();
-  if (val.empty())
-    return formatv("{0}{1}", negate() ? "!" : "", getImm);
+  auto GetImm = fmtGetOperand(Index);
+  if (!Func.empty())
+    GetImm = formatv("{0}({1})", Func, GetImm);
+  auto Val = Value->getValue();
+  if (Val.empty())
+    return formatv("{0}{1}", getNegate() ? "!" : "", GetImm);
 
-  auto op = negate() ? "!=" : "==";
-  return formatv("{0} {1} {2}", getImm, op, val);
+  auto Op = getNegate() ? "!=" : "==";
+  return formatv("{0} {1} {2}", GetImm, Op, Val);
 }
 
-std::string PredExpr::ImmZeroOperand() const {
-  PredExpr *index = operands_[0];
+std::string PredExpr::fmtImmZeroOperand() const {
+  PredExpr *Index = Operands[0];
 
-  auto getImm = GetOperand(index);
-  auto op = negate() ? "!=" : "==";
-  return formatv("{0} {1} 0", getImm, op);
+  auto GetImm = fmtGetOperand(Index);
+  auto Op = getNegate() ? "!=" : "==";
+  return formatv("{0} {1} 0", GetImm, Op);
 }
 
-std::string PredExpr::NumOperands() const {
-  auto op = negate() ? "!=" : "==";
-  return formatv("MI->getMI()->getNumOperands() {0} {1}", op,
-                 operands_[0]->value());
+std::string PredExpr::fmtNumOperands() const {
+  auto Op = getNegate() ? "!=" : "==";
+  return formatv("MI->getMI()->getNumOperands() {0} {1}", Op,
+                 Operands[0]->getValue());
 }
 
-std::string PredExpr::CheckCompound(OutputState *spec) {
-  std::string out;
-  std::string sep = "";
-  std::string op = (opcode() == PredOp::kCheckAll) ? " && " : " || ";
+std::string PredExpr::fmtCheckCompound(OutputState *Outspec) {
+  std::string Out;
+  std::string Sep = "";
+  std::string Op = (getOpcode() == PredOp::kCheckAll) ? " && " : " || ";
 
-  for (auto *operand : operands()) {
-    out += formatv("{0}{1}", sep, spec->FormatPredicateFunc(operand));
-    sep = op;
+  for (auto *operand : getOperands()) {
+    Out += formatv("{0}{1}", Sep, Outspec->formatPredicateFunc(operand));
+    Sep = Op;
   }
-  return formatv("({0})", out);
+  return formatv("({0})", Out);
 }
 
 //----------------------------------------------------------------------
@@ -776,113 +773,114 @@ std::string PredExpr::CheckCompound(OutputState *spec) {
 // TdScan and pass that information through the generated MDL file.
 // Since its potentially arbitrary C++ code, that could be tricky.
 //----------------------------------------------------------------------
-static std::string InstrInfoName(const std::string &family) {
-  if (family == "ARM")
+static std::string InstrInfoName(const std::string &Family) {
+  if (Family == "ARM")
     return "ARMBaseInstrInfo";
-  if (family == "AArch64")
+  if (Family == "AArch64")
     return "AArch64InstrInfo";
-  if (family == "AMDGPU")
+  if (Family == "AMDGPU")
     return "SIInstrInfo";
-  return formatv("{0}InstrInfo", family);
+  return formatv("{0}InstrInfo", Family);
 }
 
 // Given an input string and an offset, find the next identifier in the string
 // and return it. The "loc" parameter points to the end of the identifier
-static std::string FindId(std::string input, size_t &loc) {
+static std::string FindId(std::string Input, size_t &Loc) {
   // Find next alphabetic character.
-  char ch;
-  std::string result;
-  for (ch = input[loc]; ch && !(isalpha(ch) || ch == '_'); ch = input[++loc]) {
+  char Ch;
+  std::string Result;
+  for (Ch = Input[Loc]; Ch && !(isalpha(Ch) || Ch == '_'); Ch = Input[++Loc]) {
   }
-  for (; ch && (isalnum(ch) || ch == '_'); ch = input[++loc])
-    result.push_back(ch);
-  return result;
+  for (; Ch && (isalnum(Ch) || Ch == '_'); Ch = Input[++Loc])
+    Result.push_back(Ch);
+  return Result;
 }
 
-static std::string ExpandVariables(std::string body, std::string family,
+static std::string expandVariables(std::string Body, std::string Family,
                                    bool &TII_seen) {
   // Fetch the target's InstrInfo name (from the PredicateProlog record).
-  std::string tii =
-      formatv("static_cast<const {0}*>(MI->getTII())", InstrInfoName(family));
+  std::string TII =
+      formatv("static_cast<const {0}*>(MI->getTII())", InstrInfoName(Family));
 
   // Replace references to MI with Instr object references.  Replace TII
   // with the target's InstrInfo name.
-  size_t loc = 0;
-  for (auto id = FindId(body, loc); !id.empty(); id = FindId(body, loc)) {
-    if (id == "MI") {
-      body = body.insert(loc, "->getMI()");
-      loc += 6;
-    } else if (id == "TII") {
-      body = body.replace(loc - 3, 3, tii);
-      loc += tii.size() - 3;
+  size_t Loc = 0;
+  for (auto Id = FindId(Body, Loc); !Id.empty(); Id = FindId(Body, Loc)) {
+    if (Id == "MI") {
+      Body = Body.insert(Loc, "->getMI()");
+      Loc += 6;
+    } else if (Id == "TII") {
+      Body = Body.replace(Loc - 3, 3, TII);
+      Loc += TII.size() - 3;
       TII_seen = true;
     }
   }
-  return body;
+  return Body;
 }
 
 // Code predicates must work with MachineInstr AND MCInst objects. We need
 // to replace references to (*MI) and (MI) with a reference to the object's
 // machine instruction pointer.
-std::string PredExpr::CheckCode(OutputState *spec) const {
+std::string PredExpr::fmtCheckCode(OutputState *Outspec) const {
   bool TII_seen = false;
-  std::string input = value();
-  std::string body = input.substr(2, input.length() - 4);
+  std::string Input = getValue();
+  std::string Body = Input.substr(2, Input.length() - 4);
 
-  body = ExpandVariables(body, spec->spec().family_name(), TII_seen);
+  Body = expandVariables(Body, Outspec->getSpec().getFamilyName(), TII_seen);
 
-  // Create the body of the virtual function, add it to the virtual function
+  // Create the Body of the virtual function, add it to the virtual function
   // table, and generate a call to that function via its index.
-  std::string neg = negate() ? "!" : "";
-  std::string out = formatv("{0}({1})", neg, body);
+  std::string Neg = getNegate() ? "!" : "";
+  std::string Out = formatv("{0}({1})", Neg, Body);
   if (!TII_seen)
-    return "(MI->isMI() && " + out + ")";
-  auto vfunc = formatv("  return {0};", out);
-  auto index = OutputState::AddEntry(spec->virtual_ref_predicates(), vfunc);
-  return formatv("(MI->isMI() && MI->evaluatePredicate({0}))", index);
+    return "(MI->isMI() && " + Out + ")";
+  auto Vfunc = formatv("  return {0};", Out);
+  auto Index = OutputState::AddEntry(Outspec->getVirtualRefPredicates(), Vfunc);
+  return formatv("(MI->isMI() && MI->evaluatePredicate({0}))", Index);
 }
 
-std::string PredExpr::FunctionPredicate(bool withTII, OutputState *spec) const {
-  // If withTII is specified, we need to pass target information to the
+std::string
+PredExpr::fmtFunctionPredicate(bool WithTII, OutputState *Outspec) const {
+  // If WithTII is specified, we need to pass target information to the
   // function.  For Machine instructions, this is a TII-> prefix.  For MCInst
   // versions, we pass an extra parameter.
-  std::string tii;
-  std::string mcii = withTII ? ", MI->getMCII())" : ")";
+  std::string TII;
+  std::string MCII = WithTII ? ", MI->getMCII())" : ")";
 
-  if (withTII) {
-    if (operands_.size() == 3 && operands_[2]->value() != "TII") {
-      tii = operands_[2]->value();
-      tii += "->";
+  if (WithTII) {
+    if (Operands.size() == 3 && Operands[2]->getValue() != "TII") {
+      TII = Operands[2]->getValue();
+      TII += "->";
     } else {
       // Fetch the target's InstrInfo name (from the PredicateProlog record).
-      tii = formatv("static_cast<const {0}*>(MI->getTII())->",
-                    InstrInfoName(spec->spec().family_name()));
+      TII = formatv("static_cast<const {0}*>(MI->getTII())->",
+                    InstrInfoName(Outspec->getSpec().getFamilyName()));
     }
   }
 
-  std::string neg = negate() ? "!" : "";
+  std::string Neg = getNegate() ? "!" : "";
 
-  auto MCfunc = operands_[0]->value(); // MCInst function
+  auto MCfunc = Operands[0]->getValue(); // MCInst function
   if (!MCfunc.empty())
-    MCfunc = MCfunc + "(*MI->getMC()" + mcii;
+    MCfunc = MCfunc + "(*MI->getMC()" + MCII;
 
-  auto MIfunc = operands_[1]->value();        // MachineInstr function
+  auto MIfunc = Operands[1]->getValue();        // MachineInstr function
   if (!MIfunc.empty())
-    MIfunc = tii + MIfunc + "(*MI->getMI())";
+    MIfunc = TII + MIfunc + "(*MI->getMI())";
 
   if (MIfunc.empty())
-    return formatv("(MI->isMC() && {0}{1})", neg, MCfunc);
+    return formatv("(MI->isMC() && {0}{1})", Neg, MCfunc);
 
   // Create the body of the virtual function, add it to the virtual function
   // table, and generate a call to that function via its index.
-  auto vfunc = formatv("  return {0};", MIfunc);
-  auto index = OutputState::AddEntry(spec->virtual_ref_predicates(), vfunc);
-  MIfunc = formatv("MI->evaluatePredicate({0})", index);
+  auto Vfunc = formatv("  return {0};", MIfunc);
+  auto Index = OutputState::AddEntry(Outspec->getVirtualRefPredicates(), Vfunc);
+  MIfunc = formatv("MI->evaluatePredicate({0})", Index);
 
   if (MCfunc.empty())
     return "(MI->isMI() && " + MIfunc + ")";
 
-  return neg + "(MI->isMC() ? " + MCfunc + " : " + MIfunc + ")";
+  return Neg + "(MI->isMC() ? " + MCfunc + " : " + MIfunc + ")";
 }
 
 } // namespace mdl
