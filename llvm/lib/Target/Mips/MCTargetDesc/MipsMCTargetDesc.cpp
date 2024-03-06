@@ -19,7 +19,6 @@
 #include "MipsMCNaCl.h"
 #include "MipsTargetStreamer.h"
 #include "TargetInfo/MipsTargetInfo.h"
-#include "llvm/Config/config.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCELFStreamer.h"
 #include "llvm/MC/MCInstrAnalysis.h"
@@ -47,12 +46,7 @@ using namespace llvm;
 #include "MipsGenRegisterInfo.inc"
 
 // Include the generated MDL database.
-#if ENABLE_MDL_USE
 #include "MipsGenMdlInfo.inc"
-#define MipsCpuTable &Mips::CpuTable
-#else
-#define MipsCpuTable nullptr
-#endif
 
 /// Select the Mips CPU for the given triple and cpu name.
 StringRef MIPS_MC::selectMipsCPU(const Triple &TT, StringRef CPU) {
@@ -88,7 +82,7 @@ static MCSubtargetInfo *createMipsMCSubtargetInfo(const Triple &TT,
                                                   StringRef CPU, StringRef FS) {
   CPU = MIPS_MC::selectMipsCPU(TT, CPU);
   return createMipsMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS,
-                                       MipsCpuTable);
+                                       Mips::CpuTableAddr);
 }
 
 static MCAsmInfo *createMipsMCAsmInfo(const MCRegisterInfo &MRI,

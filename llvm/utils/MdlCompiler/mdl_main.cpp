@@ -30,47 +30,47 @@ using namespace llvm;
 cl::opt<std::string> InputFile(cl::Positional, cl::desc("<input file>"));
 
 cl::OptionCategory MdlOutput("Output options");
-cl::opt<std::string> OutputDir("output_dir", cl::desc("Output directory"),
+cl::opt<std::string> OutputDir("output-dir", cl::desc("Output directory"),
                                 cl::init(""), cl::value_desc("dir"),
                                 cl::cat(MdlOutput));
-cl::opt<std::string> ImportDir("import_dir", cl::desc("Import directory"),
+cl::opt<std::string> ImportDir("import-dir", cl::desc("Import directory"),
                                 cl::init(""), cl::value_desc("dir"),
                                 cl::cat(MdlOutput));
 cl::opt<bool>
-    GenMissingInfo("gen_missing_info",
+    GenMissingInfo("gen-missing-info",
                      cl::desc("Generate missing info for instructions"),
                      cl::cat(MdlOutput), cl::init(false));
 
 cl::OptionCategory MdlDiags("Diagnostic options");
 cl::opt<bool> Warnings("warnings", cl::desc("Print warnings"),
                        cl::cat(MdlDiags), cl::init(false));
-cl::opt<bool> FatalWarnings("fatal_warnings",
+cl::opt<bool> FatalWarnings("fatal-warnings",
                              cl::desc("Treat warnings as errors"),
                              cl::cat(MdlDiags), cl::init(false));
 cl::opt<bool>
-    CheckUsage("check_usage",
+    CheckUsage("check-usage",
                 cl::desc("Check subunit, reference, and resource usage"),
                 cl::cat(MdlDiags), cl::init(false));
 cl::opt<bool> CheckAllOperands(
-    "check_all_operands",
+    "check-all-operands",
     cl::desc("Check references to all operands - not just registers"),
     cl::cat(MdlDiags), cl::init(false));
 
 cl::OptionCategory MdlDebug("Debugging options");
-cl::opt<bool> DumpResources("dump_resources", cl::desc("Dump resource ids"),
+cl::opt<bool> DumpResources("dump-resources", cl::desc("Dump resource ids"),
                              cl::init(false), cl::cat(MdlDebug));
-cl::opt<bool> DumpFus("dump_fus",
+cl::opt<bool> DumpFus("dump-fus",
                        cl::desc("Dump functional unit instantiations"),
                        cl::init(false), cl::cat(MdlDebug));
-cl::opt<bool> DumpSus("dump_sus", cl::desc("Dump subunit instantiations"),
+cl::opt<bool> DumpSus("dump-sus", cl::desc("Dump subunit instantiations"),
                        cl::init(false), cl::cat(MdlDebug));
-cl::opt<bool> DumpSpec("dump_spec", cl::desc("Dump entire mdl specification"),
+cl::opt<bool> DumpSpec("dump-spec", cl::desc("Dump entire mdl specification"),
                         cl::init(false), cl::cat(MdlDebug));
-cl::opt<bool> DumpInstr("dump_instr", cl::desc("Dump instruction information"),
+cl::opt<bool> DumpInstr("dump-instr", cl::desc("Dump instruction information"),
                          cl::init(false), cl::cat(MdlDebug));
-cl::opt<bool> DumpPreds("dump_preds", cl::desc("Dump user-defined predicates"),
+cl::opt<bool> DumpPreds("dump-preds", cl::desc("Dump user-defined predicates"),
                          cl::init(false), cl::cat(MdlDebug));
-cl::opt<bool> GenerateLLVMDefs("gen_llvm_defs",
+cl::opt<bool> GenerateLLVMDefs("gen-llvm-defs",
                                  cl::desc("Generate LLVM definitions"),
                                  cl::init(false), cl::cat(MdlDebug));
 

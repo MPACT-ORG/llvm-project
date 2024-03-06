@@ -2,7 +2,7 @@
 // Check implicit functional unit template creation, and check references to
 // those units.
 //-----------------------------------------------------------------------------
-// RUN: llvm-mdl --warnings %s 2>&1 | FileCheck %s
+// RUN: llvm-mdl --warnings %s --output-dir /tmp/ 2>&1 | FileCheck %s
 
 family test;
 

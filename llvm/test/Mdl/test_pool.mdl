@@ -1,7 +1,7 @@
 //---------------------------------------------------------------------------
 // Test handling of pool references and port references.
 //---------------------------------------------------------------------------
-// RUN: llvm-mdl --dump_instr %s --output_dir /tmp/ 2>&1 | FileCheck %s
+// RUN: llvm-mdl --dump-instr %s --output-dir /tmp/ 2>&1 | FileCheck %s
 
 family test;
 

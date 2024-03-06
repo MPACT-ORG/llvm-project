@@ -15,7 +15,6 @@
 #include "LanaiMCAsmInfo.h"
 #include "TargetInfo/LanaiTargetInfo.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Config/config.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrAnalysis.h"
 #include "llvm/MC/MCInstrInfo.h"
@@ -39,12 +38,7 @@
 #include "LanaiGenRegisterInfo.inc"
 
 // Include the generated MDL database.
-#if ENABLE_MDL_USE
 #include "LanaiGenMdlInfo.inc"
-#define LanaiCpuTable &Lanai::CpuTable
-#else
-#define LanaiCpuTable nullptr
-#endif
 
 using namespace llvm;
 
@@ -67,7 +61,7 @@ createLanaiMCSubtargetInfo(const Triple &TT, StringRef CPU, StringRef FS) {
     CPUName = "generic";
 
   return createLanaiMCSubtargetInfoImpl(TT, CPUName, /*TuneCPU*/ CPUName, FS,
-                                        LanaiCpuTable);
+                                        Lanai::CpuTableAddr);
 }
 
 static MCStreamer *createMCStreamer(const Triple &T, MCContext &Context,

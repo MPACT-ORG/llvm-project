@@ -3,15 +3,41 @@
 
 Reid Tatge          [tatge@google.com](mailto:tatge@google.com)
 
-## **Goals for a Machine Description Language**
+## Introduction: Why build a new language for describing microarchitecture?
 
-Modern processors are complex: multiple execution pipelines, dynamically dispatched, out-of-order execution, register renaming, forwarding networks, and (often) undocumented micro-operations. Instruction behaviors, including micro-operations, often can’t be _statically_ modeled in an accurate way, but only _statistically_ modeled. In these cases, the compiler’s model of a microarchitecture (Schedules and Itineraries in LLVM) is effectively closer to a heuristic than a formal model. And this works quite well for general purpose microprocessors.
+### TL;DR:
+*  The proposed language can be thought of as an _optional extension to the LLVM machine description_. For most upstream architectures, the new language offers minimal benefit other than a much more succinct way to specify an architecture vs schedules and itineraries. But for accelerator-class architectures, it provides a level of detail and capability not available in the existing tablegen approaches.
 
-However, modern accelerators have different and/or additional dimensions of complexity: VLIW instruction issue, unprotected pipelines, tensor/vector ALUs, software-managed memory hierarchies. And it's more critical that compilers can precisely model the details of that complexity. Currently, LLVM’s Schedules and Itineraries aren’t adequate for directly modeling many accelerator architectural features.
+The primary goal of this work was to enable users to write intuitive, succinct descriptions for statically- or dynamically-scheduled VLIW architectures. The current Tablegen mechanisms of schedules and itineraries can competently describe superscalar and EPIC processors, but there are problems when trying to model VLIWs. Creating solutions to some of those problems in TableGen, we found that many solutions either took more “invention” than what we were comfortable with, or scattered the semantic load of the new information to the point that it obfuscated the microarchitectural details, the very antithesis of this work. To be both succinct and intuitive, we needed a made-to-purpose DSL.  I’ll discuss some of the issues below.
+
+The critical challenge with modeling VLIWs is that a single defined instruction can have many subtly different "behaviors" on a single target. Specifically, a VLIW instruction instance may have different register constraints, different latencies, different pipeline behavior, different encoding, and different resource usage depending on which functional unit it is scheduled on, and what instructions it’s scheduled with. It's important to be able to capture each distinct behavior, plumb all behaviors through the compiler to the backend, and - for some architectures - explicitly annotate each instruction _instance_ with scheduling decisions.
+
+Currently, Tablegen itineraries can describe all the ways an instruction _can_ be executed, but don't have a way to model the different _behaviors_ of all of the scheduling choices (in the language or the generated code), nor a way to efficiently annotate the instruction with scheduling decisions. Tablegen, the current tablegen backends, and the LLVM scheduling infrastructure support _one_ description per instruction per subtarget.
+
+A motivating example is Hexagon: the current Hexagon Tablegen itinerary description is ~18000 lines of _machine-generated_ Tablegen. The reason the description is so large is subtle: for every instruction, the model has to describe every distinct way it can be issued - on different functional units, on different issue slots, with different hardware resources used in potentially different pipeline stages. You can do this with itineraries, but there's not a convenient way to do it other than producing the Cartesian product of all the constraints for every instruction. You get a huge, unreadable, unmanageable description - hence it's machine generated. In the case of Hexagon, several constraints are not modeled in the Tablegen description - likely to avoid bloating the size of the generated description - and relegated to handling by Hexagon-specific back-end code. FWIW, we can automatically generate an MDL description for Hexagon (from the generated Tablegen) that is ~3000 lines of MDL description.
+
+It's been suggested that perhaps a better approach would be to start with a series of "small" changes to Tablegen, and incrementally improve its handling of VLIW processors. Hopefully, the above paragraphs hint that the differences between what's needed for superscalar vs VLIW isn't trivial - the chasm that needs to be crossed is bigger than what is possible by taking a series of small steps.
+
+From a language perspective, what's specifically missing in Tablegen is a parametric way to define instruction _behaviors_ in a manner that can be automatically specialized for each instruction, on each target, and for each context in which it can be run. We investigated ways of doing this with changes to Tablegen, but the "improvements" we considered simply made a complex description even more complex and even less intuitive. Further, passing this information through to the backend required significant changes to the existing Tablegen backends and scheduling infrastructure. Rather than perturb both language and code that were working perfectly well for conventional processors, we believed that a parallel approach for VLIWs was a more practical option.
+
+So we needed a DSL specifically designed to describe microarchitecture. As with schedules and itineraries, this is a separable problem from describing instruction semantics, operands, registers, lowering rules, calling conventions, etc. Once we reached that decision, it was straightforward to address some additional problems:
+
+*   VLIW pipelines can be more intricate than superscalar pipelines. Tablegen supports _protected_ pipelines (implemented with register scoreboarding). However, statically scheduled VLIWs may have _unprotected_ pipelines as well, where reading a register before its latest written value is available will yield the "old" value that was in the register. (This is a feature, not a bug!) They may also have _hard_ latencies, where a producer and consumer instruction must be scheduled a specific number of cycles apart.
+*   We want to treat pipeline phases symbolically, and abstractly, rather than using plain integers to describe when things happen in the pipeline.
+*   We wanted to make operand references symbolic, rather than positional (using an operand index), which seems brittle and error prone.
+*   VLIWs typically have hardware resources - beyond functional units and issue slots - that must be allocated and managed by the compiler, often on a cycle-by-cycle basis. While itineraries have some capability to name and allocate resources, we needed a more general capability that worked seamlessly with a hierarchical, parameterized model.
+
+So that is - briefly stated - much of the rationale behind introducing a "new" DSL. In fact, this language isn't new - it is based on a language developed in the early 1990's (at Texas Instruments) to accurately model VLIW DSPs, and it is still in use by TI compilers today. Note that we're explicitly _not_ trying to replace either itineraries or schedules. The MDL is an alternative to those approaches that can be used - on a subtarget-by-subtarget basis - to describe more complex processors. While the language works extremely well for VLIW processors, it also happens to work very well for superscalar and EPIC processors, with substantially simpler descriptions in most cases.
+
+## Goals for a Machine Description Language
+
+Modern processors are complex: multiple execution pipelines, dynamically dispatched, out-of-order execution, register renaming, forwarding networks, and (often) undocumented micro-operations. Instruction behaviors, including micro-operations, often can’t be _statically_ modeled in an accurate way, but only _statistically_ modeled. In these cases, the compiler’s model of a microarchitecture (schedules and itineraries in LLVM) is effectively closer to a heuristic than a formal model. And this works quite well for general purpose microprocessors.
+
+However, modern accelerators have different and/or additional dimensions of complexity: VLIW instruction issue, unprotected pipelines, tensor/vector ALUs, software-managed memory hierarchies. Features like these make it more critical that compilers can precisely model the details of that complexity. Currently, LLVM’s schedules and itineraries aren’t adequate for directly modeling many accelerator architectural features.
 
 So we have several goals:
 
-1. We want a first-class, purpose-built, intuitive language that captures all the scheduling and latency details of the architecture - much like Schedules and Itineraries - that works well for all current targets, but also for a large class of accelerator architectures..
+1. We want a first-class, purpose-built, intuitive language that captures all the scheduling and latency details of the architecture - much like schedules and itineraries - that works well for all current targets, but also for a large class of accelerator architectures.
 2. The complexity of the specification should scale with the complexity of the hardware.
 3. The description should be succinct, avoiding duplicated information, while reflecting the way things are defined in a hardware architecture specification.
 4. We want to generate artifacts that can be used in a machine-independent way for back-end optimization, register allocation, instruction scheduling, etc - anything that depends on the behavior and constraints of instructions.
@@ -21,18 +47,17 @@ For this document (and language), the term “instructions” refers to the docu
 
 The process of compiling a processor’s machine description creates several primary artifacts:
 
-*   For each target instruction (described in td files), we create an object that describes the detailed behaviors of the instruction in any legal context (for example, on any functional unit, on any processor)
+*   For each target instruction (described in .td files), we create an object that describes the detailed behaviors of the instruction in any legal context (for example, on any functional unit, on any processor)
 *   A set of methods with machine independent APIs that leverage the information associated with instructions to inform and guide back-end optimization passes.
 
 The details of the artifacts are described later in this document.
 
 _Note: A full language grammar description is provided in an appendix.  Snippets of grammar throughout the document only provide the pertinent section of the grammar, see the Appendix A for the full grammar._
 
-The proposed language can be thought of as an _optional extension to the LLVM machine description_. For most upstream architectures, the new language offers minimal benefit other than a much more succinct way to specify the architecture vs Schedules and Itineraries.  But for accelerator-class architectures, it provides a level of detail and capability not available in the existing tablegen approaches.
 
-### **Background**
+### Background
 
-Processor families evolve over time. They accrete new instructions, and pipelines change - often in subtle ways - as they accumulate more functional units and registers; encoding rules change; issue rules change. Understanding, encoding, and using all of this information - over time, for many subtargets - can be daunting.  When the description language isn’t sufficient to model the architecture, the back-end modeling evolves towards heuristics, and leads to performance issues or bugs in the compiler. And it certainly ends with large amounts of target specific code to handle “special cases”.
+Processor families evolve over time. They accrete new instructions, and pipelines change - often in subtle ways. They accumulate more functional units and registers; encoding rules change; issue rules change. Understanding, encoding, and using all of this information - over time, for many subtargets - can be daunting.  When the description language isn’t sufficient to model the architecture, the back-end modeling evolves towards heuristics, and leads to performance issues or bugs in the compiler. And it certainly ends with large amounts of target specific code to handle “special cases”. 
 
 LLVM uses the [TableGen](https://llvm.org/docs/TableGen/index.html) language to describe a processor, and this is quite sufficient for handling most general purpose architectures - there are 20+ processor families currently upstreamed in LLVM! In fact, it is very good at modeling instruction definitions, register classes, and calling conventions.  However, there are “features” of modern accelerator micro-architectures which are difficult or impossible to model in tablegen.
 
@@ -43,22 +68,22 @@ We would like to easily handle:
     *   An instruction may read source registers more than once (in different pipeline phases).
     *   Pipeline structure, depth, hazards, scoreboarding, and protection may differ between family members.
 *   Functional units
-    *   Managing functional unit behavior differences across subtargets of a family.
-    *   Impose different register constraints on instructions (local register files, for example).
-    *   Share execution resources with other functional units (such as register ports)
-    *   Functional unit clusters with separate execution pipelines.
-*   VLIW Architecture
-    *   issue rules can get extremely complex, and can be dependent on encoding, operand features, and pipeline behavior of candidate instructions.
+    *   They may support more or fewer instructions across subtargets of a family.
+    *   They may impose additional register constraints on instructions (local register files, for example).
+    *   They may share execution resources with other functional units (such as register ports).
+    *   They may be part of a functional unit cluster with distinct scheduling and pipeline behaviors.
+*   VLIW Architecture 
+    *   Issue rules can get extremely complex and can be dependent on encoding, operand features, and pipeline behavior of candidate instructions.
 
-More generally, we’d like specific language to:
+More generally, we’d like language to:
 
-*   Support all members of a processor family
+*   Support all members (subtargets) of a processor family
 *   Describe CPU features, parameterized by subtarget
     *   Functional units
     *   Issue slots
     *   Pipeline structure and behaviors
 
-Since our emphasis is on easily supporting accelerators and VLIW processors, in addition to supporting all existing targets, much of this is overkill for most upstreamed CPUs.  CPU’s typically have much simpler descriptions, and don’t require much of the capability of our machine description language.  Incidentally, MDL descriptions of these targets (generated automatically from the tablegen Schedules and Itineraries) are typically much more concise than the original tablegen descriptions.
+Since our emphasis is on easily supporting accelerators and VLIW processors in addition to supporting all existing targets, much of this is overkill for most upstreamed CPUs.  These CPUs typically have much simpler descriptions and don’t require much of the capability of our machine description language.  Incidentally, MDL descriptions of these simpler targets (that we generated automatically from the tablegen schedules and itineraries) are typically much more concise than the original tablegen descriptions.
 
 ### **Approach - “Subunits” and Instruction Behaviors**
 
@@ -107,32 +132,32 @@ Here’s a very simple example of a trivial CPU, with three functional units, tw
 
 ```
     cpu myCpu {
-    	phases cpu { E1, E2, E3, E4 };
+    phases cpu { E1, E2, E3, E4 };
         issue slot1, slot2;
-    	func_unit FU_ALU my_alu1();    	// an instance of FU_ALU
-    	func_unit FU_ALU my_alu2();    	// an instance of FU_ALU
-    	func_unit FU_LOAD my_load();   	// an instance of FU_LOAD
+        func_unit FU_ALU my_alu1();    // an instance of FU_ALU
+        func_unit FU_ALU my_alu2();    // an instance of FU_ALU
+        func_unit FU_LOAD my_load();   // an instance of FU_LOAD
     }
 
-    func_unit FU_ALU() {            		// template definition for FU_ALU
-    	subunit ALU();              	// an instance of subunit ALU
+    func_unit FU_ALU() {               // template definition for FU_ALU
+        subunit ALU();                 // an instance of subunit ALU
     }
-    func_unit FU_LOAD() {               	// template definition for FU_LOAD
-    	subunit LOAD();                	// an instance of subunit LOAD
-    }
-
-    subunit ALU() {                      	// template definition for ALU
-    	latency LALU();                	// an instance of latency LALU
-    }
-    subunit LOAD() {                     	// template definition for LOAD
-    	latency LLOAD();               	// an instance of latency LLOAD
+    func_unit FU_LOAD() {              // template definition for FU_LOAD
+        subunit LOAD();                // an instance of subunit LOAD
     }
 
-    latency LALU() {                     	// template definition for LALU
-    	def(E2, $dst);  use(E1, $src1);  use(E1, $src2);
+    subunit ALU() {                    // template definition for ALU
+        latency LALU();                // an instance of latency LALU
     }
-    latency LLOAD() {                    	// template definition for LLOAD
-    	def(E4, $dst);  use(E1, $addr);
+    subunit LOAD() {                   // template definition for LOAD
+        latency LLOAD();               // an instance of latency LLOAD
+    }
+
+    latency LALU() {                   // template definition for LALU
+        def(E2, $dst);  use(E1, $src1);  use(E1, $src2);
+    }
+    latency LLOAD() {                  // template definition for LLOAD
+        def(E4, $dst);  use(E1, $addr);
     }
 ```
 
@@ -619,7 +644,7 @@ We will describe each of these items in more detail.  A machine description for 
        …
     }
     latency mul(…) { … }
-	…
+    …
 
     // Instruction information scraped from Tablegen description
     <register descriptions>
@@ -643,8 +668,8 @@ Here’s an example of this kind of bottom-up description:
 
 ```
     cpu dual_cpu {
-    	func_unit ALU alu1();     // a "my_alu" functional unit, named "alu1"
-    	func_unit ALU alu2();     // a "my_alu" functional unit, named "alu2"
+        func_unit ALU alu1();     // a "my_alu" functional unit, named "alu1"
+        func_unit ALU alu2();     // a "my_alu" functional unit, named "alu2"
     }
     subunit alu2() {{ def(E2, $dst); use(E1, $src); fus(ALU, 3); }}
     subunit alu4() {{ def(E4, $dst); use(E1, $src); fus(ALU, 7); }}
@@ -749,7 +774,7 @@ Grammar:
 
     func_unit_instantiation : 'func_unit' func_unit_instance func_unit_bases*
                               IDENT '(' resource_refs? ')'
-                          		('->' (pin_one | pin_any | pin_all))?  ';'
+                                 ('->' (pin_one | pin_any | pin_all))?  ';'
 
     func_unit_instance      : IDENT ('<>' | ('<' number '>'))?
     func_unit_bases         : ':' func_unit_instance
@@ -764,8 +789,8 @@ The overall schema of a CPU definition looks like this:
 ```
     cpu gen_1 {
        <cpu-specific resource definitions>
-	   <cpu-specific issue definitions>
-	   <cpu-specific pipeline definitions>
+       <cpu-specific issue definitions>
+       <cpu-specific pipeline definitions>
        <cluster definition or functional unit instance>
        <cluster definition or functional unit instance>
        <optional forwarding info>
@@ -800,7 +825,7 @@ A single-alu CPU that has a scheduling model looks like this:
 
 ```
     cpu simple_cpu {
-    	func_unit my_alu alu();      // a "my_alu" functional unit, named "alu"
+        func_unit my_alu alu();      // a "my_alu" functional unit, named "alu"
     }
 ```
 
@@ -808,9 +833,9 @@ A slightly more complex example is a CPU that is single-issue, but has more than
 
 ```
     cpu dual_alu_cpu {
-    	issue slot0;                 // a single issue pipeline
-    	func_unit my_alu alu1();     // a "my_alu" functional unit, named "alu1"
-    	func_unit my_alu alu2();     // a "my_alu" functional unit, named "alu2"
+        issue slot0;                 // a single issue pipeline
+        func_unit my_alu alu1();     // a "my_alu" functional unit, named "alu1"
+        func_unit my_alu alu2();     // a "my_alu" functional unit, named "alu2"
     }
 ```
 
@@ -820,8 +845,8 @@ Here’s an example of a 2-issue processor with two identical functional units:
 
 ```
     cpu dual_issue_cpu {
-    	func_unit my_alu alu1();    // a "my_alu" functional unit, named "alu1"
-    	func_unit my_alu alu2();    // a "my_alu" functional unit, named "alu2"
+        func_unit my_alu alu1();    // a "my_alu" functional unit, named "alu1"
+        func_unit my_alu alu2();    // a "my_alu" functional unit, named "alu2"
     }
 ```
 
@@ -829,8 +854,8 @@ Processors commonly have functional units with different capabilities - memory u
 
 ```
     cpu quad_cpu {
-    	func_unit int_math imath();    // a "int_math" functional unit
-    	func_unit float_math fmath();  // a "float_math" functional unit
+        func_unit int_math imath();    // a "int_math" functional unit
+        func_unit float_math fmath();  // a "float_math" functional unit
         func_unit memory mem();        // a "memory" functional unit
         func_unit branch br();         // a "branch" functional unit
     }
@@ -842,10 +867,10 @@ Multi-issue CPUs always have a constrained set of instructions they can issue in
 
 ```
     cpu tri_cpu {
-    	issue slot0, slot1;
-    	func_unit my_alu alu1();     // a "my_alu" functional unit, named "alu1"
-    	func_unit my_alu alu2();     // a "my_alu" functional unit, named "alu2"
-    	func_unit my_alu alu3();     // a "my_alu" functional unit, named "alu3"
+        issue slot0, slot1;
+        func_unit my_alu alu1();     // a "my_alu" functional unit, named "alu1"
+        func_unit my_alu alu2();     // a "my_alu" functional unit, named "alu2"
+        func_unit my_alu alu3();     // a "my_alu" functional unit, named "alu3"
     }
 ```
 
@@ -859,9 +884,9 @@ In VLIW architectures (in particular), some functional units may be “pinned”
 
 ```
     cpu three_issue_quad_cpu {
-    	issue s0, s1, s2;
-    	func_unit int_math alu1() -> s0;         // alu1 must issue in s0
-    	func_unit float_math alu2() -> s1 | s2;  // alu2 must be in s1 or s2
+        issue s0, s1, s2;
+        func_unit int_math alu1() -> s0;         // alu1 must issue in s0
+        func_unit float_math alu2() -> s1 | s2;  // alu2 must be in s1 or s2
         func_unit memory alu3() -> s0 & s1;      // alu3 uses both s0 and s1
         func_unit branch br();                   // branches can run in any slot
     }
@@ -875,12 +900,12 @@ Functional units can be unreserved (like alu1, below), which means that an instr
 
 ```
     cpu three_issue_superscalar_cpu {
-    	issue s0, s1, s2;
-        reorder_buffer<20>;        		// the reorder buffer is size 20
-    	func_unit int_math<> alu1();		// alu1 is unreserved
-    	func_unit float_math<10> alu2();	// alu2 has 10 queue entries
-        func_unit memory<20> alu3();		// alu3 has 20 queue entries
-        func_unit branch br();			// branch has a single entry
+        issue s0, s1, s2;
+        reorder_buffer<20>;                    // the reorder buffer is size 20
+        func_unit int_math<> alu1();           // alu1 is unreserved
+        func_unit float_math<10> alu2();       // alu2 has 10 queue entries
+        func_unit memory<20> alu3();           // alu3 has 20 queue entries
+        func_unit branch br();                 // branch has a single entry
     }
 ```
 
@@ -897,8 +922,8 @@ A **register class parameter** asserts that the functional unit instance may imp
     register_class HI  { r[16..31] };
 
     cpu my_cpu {
-    	func_unit my_alu alu0(LOW);    // instructions use r0..r15
-    	func_unit my_alu alu1(HI);     // instructions use r16..31
+        func_unit my_alu alu0(LOW);    // instructions use r0..r15
+        func_unit my_alu alu1(HI);     // instructions use r16..31
     }
     instruction add(ALL dst, ALL src1, ALL src2) { … }
 ```
@@ -907,17 +932,17 @@ A **resource parameter** indicates that instructions that execute on the functio
 
 ```
     cpu my_cpu {
-    	resource shared_thing;                   // a single shared resource
-    	resource reg_ports { p1, p2, p3 };       // three associated resources
-    	resource shared_stuff[20];               // 20 associated resources
+        resource shared_thing;                   // a single shared resource
+        resource reg_ports { p1, p2, p3 };       // three associated resources
+        resource shared_stuff[20];               // 20 associated resources
 
-    	func_unit math alu0(shared_thing);       // share a named resource
-    	func_unit math alu1(reg_ports.p1);       // share one member of a group
-    	func_unit math alu2(shared_stuff[12]);   // share one member of a pool
+        func_unit math alu0(shared_thing);       // share a named resource
+        func_unit math alu1(reg_ports.p1);       // share one member of a group
+        func_unit math alu2(shared_stuff[12]);   // share one member of a pool
 
-    	func_unit mem mem0(reg_ports);           // share an entire group
-    	func_unit mem mem1(shared_stuff);        // share an entire pool
-    	func_unit mem mem2(shared_stuff[3..14]); // share part of a pool
+        func_unit mem mem0(reg_ports);           // share an entire group
+        func_unit mem mem1(shared_stuff);        // share an entire pool
+        func_unit mem mem2(shared_stuff[3..14]); // share part of a pool
     }
 ```
 
@@ -980,7 +1005,7 @@ Grammar:
 
 ```
     forward_stmt            : 'forward' IDENT '->'
-            	                         forward_to_unit (',' forward_to_unit)* ';' ;
+                                         forward_to_unit (',' forward_to_unit)* ';' ;
     forward_to_unit         : IDENT ('(' snumber ')')?  ;
 ```
 
@@ -1077,12 +1102,12 @@ A functional unit template can locally define resources which represent hardware
 
 ```
     func_unit unit_with_local_resources() {
-    	resource my_resource;
-    	resource my_pooled_resource[4];
+        resource my_resource;
+        resource my_pooled_resource[4];
 
-    	subunit add(my_resource, my_pooled_resource[0..1]);
-    	subunit subtract(my_resource, my_pooled_resource[2..3]);
-    	subunit multiply(my_pooled_resource);
+        subunit add(my_resource, my_pooled_resource[0..1]);
+        subunit subtract(my_resource, my_pooled_resource[2..3]);
+        subunit multiply(my_pooled_resource);
     }
 ```
 
@@ -1145,11 +1170,11 @@ A simple example of a full functional unit template definition:
 
 ```
     func_unit specialized(resource shared_pool; class regs) {
-    	resource my_resource;
-    	port my_port<regs> (shared_pool[3..5]);
+        resource my_resource;
+        port my_port<regs> (shared_pool[3..5]);
 
-    	subunit load(my_resource, my_port);
-    	subunit store(my_port);
+        subunit load(my_resource, my_port);
+        subunit store(my_port);
     }
 ```
 
@@ -1159,13 +1184,13 @@ In a functional unit template, a subunit instance can be conditionally instantia
 
 ```
     cpu my_cpu {
-    	func_unit my_func xyzzy();
-    	func_unit my_func plugh();
+        func_unit my_func xyzzy();
+        func_unit my_func plugh();
     }
     func_unit my_func() {
-    	resource pooled_resource[4];
-    	xyzzy: subunit add(pooled_resource[0..1]);
-    	plugh: subunit add(pooled_resource[2..3]);
+        resource pooled_resource[4];
+        xyzzy: subunit add(pooled_resource[0..1]);
+        plugh: subunit add(pooled_resource[2..3]);
     }
 ```
 
@@ -1312,7 +1337,7 @@ Often a subunit template simply specifies a single latency template instance, an
 
 ```
     subunit load(resource a, b, c) {
-	latency load(resource a, b, c);
+        latency load(resource a, b, c);
     }
     latency load(resource a, b, c) { def(E1, $dst); use(E1, $src); … }
 ```
@@ -1321,7 +1346,7 @@ Can be alternatively expressed as:
 
 ```
     subunit load(resource a, b, c) {{
-	def(E1, $dst); use(E1, $src); …
+        def(E1, $dst); use(E1, $src); …
     }}
 ```
 
@@ -1387,8 +1412,7 @@ The full grammar:
                                       snumber (',' fus_attribute)* ')' ';'
 
     fus_item                : IDENT ('<' (expr ':')? number '>')? ;
-    fus_attribute           : 'BeginGroup' | 'EndGroup' | 'SingleIssue'
-  	                        | 'RetireOOO' ;
+    fus_attribute           : 'BeginGroup' | 'EndGroup' | 'SingleIssue' | 'RetireOOO' ;
 
     latency_resource_refs   : latency_resource_ref (',' latency_resource_ref)* ;
     latency_resource_ref    : resource_ref ':' number (':' IDENT)?
@@ -1562,33 +1586,73 @@ Each of these objects describe the behavior of each instruction cycle by cycle:
 
 The other primary artifact is a set of objects and methods for managing the low-level details of instruction scheduling and register allocation.  This includes methods to build and manage resource pools, pipeline models, resource reservation infrastructure, and instruction bundling, all specialized for the input machine description.
 
-As part of this effort, we will incrementally modify the LLVM compiler to alternatively use this information alongside of SchedMachineModel and Itinerary methodologies.
-
+As part of this effort, we will incrementally modify the LLVM compiler to use this information as an alternative to SchedMachineModel and Itinerary methodologies.
 ![alt_text](images/MachineDescriptionSchema.png "image_tooltip")
 
 ## **Using the MDL Language in LLVM**
 
 The proposed use case for the MDL language is as an alternative specification for the architecture description currently embodied in TableGen Schedules and Itineraries, particularly for architectures for which Schedules and Itineraries are not expressive enough.  It is explicitly _not_ the intent that it “replace TableGen”.  But we believe that the MDL language is a better language (vs Schedules and Itineraries) for a large class of accelerators, and can be used effectively alongside TableGen.
 
-We’ve written a tool (TdScan) which extracts enough information from TableGen descriptions so that we can sync instruction definitions with architecture definitions. TdScan can also optionally scrape all of the Schedule and Itinerary information from a tablegen description and produce an MDL description that captures all of that information.
-
-So there are several possible MDL usage scenarios:
-
-*   _Current:_ Given a complete tablegen description with schedules or itineraries, scrape the architecture information and create an MDL description of the architecture every time you build the compiler.
-*   _Transitional:_ Scrape an existing tablegen description and keep the generated MDL file, using it as the architecture description going forward.
-*   _Future (potentially):_ when writing a compiler for a new architecture, write an MDL description rather than schedules and/or itineraries.
-
-The general development flow of using an MDL description in LLVM looks like this:
-
-1. Write an architecture description (or scrape one from an existing tablegen description).
-    1. Instructions, operands, register descriptions in .td files
-    2. Microarchitecture description in .mdl files
-2. Compile TD files with TableGen
-3. Use TdScan to scrape instruction, operand, and register information from tablegen, producing a .mdl file
-4. Compile the top-level MDL file (which includes the scraped Tablegen information). This produces C++ code for inclusion in llvm.
-5. Build LLVM.
-
+Overall schema looks like this:
 ![alt_text](images/MachineDescriptionDevFlow.png "image_tooltip")
+
+To use MDL for an existing target, simply write an MDL file for that target, and put it in the same directory as the tablegen (.td) files.  If your top-level tablegen target is called _MyTarget.td_, name the MDL file MyTarget.mdl.
+
+We also need to tie each instruction definition in TableGen to a set of subunits.  There are three different ways to do this, described below.
+
+### Annotate instruction descriptions in TableGen
+
+The first method is to annotate each instruction definition with an attribute that lists the subunits for that instruction:
+1. Define “SubUnitEncodings” for each subunit defined in the MDL file, using a 3-letter prefix (like “SU\_”, below).  (Note that the prefix exists simply to avoid namespace clutter.)
+2. Add SubUnits attributes to each instruction definition.
+
+For example:
+```
+    def SU_MyAlu : SubUnitEncoding { }             // for subunit "MyAlu"
+    def SU_MyMultiplier : SubUnitEncoding { }      // for subunit "MyMultiplier"
+    ...
+    def ADDrrr : Instr< … SubUnits<[SU_MyAlu]>  …   >;
+    ...
+```
+
+Note: We’ve defined two new classes in Target.td:
+```
+    class SubUnitEncoding { }
+    class SubUnits<list<SubUnitEncoding> subunits> {
+       list<SubUnitEncoding> SubUnits = subunits;
+    }
+```
+
+and added a new attribute to instructions:
+```
+    class Instruction … {
+       list<SubUnitEncoding> SubUnits = [];
+    }
+```
+
+### Annotate subunit descriptions in MDL
+
+An alternate approach to tying instructions to functional units is to define each subunit (in the MDL file) using a set of regular expressions to specify which instructions use that subunit.  For example: \
+`    subunit xyzzy : "ADD*" : "SUB*" (...) { … }`
+
+This approach works similarly to the way InstRW records work in TableGen.
+
+
+### Automatically generate an MDL description from TableGen
+
+The TdScan utility is used to scrape instruction, operand, and register information from TableGen.  However, it can also scrape the entire Schedule and/or Itinerary from TableGen and generate a complete machine description.
+
+This method is primarily used for two purposes: testing of the MDL infrastructure (so that we can test targets we don’t have descriptions for), and generating an “initial” machine description in a transitional situation.   We don’t recommend this approach in general, since the generated descriptions are generally not as succinct as a hand-written description.
+
+To generate an MDL description from a TableGen description, you can use tablegen and tdscan together:
+
+```
+    llvm-tblgen –print-records -I <includepath> target.td
+    llvm-tdscan –gen-arch-spec –gen-base-subunits –family-name target target.txt
+```
+
+This produces a “_target_.mdl” and a “_target_\_instructions.mdl.
+
 
 ### **TdScan**
 
@@ -1748,6 +1812,7 @@ There’s more we can do here, and a deeper integration with upstreamed LLVM is 
 ## **Appendix A: Full Language Grammar**
 
 The MDL parser is a recursive descent parser based on the following grammar. 
+This is a complete specification of the grammar implemented in the MDL compiler. 
 
 ```
 architecture_spec       : architecture_item+ EOF ;
@@ -1795,8 +1860,8 @@ cluster_stmt            : resource_def
 issue_statement         : 'issue' '(' IDENT ')' name_list ';' ;
 
 func_unit_instantiation : 'func_unit' func_unit_instance func_unit_bases*
-                IDENT '(' resource_refs? ')'
-                          		('->' (pin_one | pin_any | pin_all))?  ';'
+                              IDENT '(' resource_refs? ')'
+                              ('->' (pin_one | pin_any | pin_all))?  ';'
 
 func_unit_instance      : IDENT ('<>' | ('<' number '>'))?
 func_unit_bases         : ':' func_unit_instance
@@ -1852,7 +1917,7 @@ subunit_instance        : IDENT '(' resource_refs? ')' ;
 //---------------------------------------------------------------------------
 subunit_template        : 'subunit' IDENT su_base_list '(' su_decl_items? ')'
                              (('{' subunit_body* '}' ';'?) |
-                              ('{{' latency_items* '}}' ';')) ;
+                              ('{{' latency_items* '}}' ';'? )) ;
 
 su_decl_items           : su_decl_item (';' su_decl_item)* ;
 su_decl_item            : 'resource' name_list
@@ -2008,8 +2073,8 @@ operand_type            : 'type' '(' IDENT ')' ';' ;
 operand_attribute       : (name_list ':')? operand_attribute_stmt
                         | name_list ':' '{' operand_attribute_stmt* '}' ';' ;
 operand_attribute_stmt  : 'attribute' IDENT '=' (snumber | tuple)
-                           ('if' ('lit' | 'address' | 'label')
-                 ('[' pred_value (',' pred_value)* ']' )? )? ';' ;
+                             ('if' ('lit' | 'address' | 'label')
+                             ('[' pred_value (',' pred_value)* ']' )? )? ';' ;
 pred_value              : snumber
                         | snumber '..' snumber
                         | '{' number '}' ;
