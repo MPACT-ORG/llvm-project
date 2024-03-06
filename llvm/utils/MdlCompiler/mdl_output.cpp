@@ -1368,13 +1368,14 @@ void OutputState::writePredicateFunctions(const OutputSet &Funcs,
 
 void OutputState::writeVirtualPredicateTable(const OutputSet &Funcs) const {
   outputT() << formatv("{0}// Virtual predicate function table{0}", Divider);
-  outputT() << "std::vector<PredFunc> InstrPredicates { ";
-  for (unsigned I = 0; I < Funcs.size(); I++) {
-    if (I > 0)
-      outputT() << ", ";
-    outputT() << "&" << VirtualPredicateName(I);
-  }
+  outputT() << "InstrPredTable InstrPredicates { ";
+  for (unsigned I = 0; I < Funcs.size(); I++)
+    outputT() << "&" << VirtualPredicateName(I) << ", ";
   outputT() << "};\n\n";
+
+  // Generate a variable that contains a pointer to the predicate table.
+  // This is used by name to initialize the subtarget.
+  outputT() << "InstrPredTable *InstrPreds = &InstrPredicates;\n\n";
 }
 
 // TODO(tbd): Write Out a representation of register classes.
@@ -1615,6 +1616,7 @@ void OutputState::writeCpuList() const {
                         Divider, getSpec().getFamilyName());
   outputC() << formatv("CpuTableDict CpuDict = {{\n{0}};\n\n", Out);
   outputC() << formatv("CpuTableDef CpuTable = CpuTableDef(CpuDict);\n");
+  outputC() << formatv("CpuTableDef *CpuTableAddr = &CpuTable;\n");
 }
 
 // Open the output files, abort if unable to do that.
@@ -1985,7 +1987,8 @@ void OutputState::writeExterns() {
     outputH() << formatv("extern InstructionNameMap InstructionNames;\n",
                           Family);
   }
-  outputH() << formatv("extern llvm::mdl::CpuTableDef CpuTable;\n\n", Family);
+  outputH() << formatv("extern llvm::mdl::CpuTableDef CpuTable;\n");
+  outputH() << formatv("extern llvm::mdl::CpuTableDef *CpuTableAddr;\n\n");
   outputH() << formatv("}  // namespace {0}\n}  // namespace llvm\n", Family);
 }
 

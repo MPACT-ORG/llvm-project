@@ -47,12 +47,7 @@ using namespace llvm;
 #include "MipsGenRegisterInfo.inc"
 
 // Include the generated MDL database.
-#if ENABLE_MDL_USE
 #include "MipsGenMdlInfo.inc"
-#define MipsCpuTable &Mips::CpuTable
-#else
-#define MipsCpuTable nullptr
-#endif
 
 void MIPS_MC::initLLVMToCVRegMapping(MCRegisterInfo *MRI) {
   // Mapping from CodeView to MC register id.
@@ -175,7 +170,7 @@ static MCSubtargetInfo *createMipsMCSubtargetInfo(const Triple &TT,
                                                   StringRef CPU, StringRef FS) {
   CPU = MIPS_MC::selectMipsCPU(TT, CPU);
   return createMipsMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS,
-                                       MipsCpuTable);
+                                       Mips::CpuTableAddr);
 }
 
 static MCAsmInfo *createMipsMCAsmInfo(const MCRegisterInfo &MRI,

@@ -21,7 +21,6 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/ELF.h"
-#include "llvm/Config/config.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -60,12 +59,7 @@ using namespace llvm;
 #include "PPCGenRegisterInfo.inc"
 
 // Include the generated MDL database.
-#if ENABLE_MDL_USE
 #include "PPCGenMdlInfo.inc"
-#define PPCCpuTable &PPC::CpuTable
-#else
-#define PPCCpuTable nullptr
-#endif
 
 /// stripRegisterPrefix - This method strips the character prefix from a
 /// register name so that only the number is left.  Used by for linux asm.
@@ -186,7 +180,7 @@ static MCSubtargetInfo *createPPCMCSubtargetInfo(const Triple &TT,
   }
 
   return createPPCMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FullFS,
-                                      PPCCpuTable);
+                                      PPC::CpuTableAddr);
 }
 
 static MCAsmInfo *createPPCMCAsmInfo(const MCRegisterInfo &MRI,

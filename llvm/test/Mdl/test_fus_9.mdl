@@ -1,7 +1,7 @@
 //----------------------------------------------------------------------------
 // Check that functional unit buffering information is working properly.
 //----------------------------------------------------------------------------
-// RUN: llvm-mdl --dump_instr %s 2>& 1 | FileCheck %s
+// RUN: llvm-mdl --dump-instr %s --output-dir /tmp/ 2>& 1 | FileCheck %s
 family x;
 
 phases x { E1, E2, E3, E4, E5 };

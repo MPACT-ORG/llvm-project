@@ -57,31 +57,31 @@ using namespace llvm;
 cl::opt<std::string> input_file(cl::Positional, cl::desc("<input-file>"));
 
 cl::opt<std::string>
-    family_name("family_name", cl::init(""), cl::value_desc("family"),
+    family_name("family-name", cl::init(""), cl::value_desc("family"),
                 cl::desc("Processor family name (default=<input file>)."));
 cl::opt<std::string> output_name(
-    "output_name", cl::init(""), cl::value_desc("output"),
+    "output-name", cl::init(""), cl::value_desc("output"),
     cl::desc("Output file name prefix (default=<input file name>)"));
 
-cl::opt<bool> ignore_subunits("ignore_subunits", cl::init(false),
+cl::opt<bool> ignore_subunits("ignore-subunits", cl::init(false),
                               cl::desc("Ignore subunits."));
 cl::opt<bool>
-    gen_arch_spec("gen_arch_spec", cl::init(false),
+    gen_arch_spec("gen-arch-spec", cl::init(false),
                   cl::desc("Auto generate the mdl specification. (-g)"));
 cl::alias gen_arch_specA("g", cl::desc("Alias for --gen_arch_spec"),
                          cl::aliasopt(gen_arch_spec));
 
 cl::opt<bool> generate_base_subunits(
-    "gen_base_subunits", cl::init(false),
+    "gen-base-subunits", cl::init(false),
     cl::desc("Generate instruction bases for each subunit"));
 cl::opt<bool> generate_forwarding_info(
-    "gen_forwarding", cl::init(false),
+    "gen-forwarding", cl::init(false),
     cl::desc("Generate forwarding information each CPU"));
 cl::opt<bool>
-    generate_operand_indexes("gen_indexes", cl::init(false),
+    generate_operand_indexes("gen-indexes", cl::init(false),
                              cl::desc("Generate operand indexes (vs names)"));
 
-cl::opt<std::string> output_dir("output_dir", cl::init(""),
+cl::opt<std::string> output_dir("output-dir", cl::init(""),
                                 cl::value_desc("dir"),
                                 cl::desc("Output path for generated files."));
 cl::opt<bool> no_warnings("nowarnings", cl::init(false),
@@ -90,19 +90,19 @@ cl::alias quiet_mode("q", cl::desc("Alias for --nowarnings"),
                      cl::aliasopt(no_warnings));
 
 cl::OptionCategory TdDebug("Debugging Options");
-cl::opt<bool> generate_csv("dump_csv", cl::init(false), cl::cat(TdDebug),
+cl::opt<bool> generate_csv("dump-csv", cl::init(false), cl::cat(TdDebug),
                            cl::desc("Dump instructions to a CSV file."));
-cl::opt<bool> dump_debug("dump_debug", cl::init(false), cl::cat(TdDebug),
+cl::opt<bool> dump_debug("dump-debug", cl::init(false), cl::cat(TdDebug),
                          cl::desc("Dump lots of debug info."));
-cl::opt<bool> dump_instr_forwarding("dump_instr_forwarding", cl::init(false),
+cl::opt<bool> dump_instr_forwarding("dump-instr-forwarding", cl::init(false),
                                     cl::cat(TdDebug),
                                     cl::desc("Dump forwarding info."));
-cl::opt<bool> dump_forwarding("dump_forwarding", cl::init(false),
+cl::opt<bool> dump_forwarding("dump-forwarding", cl::init(false),
                               cl::cat(TdDebug),
                               cl::desc("Dump forwarding info."));
-cl::opt<bool> dump_rw("dump_rw", cl::init(false), cl::cat(TdDebug),
+cl::opt<bool> dump_rw("dump-rw", cl::init(false), cl::cat(TdDebug),
                       cl::desc("Dump ReadWrite Records"));
-cl::alias dump_debugA("d", cl::desc("Alias for --dump_debug"),
+cl::alias dump_debugA("d", cl::desc("Alias for --dump-debug"),
                       cl::aliasopt(dump_debug));
 
 // Check command line arguments and manage help option messages.

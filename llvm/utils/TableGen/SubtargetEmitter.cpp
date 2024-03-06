@@ -2094,7 +2094,8 @@ void SubtargetEmitter::run(raw_ostream &OS) {
   OS << "struct " << ClassName << " : public TargetSubtargetInfo {\n"
      << "  explicit " << ClassName << "(const Triple &TT, StringRef CPU, "
      << "StringRef TuneCPU, StringRef FS, "
-     << "const mdl::CpuTableDef *CpuTable = nullptr);\n"
+     << "mdl::CpuTableDef *CpuTable = nullptr, \n"
+     << "mdl::InstrPredTable *Preds = nullptr);\n"
      << "public:\n"
      << "  unsigned resolveSchedClass(unsigned SchedClass, "
      << " const MachineInstr *DefMI,"
@@ -2165,7 +2166,7 @@ void SubtargetEmitter::run(raw_ostream &OS) {
 
   OS << ClassName << "::" << ClassName << "(const Triple &TT, StringRef CPU, "
      << "StringRef TuneCPU, StringRef FS, "
-     << "const mdl::CpuTableDef *CpuTable)\n";
+     << "mdl::CpuTableDef *CpuTable, mdl::InstrPredTable *Preds)\n";
 
   if (Target == "AArch64")
     OS << "  : TargetSubtargetInfo(TT, AArch64::resolveCPUAlias(CPU),\n"
@@ -2195,7 +2196,7 @@ void SubtargetEmitter::run(raw_ostream &OS) {
        << "ForwardingPaths";
   } else
     OS << "nullptr, nullptr, nullptr";
-  OS << ", CpuTable";
+  OS << ", CpuTable, Preds";
   OS << ") {}\n\n";
 
   emitSchedModelHelpers(ClassName, OS);

@@ -18,7 +18,6 @@
 #include "X86MCAsmInfo.h"
 #include "X86TargetStreamer.h"
 #include "llvm/ADT/APInt.h"
-#include "llvm/Config/config.h"
 #include "llvm/DebugInfo/CodeView/CodeView.h"
 #include "llvm/MC/MCDwarf.h"
 #include "llvm/MC/MCInstrAnalysis.h"
@@ -37,12 +36,7 @@ using namespace llvm;
 #include "X86GenRegisterInfo.inc"
 
 // Include the generated MDL database.
-#if ENABLE_MDL_USE
 #include "X86GenMdlInfo.inc"
-#define X86CpuTable &X86::CpuTable
-#else
-#define X86CpuTable nullptr
-#endif
 
 #define GET_INSTRINFO_MC_DESC
 #define GET_INSTRINFO_MC_HELPERS
@@ -418,7 +412,7 @@ MCSubtargetInfo *X86_MC::createX86MCSubtargetInfo(const Triple &TT,
       ArchFS += ",+evex512";
 
   return createX86MCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, ArchFS,
-                                      X86CpuTable);
+                                      X86::CpuTableAddr);
 }
 
 static MCInstrInfo *createX86MCInstrInfo() {
