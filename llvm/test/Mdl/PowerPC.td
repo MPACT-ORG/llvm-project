@@ -2,8 +2,8 @@
 // This is really just a sanity check.
 
 // RUN: llvm-tblgen %p/../../lib/Target/PowerPC/PPC.td -I %p/../../lib/Target/PowerPC -I %p/../../include -print-records -o /tmp/PPC.txt
-// RUN: llvm-tdscan /tmp/PPC.txt --nowarnings --gen_arch_spec --output_dir /tmp/
-// RUN: llvm-mdl /tmp/PPC.mdl --output_dir /tmp/
+// RUN: llvm-tdscan /tmp/PPC.txt --nowarnings --gen-arch-spec --output-dir /tmp/
+// RUN: llvm-mdl /tmp/PPC.mdl --output-dir /tmp/
 
 
 

@@ -20,9 +20,11 @@ TargetSubtargetInfo::TargetSubtargetInfo(
     ArrayRef<SubtargetFeatureKV> PF, ArrayRef<SubtargetSubTypeKV> PD,
     const MCWriteProcResEntry *WPR, const MCWriteLatencyEntry *WL,
     const MCReadAdvanceEntry *RA, const InstrStage *IS, const unsigned *OC,
-    const unsigned *FP, const mdl::CpuTableDef *MDL)
+    const unsigned *FP, mdl::CpuTableDef *MDL, mdl::InstrPredTable *Preds)
     : MCSubtargetInfo(TT, CPU, TuneCPU, FS, PF, PD, WPR, WL, RA, IS, OC, FP,
-                      MDL) {}
+                      MDL) {
+      if (MDL) MDL->setInstrPredicates(Preds);
+    }
 
 TargetSubtargetInfo::~TargetSubtargetInfo() = default;
 

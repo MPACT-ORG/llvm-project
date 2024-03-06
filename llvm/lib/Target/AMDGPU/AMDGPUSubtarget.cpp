@@ -43,14 +43,9 @@ using namespace llvm;
 #undef AMDGPUSubtarget
 
 // Include definitions associated with the MDL description.
-#if ENABLE_MDL_USE
 #include "AMDGPUGenMdlInfo.h"
 // Include virtual predicate function definitions from the MDL description.
 #include "AMDGPUGenMdlTarget.inc"
-#define AMDGPUCpuTable &AMDGPU::CpuTable
-#else
-#define AMDGPUCpuTable nullptr
-#endif
 
 static cl::opt<bool> EnablePowerSched(
   "amdgpu-enable-power-sched",
@@ -194,7 +189,8 @@ bool AMDGPUSubtarget::useRealTrue16Insts() const {
 GCNSubtarget::GCNSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
                            const GCNTargetMachine &TM)
     : // clang-format off
-    AMDGPUGenSubtargetInfo(TT, GPU, /*TuneCPU*/ GPU, FS, AMDGPUCpuTable),
+    AMDGPUGenSubtargetInfo(TT, GPU, /*TuneCPU*/ GPU, FS, AMDGPU::CpuTableAddr,
+                           AMDGPU::InstrPreds),
     AMDGPUSubtarget(TT),
     TargetTriple(TT),
     TargetID(*this),

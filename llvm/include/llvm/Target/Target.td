@@ -532,6 +532,11 @@ include "llvm/Target/TargetInstrPredicate.td"
 //
 include "llvm/Target/TargetSchedule.td"
 
+//===----------------------------------------------------------------------===//
+// Pull in Support for MDL-based architecture descriptions.
+//
+include "llvm/Target/TargetMdl.td"
+
 class InstructionEncoding {
   // Size of encoded instruction.
   int Size;
@@ -713,6 +718,9 @@ class Instruction : InstructionEncoding {
 
   // Scheduling information from TargetSchedule.td.
   list<SchedReadWrite> SchedRW;
+
+  // Optional SubUnit information from TargetMDL.td.
+  list<SubUnitEncoding> Subunits = [];
 
   /// Support for operand constraints. There are currently two kinds:
   /// "$src = $dst"

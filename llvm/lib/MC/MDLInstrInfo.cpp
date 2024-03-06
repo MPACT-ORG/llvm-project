@@ -348,7 +348,7 @@ int calculateOperandLatency(Instr *Def, unsigned DefOpId, Instr *Use,
   SubunitVec *DefSubunit = nullptr;
   SubunitVec *UseSubunit = nullptr;
 
-  if (Cpu.IsInstruction(Def->getOpcode(), DefOpId))
+  if (Cpu.isInstruction(Def->getOpcode(), DefOpId))
     if ((DefSubunit = Def->getSubunit()))
       if (auto *DefRefs = (*DefSubunit)[DefSuId].getOperandReferences())
         if (auto *DefRef =
@@ -360,7 +360,7 @@ int calculateOperandLatency(Instr *Def, unsigned DefOpId, Instr *Use,
     return defaultDefLatency(Def, Cpu);
 
   // Find the phase for a Use instruction, if provided.
-  if (Use && Cpu.IsInstruction(Use->getOpcode(), UseOpId))
+  if (Use && Cpu.isInstruction(Use->getOpcode(), UseOpId))
     if ((UseSubunit = Use->getSubunit()))
       if (auto *UseRefs = (*UseSubunit)[UseSuId].getOperandReferences())
         if (auto *UseRef =
@@ -427,7 +427,7 @@ inline int findMaxLatency(Instr *Inst, OperandRefVec *Refs) {
 /// Find the maximum latency of an instruction based on operand references.
 int calculateInstructionLatency(Instr *Inst) {
   CpuInfo &Cpu = *Inst->getCpuInfo();
-  if (!Cpu.IsInstruction(Inst->getOpcode(), 0))
+  if (!Cpu.isInstruction(Inst->getOpcode(), 0))
     return defaultDefLatency(Inst, Cpu);
 
   // Handle instructions that don't have subunit information, or whose subunits

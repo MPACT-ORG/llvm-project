@@ -3,7 +3,7 @@
 // appropriate operand definition.  Also check phase expressions based on
 // instruction operands.
 //----------------------------------------------------------------------------
-// RUN: llvm-mdl  --dump_instr %s --output_dir /tmp/ | FileCheck %s
+// RUN: llvm-mdl  --dump-instr %s --output-dir /tmp/ | FileCheck %s
 
 family test;
 

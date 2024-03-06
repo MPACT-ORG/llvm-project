@@ -2,8 +2,8 @@
 // This is really just a sanity check.
 
 // RUN: llvm-tblgen %p/../../lib/Target/RISCV/RISCV.td -I %p/../../lib/Target/RISCV -I %p/../../include -print-records -o /tmp/RISCV.txt
-// RUN: llvm-tdscan /tmp/RISCV.txt --nowarnings --gen_arch_spec --output_dir /tmp/
-// RUN: llvm-mdl /tmp/RISCV.mdl --output_dir /tmp/
+// RUN: llvm-tdscan /tmp/RISCV.txt --nowarnings --gen-arch-spec --output-dir /tmp/
+// RUN: llvm-mdl /tmp/RISCV.mdl --output-dir /tmp/
 
 
 
