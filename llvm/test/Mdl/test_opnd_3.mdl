@@ -6,7 +6,7 @@
 // So we want to use the I/O designator to determine which reference rules
 // they should match.
 //----------------------------------------------------------------------------
-// RUN: llvm-mdl --dump_instr %s --output_dir /tmp/ 2>&1 | FileCheck %s
+// RUN: llvm-mdl --dump-instr %s --output-dir /tmp/ 2>&1 | FileCheck %s
 
 family test;
 

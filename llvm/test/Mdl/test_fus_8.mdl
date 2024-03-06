@@ -2,7 +2,7 @@
 // Check that latencies predicated for a single CPU, and are "empty" for other
 // CPUs, don't produce references for other CPUs.
 //----------------------------------------------------------------------------
-// RUN: llvm-mdl --dump_instr %s 2>& 1 | FileCheck %s
+// RUN: llvm-mdl --dump-instr %s --output-dir /tmp/ 2>& 1 | FileCheck %s
 family x;
 
 phases x { E1, E2, E3, E4, E5 };
