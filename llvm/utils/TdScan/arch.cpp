@@ -250,9 +250,9 @@ void MachineDescription::FindReferencedOperands() {
         std::string op = GetOperandType(out);
         if (operands_.count(op)) {
           operands_[op]->set_referenced();
-        } else if (register_class_list_.count(op)) {
+        } else if (IsRegisterClass(op)) {
           register_class_list_[op]->set_referenced();
-        } else if (op != "...") {
+        } else if (!IsRegister(op) && op != "...") {
           std::cerr << "Unrecognized operand type:" << op << "\n";
         }
       }
@@ -260,9 +260,9 @@ void MachineDescription::FindReferencedOperands() {
         std::string op = GetOperandType(in);
         if (operands_.count(op)) {
           operands_[op]->set_referenced();
-        } else if (register_class_list_.count(op)) {
+        } else if (IsRegisterClass(op)) {
           register_class_list_[op]->set_referenced();
-        } else if (op != "...") {
+        } else if (!IsRegister(op) && op != "...") {
           std::cerr << "Unrecognized operand type:" << op << "\n";
         }
       }
