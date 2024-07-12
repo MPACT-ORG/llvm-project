@@ -116,10 +116,6 @@ RISCVSubtarget::RISCVSubtarget(const Triple &TT, StringRef CPU,
           initializeSubtargetDependencies(TT, CPU, TuneCPU, FS, ABIName)),
       InstrInfo(*this), RegInfo(getHwMode()), TLInfo(TM, *this) {
   TSInfo = std::make_unique<RISCVSelectionDAGInfo>();
-  // Register the Target-library-specific predicate table in the cpu table.
-#if ENABLE_MDL_USE
-RISCV::CpuTable.SetInstrPredicates(&RISCV::InstrPredicates);
-#endif
 }
 
 RISCVSubtarget::~RISCVSubtarget() = default;
