@@ -102,12 +102,7 @@ RISCVSubtarget::RISCVSubtarget(const Triple &TT, StringRef CPU,
       RVVVectorBitsMin(RVVVectorBitsMin), RVVVectorBitsMax(RVVVectorBitsMax),
       FrameLowering(
           initializeSubtargetDependencies(TT, CPU, TuneCPU, FS, ABIName)),
-      InstrInfo(*this), RegInfo(getHwMode()), TLInfo(TM, *this) {
-  // Register the Target-library-specific predicate table in the cpu table.
-#if ENABLE_MDL_USE
-  RISCV::CpuTable.SetInstrPredicates(&RISCV::InstrPredicates);
-#endif
-}
+      InstrInfo(*this), RegInfo(getHwMode()), TLInfo(TM, *this) {}
 
 const CallLowering *RISCVSubtarget::getCallLowering() const {
   if (!CallLoweringInfo)
