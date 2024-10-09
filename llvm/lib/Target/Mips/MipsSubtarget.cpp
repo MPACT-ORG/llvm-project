@@ -224,11 +224,6 @@ MipsSubtarget::MipsSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
   auto *RBI = new MipsRegisterBankInfo(*getRegisterInfo());
   RegBankInfo.reset(RBI);
   InstSelector.reset(createMipsInstructionSelector(TM, *this, *RBI));
-
-  // Register the Target-library-specific predicate table in the cpu table.
-#if ENABLE_MDL_USE
-  Mips::CpuTable.SetInstrPredicates(&Mips::InstrPredicates);
-#endif
 }
 
 bool MipsSubtarget::isPositionIndependent() const {
