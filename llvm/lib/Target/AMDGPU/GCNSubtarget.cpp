@@ -38,6 +38,11 @@ using namespace llvm;
 #include "AMDGPUGenSubtargetInfo.inc"
 #undef AMDGPUSubtarget
 
+// Include definitions associated with the MDL description.
+#include "AMDGPUGenMdlInfo.h"
+// Include virtual predicate function definitions from the MDL description.
+#include "AMDGPUGenMdlTarget.inc"
+
 static cl::opt<bool> EnableVGPRIndexMode(
     "amdgpu-vgpr-index-mode",
     cl::desc("Use GPR indexing mode instead of movrel for vector indexing"),
@@ -170,7 +175,8 @@ void GCNSubtarget::checkSubtargetFeatures(const Function &F) const {
 GCNSubtarget::GCNSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
                            const GCNTargetMachine &TM)
     : // clang-format off
-    AMDGPUGenSubtargetInfo(TT, GPU, /*TuneCPU*/ GPU, FS),
+    AMDGPUGenSubtargetInfo(TT, GPU, /*TuneCPU*/ GPU, FS,
+                           AMDGPU::CpuTableAddr, AMDGPU::InstrPreds),
     AMDGPUSubtarget(TT),
     TargetTriple(TT),
     TargetID(*this),
