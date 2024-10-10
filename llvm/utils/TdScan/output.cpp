@@ -615,8 +615,11 @@ std::string SchedMachineModel::Format(MachineDescription *md) {
 
   // Write out the start of the CPU definition - the name and subtargets.
   std::string cpus;
-  for (auto &cpu : cpus_)
+  for (auto &cpu : cpus_) {
     cpus += formatv("\"{0}\", ", cpu);
+    for (auto &alias : md->cpu_aliases(cpu))
+      cpus += formatv("\"{0}\", ", alias);
+  }
   cpus.pop_back();
   cpus.pop_back(); // delete trailing comma
   auto out = formatv("cpu {0}({1}) {{\n", output_name_, cpus);

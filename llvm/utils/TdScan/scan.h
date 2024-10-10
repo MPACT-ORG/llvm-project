@@ -1612,6 +1612,7 @@ public:
   std::string ScanType(char *input);
   std::vector<std::string> ScanInstructOpnds(char *input);
   std::vector<std::string> ScanImplicitDefsUses(char *input);
+  void ScanProcessorAlias(std::ifstream &in);
   void ScanProcessorModel(std::ifstream &in);
   void ScanProcResource(std::ifstream &in, const std::string &name,
                         const char *paren);
@@ -1691,7 +1692,10 @@ public:
   std::vector<InstRW *> &instrw_info() { return instrw_info_; }
   std::vector<ItinRW *> &itinrw_info() { return itinrw_info_; }
 
-  std::map<std::string, ProcessorModel *> cpus() { return cpus_; }
+  std::set<std::string> &cpu_aliases(std::string cpu) {
+    return cpu_aliases_[cpu];
+  }
+  std::map<std::string, ProcessorModel *> &cpus() { return cpus_; }
   std::map<std::string, SchedMachineModel *> sched_models() {
     return sched_models_;
   }
@@ -1881,6 +1885,7 @@ private:
 
   //-------------------------------------------------------------------------
   // Architectural information we're scraping from the TableGen file:
+  //   - CPU aliases
   //   - CPU definitions.
   //   - SchedModel definitions.
   //   - Functional unit definitions. (ProcResources)
@@ -1898,6 +1903,7 @@ private:
   //     - Itinerary Bypass definitions.
   //     - InstrStage definitions.
   //-------------------------------------------------------------------------
+  std::map<std::string, std::set<std::string>> cpu_aliases_;
   std::map<std::string, ProcessorModel *> cpus_;
   std::map<std::string, SchedMachineModel *> sched_models_;
   std::map<std::string, ProcResource *> proc_resources_;
