@@ -610,6 +610,32 @@ void MachineDescription::ScanOperand(std::ifstream &in,
 }
 
 //-------------------------------------------------------------------------
+// Read the entries associated with a Processor Alias record, looking for
+//    - the "Name"
+//    - the "Alias"
+//-------------------------------------------------------------------------
+void MachineDescription::ScanProcessorAlias(std::ifstream &in) {
+  std::string name;
+  std::string alias;
+  std::string input;
+  char *lstart;
+
+  // These strings correspond to subfields we are interested in.
+  constexpr auto name_str = "string Name = ";
+  constexpr auto alias_str = "string Alias = ";
+
+  // Read subfield definitions and process the ones we're interested in.
+  while (in && (lstart = GetLine(in, input))) {
+    if (!strncmp(lstart, name_str, strlen(name_str)))
+      name = ScanName(lstart + strlen(name_str));
+    else if (!strncmp(lstart, alias_str, strlen(alias_str)))
+      alias = ScanName(lstart + strlen(alias_str));
+  }
+
+  cpu_aliases_[alias].insert(name);
+}
+
+//-------------------------------------------------------------------------
 // Read the entries associated with a CPU definition, looking for
 // fields we're interested in:
 //    - the "Name"
@@ -1676,6 +1702,9 @@ void MachineDescription::ScanDef(std::ifstream &in, char *input) {
   //----------------------------------------------------------------------
   else if (!gen_arch_spec)
     SkipRecord(in);
+
+  else if (strstr(paren, " ProcessorAlias"))
+    ScanProcessorAlias(in);
 
   else if (strstr(paren, " Processor Proc") ||
            (strstr(paren, " Processor") &&
