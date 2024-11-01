@@ -646,7 +646,7 @@ void MachineDescription::ScanProcessorAlias(std::ifstream &in) {
 // fields we're interested in:
 //    - the "Name"
 //    - the "SchedModel"
-//    - the "processor itineraries
+//    - the "processor itineraries"
 //-------------------------------------------------------------------------
 void MachineDescription::ScanProcessorModel(std::ifstream &in) {
   std::string name;
