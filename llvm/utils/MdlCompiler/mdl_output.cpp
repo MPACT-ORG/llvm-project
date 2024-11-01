@@ -1408,12 +1408,28 @@ void OutputState::writeInstructionInfo() const {
 }
 
 // Write Out instruction tables for each defined CPU.
+// This is a bit tricky: we only know the NAMES of instructions, not their
+// indexes, which are assigned by tablegen, and enumerated in GenInstrInfo.inc
+// files. Since we don't have full support for designated initializers for
+// arrays, the only way to initialize the array is to enter each instruction
+// into the table symbolically, ie array[NAME] = ...
+// We only need to do this once, so we use a singleton pattern to implement the
+// initialization. We surround this with a Mutex so that multiple threads only
+// initialize this once.
+//
+// An alternate method is to use C99 designated initializers to create the
+// array. We can do it either way, the designated initializers is much better,
+// but we need to suppress the warnings generated. This is only available in
+// clang today.
+
+#if 0
+// We used to implement the instruction tables with vectors.
 void OutputState::writeInstructionTables() const {
   std::string Family = getSpec().getFamilyName();
   for (auto *Cpu : getSpec().getCpus()) {
     std::string Out;
     int InstrCount = 0; //  Number of instructions for this CPU.
-    Out = formatv("  static SubunitTable table;\n"
+    Out = formatv("  static std::vector<SubunitVec *> table;\n"
                   "  static sys::SmartMutex<true> Mutex;\n"
                   "  sys::SmartScopedLock<true> Lock(Mutex);\n"
                   "  if (table.size() != 0) return &table;\n"
@@ -1443,10 +1459,95 @@ void OutputState::writeInstructionTables() const {
         Divider, Cpu->getName(), InstrCount);
     outputC() << formatv(
         "__attribute__((optnone))\n"
-        "SubunitTable *SUNITS_{0}() {{\n{1}  return &table;\n}\n",
+        "SubunitTable SUNITS_{0}() {{\n{1}  return &table;\n}\n",
         Cpu->getName(), Out);
   }
 }
+#endif
+
+#define USE_DESIGNATED_INITIALIZERS 1
+
+#if !defined(__clang__) || !USE_DESIGNATED_INITIALIZERS
+void OutputState::writeInstructionTables() const {
+  std::string Family = getSpec().getFamilyName();
+  for (auto *Cpu : getSpec().getCpus()) {
+    std::string Out;
+    int InstrCount = 0; //  Number of instructions for this CPU.
+    Out = formatv("   static bool initialized = false;\n"
+                  "   static SubunitVec *table["
+                                       "::llvm::{0}::INSTRUCTION_LIST_END];\n"
+                  "   static sys::SmartMutex<true> Mutex;\n"
+                  "   sys::SmartScopedLock<true> Lock(Mutex);\n"
+                  "   if (initialized) return table;\n"
+                  "   initialized = true;\n" , Family);
+
+    for (auto &[Iname, Info] : Database->getInstructionInfo()) {
+      std::string SuName = SubunitsName(Cpu->getName(), Iname);
+      if (CpuInstrSubunits.count(SuName)) {
+        int Id = CpuInstrSubunits.at(SuName);
+        Out += formatv("    table[::llvm::{0}::{1}] = &{2};\n", Family, Iname,
+                       SubunitListName(Id));
+        if (Info[0]->getInstruct()->getDerived())
+          for (auto *Derived : *Info[0]->getInstruct()->getDerived())
+            Out += formatv("    table[::llvm::{0}::{1}] = &{2};\n", Family,
+                           Derived->getName(), SubunitListName(Id));
+
+        InstrCount++;
+      }
+    }
+    // If there's no instruction info for a CPU, don't write Out object.
+    Cpu->setInstrCount(InstrCount);
+    if (InstrCount == 0) continue;
+
+    outputC() << formatv(
+        "{0}// Instruction table initialization for {1} ({2} valid entries){0}",
+        Divider, Cpu->getName(), InstrCount);
+    outputC() << formatv(
+        "__attribute__((optnone))\n"
+        "SubunitTable SUNITS_{0}() {{\n{1}  return table;\n}\n",
+        Cpu->getName(), Out);
+  }
+}
+#else  // USE_DESIGNATED_INITIALIZERS
+void OutputState::writeInstructionTables() const {
+  std::string Family = getSpec().getFamilyName();
+  for (auto *Cpu : getSpec().getCpus()) {
+    std::string Out;
+    int InstrCount = 0; //  Number of instructions for this CPU.
+    Out = formatv("   static SubunitVec *table["
+                  "::llvm::{0}::INSTRUCTION_LIST_END] =  {{\n", Family);
+
+    for (auto &[Iname, Info] : Database->getInstructionInfo()) {
+      std::string SuName = SubunitsName(Cpu->getName(), Iname);
+      if (CpuInstrSubunits.count(SuName)) {
+        int Id = CpuInstrSubunits.at(SuName);
+        Out += formatv("      [::llvm::{0}::{1}] = &{2},\n", Family, Iname,
+                       SubunitListName(Id));
+        if (Info[0]->getInstruct()->getDerived())
+          for (auto *Derived : *Info[0]->getInstruct()->getDerived())
+            Out += formatv("  [::llvm::{0}::{1}] = &{2},\n", Family,
+                           Derived->getName(), SubunitListName(Id));
+
+        InstrCount++;
+      }
+    }
+    // If there's no instruction info for a CPU, don't write Out object.
+    Cpu->setInstrCount(InstrCount);
+    if (InstrCount == 0) continue;
+
+    outputC() << formatv(
+        "{0}// Instruction table initialization for {1} ({2} valid entries){0}",
+        Divider, Cpu->getName(), InstrCount);
+    outputC() << formatv(
+        "#pragma clang diagnostic push\n"
+        "#pragma clang diagnostic ignored \"-Wc99-designator\"\n"
+        "SubunitTable SUNITS_{0}() {{\n{1}   };\n   return table;\n}\n"
+        "#pragma clang diagnostic pop\n",
+        Cpu->getName(), Out);
+  }
+}
+#endif
+
 
 // Generate the forwarding table for a single CPU.
 std::string OutputState::formatForwardingInfo(const CpuInstance *Cpu,

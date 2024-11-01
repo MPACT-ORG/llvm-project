@@ -44,11 +44,11 @@ namespace mdl {
 SlotDesc::SlotDesc(const MCInst *MC, const MCSubtargetInfo *STI,
                    const MCInstrInfo *MCII)
     : Inst(MC, STI, MCII),
-      Subunits((*STI->getCpuInfo()->getSubunits())[Inst.getOpcode()]),
+      Subunits((STI->getCpuInfo()->getSubunits())[Inst.getOpcode()]),
       SubunitId(0) {}
 SlotDesc::SlotDesc(MachineInstr *MI, const TargetSubtargetInfo *STI)
     : Inst(MI, STI),
-      Subunits((*STI->getCpuInfo()->getSubunits())[Inst.getOpcode()]),
+      Subunits((STI->getCpuInfo()->getSubunits())[Inst.getOpcode()]),
       SubunitId(0) {}
 
 /// The Instr object provides a common interface to the MDL compiler for

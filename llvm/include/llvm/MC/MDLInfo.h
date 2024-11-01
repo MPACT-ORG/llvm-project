@@ -346,7 +346,8 @@ using OperandConstraintVec = InitializationVector<OperandConstraint>;
 using SubunitVec = InitializationVector<Subunit>;
 
 // A mapping of instructions to subunit lists.
-using SubunitTable = std::vector<SubunitVec *>;
+// using SubunitTable = std::vector<SubunitVec *> *;
+using SubunitTable = SubunitVec **;
 
 //-----------------------------------------------------------------------------
 /// A description of a single conditional reference object.
@@ -1126,9 +1127,9 @@ class CpuInfo {
   unsigned LoadPhase = 0;           // default phase for load instructions
   unsigned HighLatencyDefPhase = 0; // high latency def instruction phase
   unsigned MaxResourcePhase = 0;    // latest resource "use" phase
-  SubunitTable *(*InitSubunitTable)() = nullptr;
+  SubunitTable (*InitSubunitTable)() = nullptr;
   int8_t **ForwardTable = nullptr;  // forwarding info table, or null
-  SubunitTable *Subunits = nullptr; // instruction-to-subunit mapping
+  SubunitTable Subunits = nullptr; // instruction-to-subunit mapping
   unsigned ResourceFactor = 1;      // Cpu-specific resource factor
   std::string *ResourceNames = nullptr;  // Names of resources
 
@@ -1144,7 +1145,7 @@ public:
           unsigned MaxPoolAllocation, unsigned MaxIssue,
           unsigned ReorderBufferSize, unsigned EarlyUsePhase,
           unsigned LoadPhase, unsigned HighLatencyDefPhase,
-          unsigned MaxResourcePhase, SubunitTable *(*InitSubunitTable)(),
+          unsigned MaxResourcePhase, SubunitTable (*InitSubunitTable)(),
           int8_t **ForwardTable, unsigned ResourceFactor,
           std::string *ResourceNames)
       : MaxResourceId(MaxResourceId), MaxUsedResourceId(MaxUsedResourceId),
@@ -1186,10 +1187,11 @@ public:
   // table will be empty.
   //------------------------------------------------------------------------
   bool hasSubunits() const { return Subunits; }
-  SubunitTable *getSubunits() const { return Subunits; }
+  SubunitTable getSubunits() const { return Subunits; }
   SubunitVec *getSubunit(int opcode) const {
     if (Subunits == nullptr) return nullptr;
-    return (*Subunits)[opcode];
+    // return (*Subunits)[opcode];
+    return Subunits[opcode];
   }
   bool isInstruction(int Opcode, int OperandId) const {
     if (OperandId == -1)
@@ -1378,7 +1380,7 @@ public:
 ///----------------------------------------------------------------------------
 template <typename CpuParams> class CpuConfig : public CpuInfo {
 public:
-  CpuConfig(SubunitTable *(*InitSubunitTable)(), int8_t **ForwardTable,
+  CpuConfig(SubunitTable (*InitSubunitTable)(), int8_t **ForwardTable,
             unsigned ResourceFactor, std::string *ResourceNames)
       : CpuInfo(CpuParams::MaxResourceId, CpuParams::MaxUsedResourceId,
                 CpuParams::MaxFuncUnitId, CpuParams::PoolCount,
