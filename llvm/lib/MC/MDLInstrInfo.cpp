@@ -73,7 +73,7 @@ bool Instr::evaluatePredicate(int PredId) {
 }
 
 // Return the set of subunits for an instruction and CPU combination.
-SubunitVec *Instr::getSubunit() { return Cpu->getSubunit(getOpcode()); }
+const SubunitVec *Instr::getSubunit() { return Cpu->getSubunit(getOpcode()); }
 
 /// Return the raw bits associated with an operand.
 int64_t Instr::getOperand(int OperandIndex) {
@@ -168,8 +168,8 @@ bool Instr::hasExtraOperands() {
 /// information, or not.
 /// NOTE: This isn't as onerous as it sounds: operand insertions are rare,
 /// and typically instructions only have a few explicit references.
-inline OperandRef const *findOrderedReference(Instr *Inst, ReferenceType Type,
-                                              int OpndId, OperandRefVec *Refs) {
+inline OperandRef const *findOrderedReference(
+       Instr *Inst, ReferenceType Type, int OpndId, const OperandRefVec *Refs) {
   // Find the set of defs OR uses for this instruction, and sort them by
   // operand index and pipeline phase. We want the latest defs and the
   // earliest uses, so that when we're searching the sorted list below,
@@ -237,7 +237,7 @@ static const OperandRef *bestRef(const OperandRef *Best, const OperandRef *Item,
 
 /// Search an operand reference list for a reference to a particular operand.
 inline OperandRef const *findReference(Instr *Inst, ReferenceType Type,
-                                       int OpndId, OperandRefVec *Refs) {
+                                       int OpndId, const OperandRefVec *Refs) {
   if (Inst->hasExtraOperands())
     return findOrderedReference(Inst, Type, OpndId, Refs);
 
@@ -253,8 +253,9 @@ inline OperandRef const *findReference(Instr *Inst, ReferenceType Type,
 // in the forwarding table.
 // TODO: When there more than one functional unit, we need a heuristic
 // to determine if forwarding occurs.
-int calculateForwardingAdjustment(CpuInfo &Cpu, Instr *Def, Subunit &DefUnit,
-                                  Instr *Use, Subunit &UseUnit) {
+int calculateForwardingAdjustment(CpuInfo &Cpu, Instr *Def,
+                                  const Subunit &DefUnit, Instr *Use,
+                                  const Subunit &UseUnit) {
   // No point doing this if there isn't a forwarding table.
   auto *FwdTable = Cpu.getForwardTable();
   if (FwdTable == nullptr)
@@ -345,13 +346,13 @@ int calculateOperandLatency(Instr *Def, unsigned DefOpId, Instr *Use,
 
   int DefSuId = Def->getSubunitId();
   int UseSuId = Use ? Use->getSubunitId() : 0;
-  SubunitVec *DefSubunit = nullptr;
-  SubunitVec *UseSubunit = nullptr;
+  const SubunitVec *DefSubunit = nullptr;
+  const SubunitVec *UseSubunit = nullptr;
 
   if (Cpu.isInstruction(Def->getOpcode(), DefOpId))
     if ((DefSubunit = Def->getSubunit()))
-      if (auto *DefRefs = (*DefSubunit)[DefSuId].getOperandReferences())
-        if (auto *DefRef =
+      if (const auto *DefRefs = (*DefSubunit)[DefSuId].getOperandReferences())
+        if (const auto *DefRef =
                 findReference(Def, ReferenceTypes::RefDef, DefOpId, DefRefs))
           DefPhase = DefRef->getPhase(Def);
 
@@ -362,8 +363,8 @@ int calculateOperandLatency(Instr *Def, unsigned DefOpId, Instr *Use,
   // Find the phase for a Use instruction, if provided.
   if (Use && Cpu.isInstruction(Use->getOpcode(), UseOpId))
     if ((UseSubunit = Use->getSubunit()))
-      if (auto *UseRefs = (*UseSubunit)[UseSuId].getOperandReferences())
-        if (auto *UseRef =
+      if (const auto *UseRefs = (*UseSubunit)[UseSuId].getOperandReferences())
+        if (const auto *UseRef =
                 findReference(Use, ReferenceTypes::RefUse, UseOpId, UseRefs))
           UsePhase = UseRef->getPhase(Use);
 
@@ -413,7 +414,7 @@ int calculateResourceLatency(const MachineInstr *MI,
 }
 
 /// Search a list of operand references for the maximum DEF latency.
-inline int findMaxLatency(Instr *Inst, OperandRefVec *Refs) {
+inline int findMaxLatency(Instr *Inst, const OperandRefVec *Refs) {
   int Max = 0;
   if (Refs == nullptr)
     return Max;

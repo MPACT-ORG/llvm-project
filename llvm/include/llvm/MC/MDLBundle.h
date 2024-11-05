@@ -165,7 +165,7 @@ CpuConfig<CpuParams>::attemptToBundle(SlotSet &Bundle,
   // If this is the first attempt to bundle this instruction, we iterate over
   // all of its subunits, otherwise we start with the previous subunit
   // assignment.
-  SubunitVec &subunits = *Item.getSubunits();
+  const SubunitVec &subunits = *Item.getSubunits();
   int OriginalId = Item.getSubunitId();
   if (Reset)
     Item.setSubunitId(0);
@@ -204,7 +204,8 @@ CpuConfig<CpuParams>::attemptToBundle(SlotSet &Bundle,
 /// if the resource is shareable. (Its quite expensive, even if done
 /// efficiently)
 template <typename CpuParams>
-bool CpuConfig<CpuParams>::addResources(SlotDesc &Slot, Subunit &WhichSubunit,
+bool CpuConfig<CpuParams>::addResources(SlotDesc &Slot,
+                                        const Subunit &WhichSubunit,
                                         ReservationsConfig<CpuParams> &Res) {
   if (auto *Refs = WhichSubunit.getUsedResourceReferences()) {
     for (auto const &Ref : ReferenceIter<ResourceRef>(Refs, Slot.getInst())) {
@@ -257,7 +258,7 @@ CpuConfig<CpuParams>::allocatePools(SlotSet &Bundle,
 
   // If there were no pooled requests, we've succeeded!
   if (RequestCount == 0) return BundleStatus::kSuccess;
-  
+
   // Find the set of shared resources used by the bundle.
   ResourceValues<CpuParams> Values;
   findStaticResources(Bundle, Values);

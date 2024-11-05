@@ -195,15 +195,15 @@ inline int getResourcePhase(PipeFunc Func, Instr *Ins);
 template <typename T> class InitializationVector {
 public:
   unsigned char Size; // Number of entries in the vector.
-  T *Data;            // Pointer to the data.
+  const T *Data;      // Pointer to the data.
 
 public:
   class Iterator {
-    T *Iter;
+    const T *Iter;
 
   public:
-    T &operator*() const { return *Iter; }
-    T *operator->() { return Iter; }
+    const T &operator*() const { return *Iter; }
+    const T *operator->() { return Iter; }
     Iterator &operator++() {
       ++Iter;
       return *this;
@@ -220,12 +220,12 @@ public:
     friend bool operator!=(const Iterator &a, const Iterator &b) {
       return a.Iter != b.Iter;
     }
-    Iterator(T *Data) : Iter(Data) {}
+    Iterator(const T *Data) : Iter(Data) {}
   };
-  Iterator begin() { return Iterator(&Data[0]); }
-  Iterator end() { return Iterator(&Data[Size]); }
+  Iterator begin() const { return Iterator(&Data[0]); }
+  Iterator end()  const { return Iterator(&Data[Size]); }
   unsigned size() const { return Size; }
-  T &operator[](int index) { return Data[index]; }
+  const T &operator[](int index) const { return Data[index]; }
 };
 
 //-----------------------------------------------------------------------------
@@ -252,15 +252,15 @@ public:
 //-----------------------------------------------------------------------------
 template <typename T> class ReferenceIter {
 private:
-  InitializationVector<T> *Refs; // The top-level vector of references.
-  Instr *Ins;                    // Instruction to use with predicates.
+  const InitializationVector<T> *Refs; // The top-level vector of references.
+  Instr *Ins;                          // Instruction to use with predicates.
 
   struct Iterator {
     Instr *Ins;
     typename InitializationVector<T>::Iterator Iter, End;
     std::vector<typename InitializationVector<T>::Iterator> Iters, Ends;
 
-    Iterator(Instr *Ins, InitializationVector<T> *Refs)
+    Iterator(Instr *Ins, const InitializationVector<T> *Refs)
         : Ins(Ins), Iter(Refs->begin()), End(Refs->end()) {
       advance();
     }
@@ -268,7 +268,7 @@ private:
     Iterator(Instr *Ins, typename InitializationVector<T>::Iterator End)
         : Ins(Ins), Iter(End), End(End) {}
 
-    T &operator*() const { return *Iter; }
+    const T &operator*() const { return *Iter; }
     T *operator->() { return Iter; }
 
     Iterator &operator++() {
@@ -329,7 +329,7 @@ private:
   };
 
 public:
-  ReferenceIter(InitializationVector<T> *Refs, Instr *Ins)
+  ReferenceIter(const InitializationVector<T> *Refs, Instr *Ins)
       : Refs(Refs), Ins(Ins) {}
 
   Iterator begin() { return Iterator(this->Ins, Refs); }
@@ -346,7 +346,6 @@ using OperandConstraintVec = InitializationVector<OperandConstraint>;
 using SubunitVec = InitializationVector<Subunit>;
 
 // A mapping of instructions to subunit lists.
-// using SubunitTable = std::vector<SubunitVec *> *;
 using SubunitTable = SubunitVec **;
 
 //-----------------------------------------------------------------------------
@@ -354,11 +353,11 @@ using SubunitTable = SubunitVec **;
 /// Used for operand, resource, and pooled resource references.
 //-----------------------------------------------------------------------------
 template <class T> class ConditionalRef {
-  PredFunc Predicate;            // function to evaluate the predicate
-  InitializationVector<T> *Refs; // conditional refs
-  ConditionalRef<T> *ElseClause; // optional else clause
+  PredFunc Predicate;                  // function to evaluate the predicate
+  const InitializationVector<T> *Refs; // conditional refs
+  ConditionalRef<T> *ElseClause;       // optional else clause
 public:
-  ConditionalRef(PredFunc Predicate, InitializationVector<T> *Refs,
+  ConditionalRef(PredFunc Predicate, const InitializationVector<T> *Refs,
                  ConditionalRef<T> *ElseClause)
       : Predicate(Predicate), Refs(Refs), ElseClause(ElseClause) {}
 
@@ -366,7 +365,7 @@ public:
   bool evalPredicate(Instr *ins) const {
     return Predicate == nullptr || Predicate(ins);
   }
-  InitializationVector<T> *getRefs() const { return Refs; }
+  const InitializationVector<T> *getRefs() const { return Refs; }
   ConditionalRef<T> *getElseClause() const { return ElseClause; }
 };
 
@@ -617,20 +616,20 @@ public:
 /// and resource behavior of the instance of an instruction (or a set of
 /// instructions).
 class Subunit {
-  OperandRefVec *OperandReferences = nullptr;
-  ResourceRefVec *UsedResourceReferences = nullptr;
-  ResourceRefVec *HeldResourceReferences = nullptr;
-  ResourceRefVec *ReservedResourceReferences = nullptr;
-  PooledResourceRefVec *PooledResourceReferences = nullptr;
-  OperandConstraintVec *Constraints = nullptr;
+  const OperandRefVec *OperandReferences = nullptr;
+  const ResourceRefVec *UsedResourceReferences = nullptr;
+  const ResourceRefVec *HeldResourceReferences = nullptr;
+  const ResourceRefVec *ReservedResourceReferences = nullptr;
+  const PooledResourceRefVec *PooledResourceReferences = nullptr;
+  const OperandConstraintVec *Constraints = nullptr;
 
 public:
-  Subunit(OperandRefVec *OperandReferences,
-          ResourceRefVec *UsedResourceReferences,
-          ResourceRefVec *HeldResourceReferences,
-          ResourceRefVec *ReservedResourceReferences,
-          PooledResourceRefVec *PooledResourceReferences,
-          OperandConstraintVec *Constraints)
+  Subunit(const OperandRefVec *OperandReferences,
+          const ResourceRefVec *UsedResourceReferences,
+          const ResourceRefVec *HeldResourceReferences,
+          const ResourceRefVec *ReservedResourceReferences,
+          const PooledResourceRefVec *PooledResourceReferences,
+          const OperandConstraintVec *Constraints)
       : OperandReferences(OperandReferences),
         UsedResourceReferences(UsedResourceReferences),
         HeldResourceReferences(HeldResourceReferences),
@@ -638,25 +637,26 @@ public:
         PooledResourceReferences(PooledResourceReferences),
         Constraints(Constraints) {}
   // Simpler constructor for the common case of empty parameters.
-  Subunit(OperandRefVec *OperandReferences,
-          ResourceRefVec *UsedResourceReferences)
+  Subunit(const OperandRefVec *OperandReferences,
+          const ResourceRefVec *UsedResourceReferences)
       : OperandReferences(OperandReferences),
         UsedResourceReferences(UsedResourceReferences) {}
 
-  OperandRefVec *getOperandReferences() const { return OperandReferences; }
-  ResourceRefVec *getUsedResourceReferences() const {
+  const OperandRefVec *getOperandReferences() const {
+    return OperandReferences; }
+  const ResourceRefVec *getUsedResourceReferences() const {
     return UsedResourceReferences;
   }
-  ResourceRefVec *getHeldResourceReferences() const {
+  const ResourceRefVec *getHeldResourceReferences() const {
     return HeldResourceReferences;
   }
-  ResourceRefVec *getReservedResourceReferences() const {
+  const ResourceRefVec *getReservedResourceReferences() const {
     return ReservedResourceReferences;
   }
-  PooledResourceRefVec *getPooledResourceReferences() const {
+  const PooledResourceRefVec *getPooledResourceReferences() const {
     return PooledResourceReferences;
   }
-  OperandConstraintVec *getConstraints() const { return Constraints; }
+  const OperandConstraintVec *getConstraints() const { return Constraints; }
 };
 
 // CPU configuration parameters, determined by the MDL compiler, based on the
@@ -948,7 +948,7 @@ public:
   int getSubunitId() { return 0; }
 
   /// Return the set of subunits for an instruction and CPU combination.
-  SubunitVec *getSubunit();
+  const SubunitVec *getSubunit();
 };
 
 ///----------------------------------------------------------------------------
@@ -1023,7 +1023,7 @@ public:
 /// the instruction in the current bundle.
 class SlotDesc {
   Instr Inst;                     // instruction description
-  SubunitVec *Subunits;           // pointer to vector of legal subunits
+  const SubunitVec *Subunits;     // pointer to vector of legal subunits
   int SubunitId;                  // currently selected subunit id
   AllocatedResourceSet Resources; // resources reserved for instruction
 public:
@@ -1033,11 +1033,11 @@ public:
 
   Instr *getInst() { return &Inst; }
   const MachineInstr *getMI() const { return Inst.getMI(); }
-  SubunitVec *getSubunits() const { return Subunits; }
+  const SubunitVec *getSubunits() const { return Subunits; }
   int getSubunitId() const { return SubunitId; }
   void setSubunitId(int Id) { SubunitId = Id; }
 
-  Subunit *getSubunit() const { return &(*Subunits)[SubunitId]; }
+  const Subunit *getSubunit() const { return &(*Subunits)[SubunitId]; }
   AllocatedResourceSet &getResources() { return Resources; }
   void setResources(const AllocatedResourceSet &Res) { Resources = Res; }
 };
@@ -1046,12 +1046,12 @@ public:
 /// is internal to the bundle packer, and is used to fulfill instructions'
 /// pooled allocation requests.
 class PoolRequest {
-  SlotDesc *WhichSlot;    // Slot/instruction making request
-  PooledResourceRef *Ref; // the pooled resource request
-  int Count;              // how many resources requested
-  int Phase;              // what pipeline phase
+  SlotDesc *WhichSlot;          // Slot/instruction making request
+  const PooledResourceRef *Ref; // the pooled resource request
+  int Count;                    // how many resources requested
+  int Phase;                    // what pipeline phase
 public:
-  PoolRequest(SlotDesc *WhichSlot, PooledResourceRef *Ref)
+  PoolRequest(SlotDesc *WhichSlot, const PooledResourceRef *Ref)
       : WhichSlot(WhichSlot), Ref(Ref) {
     Count = Ref->getCount(WhichSlot->getInst(), Ref->getOperandIndex());
     Phase = Ref->getPhase(WhichSlot->getInst());
@@ -1071,7 +1071,7 @@ public:
   }
   Instr *getInst() const { return WhichSlot->getInst(); }
   int getOperandId() const { return Ref->getOperandIndex(); }
-  PooledResourceRef *getRef() const { return Ref; }
+  const PooledResourceRef *getRef() const { return Ref; }
   SlotDesc *getSlot() const { return WhichSlot; }
   bool isShared() const { return getRef()->isShared(); }
 };
@@ -1086,7 +1086,7 @@ template <typename CpuParams> class PoolRequests {
 public:
   PoolRequests() : Pools() {}
   auto &getPool(int Index) { return Pools[Index]; }
-  void AddPoolRequest(SlotDesc *WhichSlot, PooledResourceRef *Item) {
+  void AddPoolRequest(SlotDesc *WhichSlot, const PooledResourceRef *Item) {
     PoolRequest request(WhichSlot, Item);
     if (request.getCount() != 0)
       Pools[request.getSubpoolId()].push_back(request);
@@ -1127,10 +1127,10 @@ class CpuInfo {
   unsigned LoadPhase = 0;           // default phase for load instructions
   unsigned HighLatencyDefPhase = 0; // high latency def instruction phase
   unsigned MaxResourcePhase = 0;    // latest resource "use" phase
-  SubunitTable (*InitSubunitTable)() = nullptr;
+  const SubunitVec ** (*InitSubunitTable)() = nullptr;
   int8_t **ForwardTable = nullptr;  // forwarding info table, or null
-  SubunitTable Subunits = nullptr; // instruction-to-subunit mapping
-  unsigned ResourceFactor = 1;      // Cpu-specific resource factor
+  const SubunitVec **Subunits = nullptr; // instruction-to-subunit mapping
+  unsigned ResourceFactor = 1;           // Cpu-specific resource factor
   std::string *ResourceNames = nullptr;  // Names of resources
 
   // A CPU can have a set of Target-library predicates, which are only used
@@ -1145,7 +1145,7 @@ public:
           unsigned MaxPoolAllocation, unsigned MaxIssue,
           unsigned ReorderBufferSize, unsigned EarlyUsePhase,
           unsigned LoadPhase, unsigned HighLatencyDefPhase,
-          unsigned MaxResourcePhase, SubunitTable (*InitSubunitTable)(),
+          unsigned MaxResourcePhase, const SubunitVec ** (*InitSubunitTable)(),
           int8_t **ForwardTable, unsigned ResourceFactor,
           std::string *ResourceNames)
       : MaxResourceId(MaxResourceId), MaxUsedResourceId(MaxUsedResourceId),
@@ -1187,10 +1187,9 @@ public:
   // table will be empty.
   //------------------------------------------------------------------------
   bool hasSubunits() const { return Subunits; }
-  SubunitTable getSubunits() const { return Subunits; }
-  SubunitVec *getSubunit(int opcode) const {
+  const SubunitVec **getSubunits() const { return Subunits; }
+  const SubunitVec *getSubunit(int opcode) const {
     if (Subunits == nullptr) return nullptr;
-    // return (*Subunits)[opcode];
     return Subunits[opcode];
   }
   bool isInstruction(int Opcode, int OperandId) const {
@@ -1227,12 +1226,12 @@ public:
   // Return true if an instruction must begin an issue group.
   bool mustBeginGroup(const MachineInstr *MI, const TargetSubtargetInfo *STI) {
     Instr Ins(MI, STI);
-    if (auto *Subunit = Ins.getSubunit()) {
-      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+    if (const auto *Subunit = Ins.getSubunit()) {
+      if (const auto *Refs = (*Subunit)[0].getUsedResourceReferences())
         for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
           if (Ref.isFus() && (Ref.isBeginGroup() || Ref.isSingleIssue()))
             return true;
-      if (auto *Refs = (*Subunit)[0].getPooledResourceReferences())
+      if (const auto *Refs = (*Subunit)[0].getPooledResourceReferences())
         for (const auto &Ref : ReferenceIter<PooledResourceRef>(Refs, &Ins))
           if (Ref.isFus() && (Ref.isBeginGroup() || Ref.isSingleIssue()))
             return true;
@@ -1243,12 +1242,12 @@ public:
   // Return true if an instruction must end an issue group.
   bool mustEndGroup(const MachineInstr *MI, const TargetSubtargetInfo *STI) {
     Instr Ins(MI, STI);
-    if (auto *Subunit = Ins.getSubunit()) {
-      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+    if (const auto *Subunit = Ins.getSubunit()) {
+      if (const auto *Refs = (*Subunit)[0].getUsedResourceReferences())
         for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
           if (Ref.isFus() && (Ref.isEndGroup() || Ref.isSingleIssue()))
             return true;
-      if (auto *Refs = (*Subunit)[0].getPooledResourceReferences())
+      if (const auto *Refs = (*Subunit)[0].getPooledResourceReferences())
         for (const auto &Ref : ReferenceIter<PooledResourceRef>(Refs, &Ins))
           if (Ref.isFus() && (Ref.isEndGroup() || Ref.isSingleIssue()))
             return true;
@@ -1259,12 +1258,12 @@ public:
   // Return true if an instruction must be single-issued.
   bool isSingleIssue(const MachineInstr *MI, const TargetSubtargetInfo *STI) {
     Instr Ins(MI, STI);
-    if (auto *Subunit = Ins.getSubunit()) {
-      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+    if (const auto *Subunit = Ins.getSubunit()) {
+      if (const auto *Refs = (*Subunit)[0].getUsedResourceReferences())
         for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
           if (Ref.isFus() && Ref.isSingleIssue())
             return true;
-      if (auto *Refs = (*Subunit)[0].getPooledResourceReferences())
+      if (const auto *Refs = (*Subunit)[0].getPooledResourceReferences())
         for (const auto &Ref : ReferenceIter<PooledResourceRef>(Refs, &Ins))
           if (Ref.isFus() && Ref.isSingleIssue())
             return true;
@@ -1275,12 +1274,12 @@ public:
   // Return true if an instruction has the RetireOOO attribute.
   bool isRetireOOO(const MachineInstr *MI, const TargetSubtargetInfo *STI) {
     Instr Ins(MI, STI);
-    if (auto *Subunit = Ins.getSubunit()) {
-      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+    if (const auto *Subunit = Ins.getSubunit()) {
+      if (const auto *Refs = (*Subunit)[0].getUsedResourceReferences())
         for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
           if (Ref.isFus() && Ref.isRetireOOO())
             return true;
-      if (auto *Refs = (*Subunit)[0].getPooledResourceReferences())
+      if (const auto *Refs = (*Subunit)[0].getPooledResourceReferences())
         for (const auto &Ref : ReferenceIter<PooledResourceRef>(Refs, &Ins))
           if (Ref.isFus() && Ref.isRetireOOO())
             return true;
@@ -1297,12 +1296,12 @@ public:
       return isTransient(Ins.getMI()) ? 0 : 1;
 
     int MicroOps = 0;
-    if (auto *Refs = (*Subunit)[0].getUsedResourceReferences()) {
+    if (const auto *Refs = (*Subunit)[0].getUsedResourceReferences()) {
       for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
         if (Ref.isFus())
           MicroOps += Ref.getMicroOps();
     }
-    if (auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
+    if (const auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
       for (const auto &Ref : ReferenceIter<PooledResourceRef>(Prefs, &Ins))
         if (Ref.isFus()) 
           MicroOps += Ref.getMicroOps();
@@ -1324,14 +1323,14 @@ public:
   //------------------------------------------------------------------------
   double getReciprocalThroughput(Instr Ins) const {
     double Throughput = 0.0;
-    if (auto *Subunit = Ins.getSubunit()) {
-      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+    if (const auto *Subunit = Ins.getSubunit()) {
+      if (const auto *Refs = (*Subunit)[0].getUsedResourceReferences())
         for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
           if (Ref.isFus() && Ref.getCycles()) {
             double Temp = 1.0 / Ref.getCycles();
             Throughput = Throughput ? std::min(Throughput, Temp) : Temp;
           }
-      if (auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
+      if (const auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
         for (const auto &Ref : ReferenceIter<PooledResourceRef>(Prefs, &Ins))
           if (Ref.isFus()) { // Pools always have non-zero cycles
             double Temp = (Ref.getSize() * 1.0) / Ref.getCycles();
@@ -1380,7 +1379,7 @@ public:
 ///----------------------------------------------------------------------------
 template <typename CpuParams> class CpuConfig : public CpuInfo {
 public:
-  CpuConfig(SubunitTable (*InitSubunitTable)(), int8_t **ForwardTable,
+  CpuConfig(const SubunitVec ** (*InitSubunitTable)(), int8_t **ForwardTable,
             unsigned ResourceFactor, std::string *ResourceNames)
       : CpuInfo(CpuParams::MaxResourceId, CpuParams::MaxUsedResourceId,
                 CpuParams::MaxFuncUnitId, CpuParams::PoolCount,
@@ -1408,7 +1407,7 @@ public:
   BundleStatus attemptToBundle(SlotSet &Bundle,
                                ReservationsConfig<CpuParams> &Res,
                                int WhichSlot, bool Reset);
-  bool addResources(SlotDesc &Slot, Subunit &WhichSubunit,
+  bool addResources(SlotDesc &Slot, const Subunit &WhichSubunit,
                     ReservationsConfig<CpuParams> &res);
   void findStaticResources(SlotSet &Bundle, ResourceValues<CpuParams> &Values);
 

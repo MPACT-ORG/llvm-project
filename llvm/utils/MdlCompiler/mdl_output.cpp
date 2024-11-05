@@ -1304,8 +1304,8 @@ void OutputState::writeVectorTable(const OutputSet &Objects,
     outputC() << formatv("{0}// {1} ({2} entries){3}{0}", Divider, Title,
                           Objects.size(), Info);
   for (auto &[Out, Index] : Objects) {
-    outputC() << formatv("{0} {1}_data[] = {{{2}};\n", Type, Name(Index), Out);
-    outputC() << formatv("{0}Vec {1} = {{ {2}, {1}_data };\n", Type,
+    outputC() << formatv("const {0} {1}_data[] = {{{2}};\n", Type, Name(Index), Out);
+    outputC() << formatv("const {0}Vec {1} = {{ {2}, {1}_data };\n", Type,
                           Name(Index), countVectorInitItems(Out));
   }
 }
@@ -1474,7 +1474,7 @@ void OutputState::writeInstructionTables() const {
     std::string Out;
     int InstrCount = 0; //  Number of instructions for this CPU.
     Out = formatv("   static bool initialized = false;\n"
-                  "   static SubunitVec *table["
+                  "   static const SubunitVec *table["
                                        "::llvm::{0}::INSTRUCTION_LIST_END];\n"
                   "   static sys::SmartMutex<true> Mutex;\n"
                   "   sys::SmartScopedLock<true> Lock(Mutex);\n"
@@ -1514,7 +1514,7 @@ void OutputState::writeInstructionTables() const {
   for (auto *Cpu : getSpec().getCpus()) {
     std::string Out;
     int InstrCount = 0; //  Number of instructions for this CPU.
-    Out = formatv("   static SubunitVec *table["
+    Out = formatv("   static const SubunitVec *table["
                   "::llvm::{0}::INSTRUCTION_LIST_END] =  {{\n", Family);
 
     for (auto &[Iname, Info] : Database->getInstructionInfo()) {
@@ -1541,7 +1541,7 @@ void OutputState::writeInstructionTables() const {
     outputC() << formatv(
         "#pragma clang diagnostic push\n"
         "#pragma clang diagnostic ignored \"-Wc99-designator\"\n"
-        "SubunitTable SUNITS_{0}() {{\n{1}   };\n   return table;\n}\n"
+        "static const SubunitVec **SUNITS_{0}() {{\n{1}   };\n   return table;\n}\n"
         "#pragma clang diagnostic pop\n",
         Cpu->getName(), Out);
   }
@@ -2135,7 +2135,7 @@ void OutputState::writeCpuTable() {
   outputC() << formatv(
       "{0}// Forward references for conditional references{0}", Divider);
   for (auto Name : ForwardOpndRefs)
-    outputC() << formatv("extern OperandRefVec {0};\n", Name);
+    outputC() << formatv("extern const OperandRefVec {0};\n", Name);
   if (!ForwardOpndRefs.empty())
     outputC() << "\n";
   for (auto Name : ForwardCondOpndRefs)
@@ -2144,7 +2144,7 @@ void OutputState::writeCpuTable() {
     outputC() << "\n";
 
   for (auto Name : ForwardResourceRefs)
-    outputC() << formatv("extern ResourceRefVec {0};\n", Name);
+    outputC() << formatv("extern const ResourceRefVec {0};\n", Name);
   if (!ForwardResourceRefs.empty())
     outputC() << "\n";
   for (auto Name : ForwardCondResRefs)
@@ -2153,7 +2153,7 @@ void OutputState::writeCpuTable() {
     outputC() << "\n";
 
   for (auto Name : ForwardPooledRefs)
-    outputC() << formatv("extern PooledResourceRefVec {0};\n", Name);
+    outputC() << formatv("extern const PooledResourceRefVec {0};\n", Name);
   if (!ForwardPooledRefs.empty())
     outputC() << "\n";
   for (auto Name : ForwardCondPoolRefs)
@@ -2163,7 +2163,7 @@ void OutputState::writeCpuTable() {
     outputC() << "\n";
 
   for (auto Name : ForwardConstraintRefs)
-    outputC() << formatv("extern OperandConstraintVec {0};\n", Name);
+    outputC() << formatv("extern const OperandConstraintVec {0};\n", Name);
   if (!ForwardConstraintRefs.empty())
     outputC() << "\n";
   for (auto Name : ForwardCondConstraintRefs)
