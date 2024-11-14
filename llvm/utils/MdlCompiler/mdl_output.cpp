@@ -616,12 +616,6 @@ std::string OutputState::formatIfElseResourceRef(
   // add the resource list id to the list of ResourceRef forward references.
   auto ThenRefs = formatResourceReferenceList(
       Subunit, Cond->getRefs(), Type, OutputList, Name, FormatPooledRef);
-  if (ThenRefs != kNull) {
-    if (FormatPooledRef)
-      ForwardPooledRefs.insert(ThenRefs);
-    else
-      ForwardResourceRefs.insert(ThenRefs);
-  }
 
   // If no resource references were found, and the predicate is null, abort.
   if (ThenRefs == kNull && Cond->getInstrPredicate() == nullptr)
@@ -1753,11 +1747,8 @@ void OutputState::writeCpuList() const {
   outputC() << formatv("{0}// Family CPU Descriptions.\n"
                         "//  CpuParams template parameters:\n"
                         "//    - Maximum \"used\" resource id\n"
-                        "//    - Maximum functional unit id\n"
-                        "//\n"
                         "//    - Number of distinct allocation pools\n"
                         "//    - Largest resource pool allocation size\n"
-                        "//\n"
                         "//    - Instruction issue width\n"
                         "//    - Latest resource use pipeline phase\n"
                         "//  CpuParams Constructor arguments\n"
@@ -1768,7 +1759,6 @@ void OutputState::writeCpuList() const {
                         "//    - Resource names table\n"
                         "//    - Maximum functional unit id\n"
                         "//    - Instruction reorder buffer size\n"
-                        "//\n"
                         "//    - First execution pipeline phase\n"
                         "//    - Default load phase\n"
                         "//    - \"High-latency instruction\" write phase"

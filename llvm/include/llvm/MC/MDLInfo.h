@@ -1444,13 +1444,8 @@ public:
                 LoadPhase, HighLatencyDefPhase,
                 CpuParams::MaxResourcePhase, InitSubunitTable, SubunitTable,
                 ForwardTable, ResourceFactor, Resources) {}
-
   // CPU-specialized bundle packing functions.
   bool addToBundle(SlotSet &Bundle, const SlotDesc &Candidate,
-                   const Reservations &Res) override;
-  bool canAddToBundle(SlotSet &Bundle, const SlotDesc &Candidate,
-                      const Reservations &Res) override;
-  SlotSet bundleCandidates(const SlotSet *Candidates) override;
   Reservations *allocReservations() const override {
     return new ReservationsConfig<CpuParams>;
   }
