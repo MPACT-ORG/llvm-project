@@ -73,7 +73,7 @@ bool Instr::evaluatePredicate(int PredId) {
 }
 
 // Return the set of subunits for an instruction and CPU combination.
-const SubunitVec *Instr::getSubunit() { return Cpu->getSubunit(getOpcode()); }
+const SubunitVec<> *Instr::getSubunit() { return Cpu->getSubunit(getOpcode()); }
 
 /// Return the raw bits associated with an operand.
 int64_t Instr::getOperand(int OperandIndex) {
@@ -169,7 +169,7 @@ bool Instr::hasExtraOperands() {
 /// NOTE: This isn't as onerous as it sounds: operand insertions are rare,
 /// and typically instructions only have a few explicit references.
 inline OperandRef const *findOrderedReference(
-       Instr *Inst, ReferenceType Type, int OpndId, const OperandRefVec *Refs) {
+     Instr *Inst, ReferenceType Type, int OpndId, const OperandRefVec<> *Refs) {
   // Find the set of defs OR uses for this instruction, and sort them by
   // operand index and pipeline phase. We want the latest defs and the
   // earliest uses, so that when we're searching the sorted list below,
@@ -236,8 +236,8 @@ static const OperandRef *bestRef(const OperandRef *Best, const OperandRef *Item,
 }
 
 /// Search an operand reference list for a reference to a particular operand.
-inline OperandRef const *findReference(Instr *Inst, ReferenceType Type,
-                                       int OpndId, const OperandRefVec *Refs) {
+inline OperandRef const *findReference(
+    Instr *Inst, ReferenceType Type, int OpndId, const OperandRefVec<> *Refs) {
   if (Inst->hasExtraOperands())
     return findOrderedReference(Inst, Type, OpndId, Refs);
 
@@ -346,8 +346,8 @@ int calculateOperandLatency(Instr *Def, unsigned DefOpId, Instr *Use,
 
   int DefSuId = Def->getSubunitId();
   int UseSuId = Use ? Use->getSubunitId() : 0;
-  const SubunitVec *DefSubunit = nullptr;
-  const SubunitVec *UseSubunit = nullptr;
+  const SubunitVec<> *DefSubunit = nullptr;
+  const SubunitVec<> *UseSubunit = nullptr;
 
   if (Cpu.isInstruction(Def->getOpcode(), DefOpId))
     if ((DefSubunit = Def->getSubunit()))
@@ -414,7 +414,7 @@ int calculateResourceLatency(const MachineInstr *MI,
 }
 
 /// Search a list of operand references for the maximum DEF latency.
-inline int findMaxLatency(Instr *Inst, const OperandRefVec *Refs) {
+inline int findMaxLatency(Instr *Inst, const OperandRefVec<> *Refs) {
   int Max = 0;
   if (Refs == nullptr)
     return Max;

@@ -165,7 +165,7 @@ CpuConfig<CpuParams>::attemptToBundle(SlotSet &Bundle,
   // If this is the first attempt to bundle this instruction, we iterate over
   // all of its subunits, otherwise we start with the previous subunit
   // assignment.
-  const SubunitVec &subunits = *Item.getSubunits();
+  const SubunitVec<> &subunits = *Item.getSubunits();
   int OriginalId = Item.getSubunitId();
   if (Reset)
     Item.setSubunitId(0);

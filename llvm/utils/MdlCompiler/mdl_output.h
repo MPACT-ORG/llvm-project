@@ -39,6 +39,7 @@ class OutputState {
   std::set<std::string> ForwardResourceRefs;   // conditional resource refs
   std::set<std::string> ForwardPooledRefs;     // conditional pooled refs
   std::set<std::string> ForwardConstraintRefs; // conditional constraints
+  std::map<std::string, int> ForwardListSizes; // size of all forward lists
 
   std::set<std::string> ForwardCondOpndRefs;
   std::set<std::string> ForwardCondResRefs;
@@ -144,7 +145,7 @@ private:
   // Format an operand reference.
   std::string formatOperandReference(const Reference *Ref);
   // Format an operand reference list, which can be share between subunits.
-  std::string formatOperandReferenceList(const ReferenceList *Refs);
+  std::string formatOperandReferenceList(const ReferenceList *Refs, bool fwd);
   // Format a single resource reference.
   std::string formatResourceReference(const ResourceEvent &Ref);
   // Format an operand reference list, which can be shared between subunits.
