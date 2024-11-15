@@ -109,6 +109,7 @@ public:
 
   // Top level function to handle output of the database.
   void writeCpuTable();
+  void writeSubunitListTable();
   void writeExterns();
   void writeHeader();
   void writeTrailer();

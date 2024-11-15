@@ -85,11 +85,6 @@ struct ReferenceTypes {
 };
 using ReferenceType = ReferenceTypes::Item;
 
-// The index of an operand into an instruction.
-using OperandId = int8_t;     // These start at 0, so < 0 means invalid.
-
-using MicroOpsType = uint8_t; // Type used to store micro ops.
-
 // Reference flags field.  Values are powers of 2 so we can combine them.
 struct ReferenceFlags {
   using Item = int8_t;
@@ -121,6 +116,15 @@ struct ReferenceFlags {
   static bool isRetireOOO(Item flag) { return flag & kRetireOOO; }
 };
 using ReferenceFlag = ReferenceFlags::Item;
+
+// The index of a subunit id in the global table.
+using SubunitId = uint16_t;
+
+// The index of an operand into an instruction.
+using OperandId = int8_t;     // These start at 0, so < 0 means invalid.
+                              //
+// Type used to store micro ops.
+using MicroOpsType = uint8_t;
 
 // The index of a reference resource or resource pool.
 using ResourceIdType = int16_t; // These start at 0, so < 0 means invalid.
@@ -356,9 +360,6 @@ using OperandConstraintVec = InitializationVector<OperandConstraint, N>;
 // A set of subunits for a particular instruction/CPU combination
 template <int N = 1>
 using SubunitVec = InitializationVector<Subunit, N>;
-
-// A mapping of instructions to subunit lists.
-using SubunitTable = SubunitVec<> **;
 
 //-----------------------------------------------------------------------------
 /// A description of a single conditional reference object.
@@ -1138,9 +1139,10 @@ class CpuInfo {
   unsigned LoadPhase = 0;           // default phase for load instructions
   unsigned HighLatencyDefPhase = 0; // high latency def instruction phase
   unsigned MaxResourcePhase = 0;    // latest resource "use" phase
-  const SubunitVec<> ** (*InitSubunitTable)() = nullptr;
-  int8_t **ForwardTable = nullptr;  // forwarding info table, or null
-  const SubunitVec<> **Subunits = nullptr; // instruction-to-subunit mapping
+  const SubunitId *(*InitSubunitTable)() = nullptr;
+  const InitializationVectorBase **SubunitTable;
+  int8_t **ForwardTable = nullptr;       // forwarding info table, or null
+  const SubunitId *Subunits = nullptr;   // instruction-to-subunit id mapping
   unsigned ResourceFactor = 1;           // Cpu-specific resource factor
   const char **ResourceNames = nullptr;  // Names of resources
 
@@ -1156,7 +1158,8 @@ public:
           unsigned MaxPoolAllocation, unsigned MaxIssue,
           unsigned ReorderBufferSize, unsigned EarlyUsePhase,
           unsigned LoadPhase, unsigned HighLatencyDefPhase,
-          unsigned MaxResourcePhase, const SubunitVec<> **(*InitSubunitTable)(),
+          unsigned MaxResourcePhase, const SubunitId *(*InitSubunitTable)(),
+          const InitializationVectorBase **SubunitTable,
           int8_t **ForwardTable, unsigned ResourceFactor,
           const char **ResourceNames)
       : MaxUsedResourceId(MaxUsedResourceId),
@@ -1165,8 +1168,8 @@ public:
         ReorderBufferSize(ReorderBufferSize), EarlyUsePhase(EarlyUsePhase),
         LoadPhase(LoadPhase), HighLatencyDefPhase(HighLatencyDefPhase),
         MaxResourcePhase(MaxResourcePhase), InitSubunitTable(InitSubunitTable),
-        ForwardTable(ForwardTable), ResourceFactor(ResourceFactor),
-        ResourceNames(ResourceNames) {}
+        SubunitTable(SubunitTable), ForwardTable(ForwardTable),
+        ResourceFactor(ResourceFactor), ResourceNames(ResourceNames) {}
   CpuInfo() {}
   virtual ~CpuInfo() = default;
 
@@ -1197,10 +1200,11 @@ public:
   // table will be empty.
   //------------------------------------------------------------------------
   bool hasSubunits() const { return Subunits; }
-  const SubunitVec<> **getSubunits() const { return Subunits; }
+  // const SubunitVec<> **getSubunits() const { return Subunits; }
   const SubunitVec<> *getSubunit(int opcode) const {
     if (Subunits == nullptr) return nullptr;
-    return Subunits[opcode];
+    return 
+        reinterpret_cast<const SubunitVec<> *>(SubunitTable[Subunits[opcode]]);
   }
   bool isInstruction(int Opcode, int OperandId) const {
     if (OperandId == -1)
@@ -1389,17 +1393,19 @@ public:
 ///----------------------------------------------------------------------------
 template <typename CpuParams> class CpuConfig : public CpuInfo {
 public:
-  CpuConfig(const SubunitVec<> **(*InitSubunitTable)(), int8_t **ForwardTable,
-            unsigned ResourceFactor, const char **ResourceNames,
+  CpuConfig(const SubunitId *(*InitSubunitTable)(),
+            const InitializationVectorBase **SubunitTable,
+            const char **ResourceNames,
             int MaxFuncUnitId, int ReorderBufferSize, int EarlyUsePhase,
-            int LoadPhase, int HighLatencyDefPhase)
+            int LoadPhase, int HighLatencyDefPhase,
+            unsigned ResourceFactor, int8_t **ForwardTable)
       : CpuInfo(CpuParams::MaxUsedResourceId,
                 MaxFuncUnitId, CpuParams::PoolCount,
                 CpuParams::MaxPoolAllocation, CpuParams::MaxIssue,
                 ReorderBufferSize, EarlyUsePhase,
                 LoadPhase, HighLatencyDefPhase,
-                CpuParams::MaxResourcePhase, InitSubunitTable, ForwardTable,
-                ResourceFactor, ResourceNames) {}
+                CpuParams::MaxResourcePhase, InitSubunitTable, SubunitTable,
+                ForwardTable, ResourceFactor, ResourceNames) {}
 
   // CPU-specialized bundle packing functions.
   bool addToBundle(SlotSet &Bundle, const SlotDesc &Candidate,

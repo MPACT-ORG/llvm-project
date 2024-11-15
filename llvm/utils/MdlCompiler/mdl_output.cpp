@@ -1485,7 +1485,7 @@ void OutputState::writeInstructionTables() const {
     std::string Out;
     int InstrCount = 0; //  Number of instructions for this CPU.
     Out = formatv("   static bool initialized = false;\n"
-                  "   static const SubunitVec<> *table["
+                  "   static const SubunitId *table["
                                        "::llvm::{0}::INSTRUCTION_LIST_END];\n"
                   "   static sys::SmartMutex<true> Mutex;\n"
                   "   sys::SmartScopedLock<true> Lock(Mutex);\n"
@@ -1496,12 +1496,12 @@ void OutputState::writeInstructionTables() const {
       std::string SuName = SubunitsName(Cpu->getName(), Iname);
       if (CpuInstrSubunits.count(SuName)) {
         int Id = CpuInstrSubunits.at(SuName);
-        Out += formatv("    table[::llvm::{0}::{1}] = &{2};\n", Family, Iname,
-                       SubunitListName(Id));
+        Out += formatv("    table[::llvm::{0}::{1}] = {2}; // {3}\n",
+                       Family, Iname, Id, SubunitListName(Id));
         if (Info[0]->getInstruct()->getDerived())
           for (auto *Derived : *Info[0]->getInstruct()->getDerived())
-            Out += formatv("    table[::llvm::{0}::{1}] = &{2};\n", Family,
-                           Derived->getName(), SubunitListName(Id));
+            Out += formatv("    table[::llvm::{0}::{1}] = {2}; // {3}\n",
+                           Family, Derived->getName(), Id, SubunitListName(Id));
 
         InstrCount++;
       }
@@ -1525,19 +1525,19 @@ void OutputState::writeInstructionTables() const {
   for (auto *Cpu : getSpec().getCpus()) {
     std::string Out;
     int InstrCount = 0; //  Number of instructions for this CPU.
-    Out = formatv("   static const SubunitVec<> *table["
+    Out = formatv("   static const SubunitId table["
                   "::llvm::{0}::INSTRUCTION_LIST_END] =  {{\n", Family);
 
     for (auto &[Iname, Info] : Database->getInstructionInfo()) {
       std::string SuName = SubunitsName(Cpu->getName(), Iname);
       if (CpuInstrSubunits.count(SuName)) {
         int Id = CpuInstrSubunits.at(SuName);
-        Out += formatv("      [::llvm::{0}::{1}] = reinterpret_cast<const SubunitVec<> *>(&{2}),\n", Family, Iname,
-                       SubunitListName(Id));
+        Out += formatv("      [::llvm::{0}::{1}] = {2}, // {3}\n",
+                       Family, Iname, Id, SubunitListName(Id));
         if (Info[0]->getInstruct()->getDerived())
           for (auto *Derived : *Info[0]->getInstruct()->getDerived())
-            Out += formatv("  [::llvm::{0}::{1}] = reinterpret_cast<const SubunitVec<> *>(&{2}),\n", Family,
-                           Derived->getName(), SubunitListName(Id));
+            Out += formatv("  [::llvm::{0}::{1}] = {2}, // {3}\n",
+                           Family, Derived->getName(), Id, SubunitListName(Id));
 
         InstrCount++;
       }
@@ -1552,7 +1552,7 @@ void OutputState::writeInstructionTables() const {
     outputC() << formatv(
         "#pragma clang diagnostic push\n"
         "#pragma clang diagnostic ignored \"-Wc99-designator\"\n"
-        "static const SubunitVec<> **SUNITS_{0}() {{\n{1}   };\n"
+        "static const SubunitId *SUNITS_{0}() {{\n{1}   };\n"
         "   return table;\n}\n"
         "#pragma clang diagnostic pop\n",
         Cpu->getName(), Out);
@@ -1677,6 +1677,23 @@ int CalcResourceFactor(CpuInstance *Cpu) {
   return Factor;
 }
 
+// Write Out a single table containing pointers to all defined subunit lists.
+void OutputState::writeSubunitListTable() {
+  auto Out = formatv("{0}// Subunit table ({1} entries){0}",
+                     Divider, Subunits.size());
+  Out += "static const InitializationVectorBase *SubunitTable[] = { nullptr,";
+  int count_per_line = 7;
+  for (size_t Id = 1; Id < Subunits.size(); Id++) {
+    if (count_per_line++ == 7) {
+      Out += formatv("\n     ");
+      count_per_line = 0;
+    }
+    Out += formatv("&{0},", SubunitListName(Id));
+  }
+  Out.pop_back();      // Delete last comma
+  outputC() << Out << "\n};\n";
+}
+
 // Write Out the top-level CPU table, which contains pointers to instruction
 // tables for each CPU.
 void OutputState::writeCpuList() const {
@@ -1691,22 +1708,23 @@ void OutputState::writeCpuList() const {
                        formatv("&SUNITS_{0}", Cpu->getName()) : kNull;
     CpuDefs +=
         formatv("CpuConfig<CpuParams<{0},{1},{2},{3},{4}>> "
-                "CPU_{5}({6},{7},{8},NAMES_{9},{10},{11},{12},{13},{14});\n",
+                "CPU_{5}({6},SubunitTable,NAMES_{7},{8},{9},"
+                "{10},{11},{12},{13},{14});\n",
                 Cpu->getMaxUsedResourceId(),     // Template param 1
                 Cpu->getPoolCount(),             // Template param 2
                 Cpu->getMaxPoolAllocation(),     // Template param 3
                 std::max(1, Cpu->getMaxIssue()), // Template param 4
                 Cpu->getMaxResourcePhase(),      // Template param 5
                 Cpu->getName(),
-                SUnitsName,                      // Constructor arg 1
-                Fwd,                             // Constructor arg 2
-                ResourceFactor,                  // Constructor arg 3
-                Cpu->getName(),                  // Constructor arg 4
-                Cpu->getMaxFuId(),               // Constructor arg 5
-                Cpu->getReorderBufferSize(),     // Constructor arg 6
-                ExeStage,                        // Constructor arg 7
-                Cpu->getLoadPhase(),             // Constructor arg 8
-                Cpu->getHighLatencyDefPhase()    // Constructor arg 9
+                SUnitsName,                      // Constructor arg 1 (and 2)
+                Cpu->getName(),                  // Constructor arg 3
+                Cpu->getMaxFuId(),               // Constructor arg 4
+                Cpu->getReorderBufferSize(),     // Constructor arg 5
+                ExeStage,                        // Constructor arg 6
+                Cpu->getLoadPhase(),             // Constructor arg 7
+                Cpu->getHighLatencyDefPhase(),   // Constructor arg 8
+                ResourceFactor,                  // Constructor arg 9
+                Fwd                              // Constructor arg 10
                );
 
     for (const auto &LLVMName : Cpu->getLlvmNames())
@@ -1723,7 +1741,8 @@ void OutputState::writeCpuList() const {
                         "//    - Instruction issue width\n"
                         "//    - Latest resource use pipeline phase\n"
                         "//  CpuParams Constructor arguments\n"
-                        "//    - Subunits table\n"
+                        "//    - Cpu-specific subunits table\n"
+                        "//    - Global subunit table\n"
                         "//    - Forwarding information table\n"
                         "//    - Resource factor\n"
                         "//    - Resource names table\n"
@@ -1731,7 +1750,7 @@ void OutputState::writeCpuList() const {
                         "//    - Instruction reorder buffer size\n"
                         "//    - First execution pipeline phase\n"
                         "//    - Default load phase\n"
-                        "//    - \"High-latency instruction\" write phase\n"
+                        "//    - \"High-latency instruction\" write phase"
                         "{0}{1}",
                         Divider, CpuDefs);
 
@@ -2321,6 +2340,7 @@ void OutputState::writeCpuTable() {
   generateForwardingInfo();
 
   writeResourceDefinitions();      // Write out resource names
+  writeSubunitListTable();
   writeCpuList();
 
   outputC() << formatv("}  // namespace {0}\n}  // namespace llvm\n\n",
