@@ -186,21 +186,15 @@ inline int getResourcePhase(PipeFunc Func, Instr *Ins);
 
 //----------------------------------------------------------------------------
 // We initialize a *LOT* of vectors of objects, which can incur a significant
-// runtime overhead when the compiler autoinitialization occurs. So rather than
-// use vectors, we use an "InitializationVector" instead, which incurs zero
-// overhead**.  This is a limited "vector" substitute with limited iteration
-// capabilities, but is sufficient for all uses of these objects.
-//----------------------------------------------------------------------------
-// **Note: If the client type has a constructor, the compiler by default
-// may generate code to call the constructor, and the translation unit must be
-// compiled with optimization to eliminate the code and only produce
-// initialized data.  Alternatively, we can delete all the constructors so
-// that we don't -have- to compile with optimization and still avoid the
-// initialization time overhead.
+// runtime overhead when the dynamic autoinitialization occurs. So rather than
+// use vectors, we use an "InitializationVector" instead, which can be
+// statically initialized (with no runtime overhead). This is a limited
+// "vector" substitute with limited iteration capabilities, but is sufficient
+// for all uses of these objects.
 //----------------------------------------------------------------------------
 class InitializationVectorBase {
  public:
-  InitializationVectorBase(int16_t Size) : Size(Size) {}
+  constexpr InitializationVectorBase(int16_t Size) : Size(Size) {}
  public: int16_t Size;  // Number of entries in the vector
 };
 
@@ -370,8 +364,9 @@ template <class T> class ConditionalRef {
   const InitializationVector<T> *Refs; // conditional refs
   ConditionalRef<T> *ElseClause;       // optional else clause
 public:
-  ConditionalRef(PredFunc Predicate, const InitializationVectorBase *Refs,
-                 ConditionalRef<T> *ElseClause)
+  constexpr ConditionalRef(PredFunc Predicate,
+                           const InitializationVectorBase *Refs,
+                           ConditionalRef<T> *ElseClause)
       : Predicate(Predicate),
         Refs(reinterpret_cast<const InitializationVector<T> *>(Refs)),
         ElseClause(ElseClause) {}
@@ -398,12 +393,13 @@ class OperandRef {
   };
 public:
   // Construct a normal unconditional reference.
-  OperandRef(ReferenceType Type, ReferenceFlag Flags, PipePhaseType Phase,
-             PipeFunc PhaseFunc, OperandId OperandIndex)
+  constexpr OperandRef(ReferenceType Type, ReferenceFlag Flags,
+                       PipePhaseType Phase, PipeFunc PhaseFunc,
+                       OperandId OperandIndex)
       : Type(Type), Flags(Flags), Phase(Phase), OperandIndex(OperandIndex),
         PhaseFunc(PhaseFunc) {}
   // Construct a conditional reference.
-  OperandRef(ConditionalRef<OperandRef> *IfElse)
+  constexpr OperandRef(ConditionalRef<OperandRef> *IfElse)
       : Type(ReferenceTypes::RefCond), IfElse(IfElse) {}
 
   ReferenceType getType() const { return Type; }
@@ -426,9 +422,9 @@ public:
 //-----------------------------------------------------------------------------
 class ResourceRef {
   ReferenceType Type;              // type of the reference (def, use, etc)
-  ReferenceFlag Flags;             // protected, unprotected, or duplicate ref
+  ReferenceFlag Flags = 0;         // protected, unprotected, or duplicate ref
   union {
-    OperandId OperandIndex;        // operand index for shared resources.
+    OperandId OperandIndex; // = 0;    // operand index for shared resources.
     MicroOpsType MicroOps;         // number of microops for this resource.
   };
   PipePhaseType Phase = 0;         // pipeline phase of the reference
@@ -440,25 +436,27 @@ class ResourceRef {
     ConditionalRef<ResourceRef> *IfElse;  // conditional ref descriptor
   };
 public:
-  ResourceRef(ReferenceType Type, ReferenceFlag Flags, PipePhaseType Phase,
-              PipeFunc PhaseFunc, UseCyclesType UseCycles,
-              ResourceIdType ResourceId, OperandId OperandIndex,
-              PoolBitsType Width)
+  constexpr ResourceRef(ReferenceType Type, ReferenceFlag Flags,
+                        PipePhaseType Phase, PipeFunc PhaseFunc,
+                        UseCyclesType UseCycles, ResourceIdType ResourceId,
+                        OperandId OperandIndex, PoolBitsType Width)
       : Type(Type), Flags(Flags), OperandIndex(OperandIndex),
         Phase(Phase), UseCycles(UseCycles), ResourceId(ResourceId),
         Width(Width), PhaseFunc(PhaseFunc) {}
 
   // Construct a conditional reference.
-  ResourceRef(ConditionalRef<ResourceRef> *IfElse)
+  constexpr ResourceRef(ConditionalRef<ResourceRef> *IfElse)
       : Type(ReferenceTypes::RefCond), IfElse(IfElse) {}
 
   // Construct a fus reference
-  ResourceRef(ReferenceType Type, ReferenceFlag Flags, UseCyclesType UseCycles,
-              ResourceIdType ResourceId, MicroOpsType MicroOps)
+  constexpr ResourceRef(ReferenceType Type, ReferenceFlag Flags,
+                        UseCyclesType UseCycles, ResourceIdType ResourceId,
+                        MicroOpsType MicroOps)
       : Type(Type), Flags(Flags), MicroOps(MicroOps), Phase(0),
         UseCycles(UseCycles), ResourceId(ResourceId), PhaseFunc(nullptr) {}
   // Construct a micro-ops reference with no functional unit resource.
-  ResourceRef(ReferenceType Type, ReferenceFlag Flags, MicroOpsType MicroOps)
+  constexpr ResourceRef(ReferenceType Type, ReferenceFlag Flags,
+                        MicroOpsType MicroOps)
       : Type(Type), Flags(Flags), MicroOps(MicroOps), Phase(0), UseCycles(0),
         ResourceId(-1), PhaseFunc(nullptr) {}
 
@@ -507,9 +505,10 @@ class PoolDescriptor {
   ResourceIdType Last;     // index of last legal id
   PoolBitsType Width;      // how many bits in value (-1 if not shared)
 public:
-  PoolDescriptor(PoolIdType PoolId, PoolIdType PoolSize, PoolSizeType Count,
-                 PoolFuncType PoolFunc, OpndValueFunc ValueFunc,
-                 ResourceIdType First, ResourceIdType Last, PoolBitsType Width)
+  constexpr PoolDescriptor(PoolIdType PoolId, PoolIdType PoolSize,
+                           PoolSizeType Count, PoolFuncType PoolFunc,
+                           OpndValueFunc ValueFunc, ResourceIdType First,
+                           ResourceIdType Last, PoolBitsType Width)
       : PoolId(PoolId), PoolSize(PoolSize), Count(Count), PoolFunc(PoolFunc),
         ValueFunc(ValueFunc), First(First), Last(Last), Width(Width) {}
 
@@ -553,20 +552,20 @@ class PooledResourceRef {
   };
 
 public:
-  PooledResourceRef(ReferenceType Type, ReferenceFlag Flags,
-                    PipePhaseType Phase, PipeFunc PipeFunc,
-                    UseCyclesType Cycles, ResourceIdType *ResourceIds,
-                    OperandId OperandIndex, PoolDescriptor *Pool)
+  constexpr PooledResourceRef(ReferenceType Type, ReferenceFlag Flags,
+                              PipePhaseType Phase, PipeFunc PipeFunc,
+                              UseCyclesType Cycles, ResourceIdType *ResourceIds,
+                              OperandId OperandIndex, PoolDescriptor *Pool)
       : Type(Type), Flags(Flags), OperandIndex(OperandIndex), Phase(Phase),
         Cycles(Cycles), ResourceIds(ResourceIds), PhaseFunc(PipeFunc),
         Pool(Pool) {}
   // Construct a conditional reference.
-  PooledResourceRef(ConditionalRef<PooledResourceRef> *IfElse)
+  constexpr PooledResourceRef(ConditionalRef<PooledResourceRef> *IfElse)
       : Type(ReferenceTypes::RefCond), IfElse(IfElse) {}
   // Constructor for a pooled functional unit reference.
-  PooledResourceRef(ReferenceType Type, ReferenceFlag Flags,
-                    UseCyclesType Cycles, ResourceIdType *ResourceIds,
-                    PoolDescriptor *Pool, MicroOpsType MicroOps)
+  constexpr PooledResourceRef(ReferenceType Type, ReferenceFlag Flags,
+                              UseCyclesType Cycles, ResourceIdType *ResourceIds,
+                              PoolDescriptor *Pool, MicroOpsType MicroOps)
       : Type(Type), Flags(Flags), OperandIndex(0), Phase(0), Cycles(Cycles),
         MicroOps(MicroOps), ResourceIds(ResourceIds), PhaseFunc(nullptr),
         Pool(Pool) {}
@@ -616,10 +615,11 @@ class OperandConstraint {
   RegisterClassIndexType ClassIndex = 0;
   ConditionalRef<OperandConstraint> *IfElse = nullptr; // conditional constraint
 public:
-  OperandConstraint(OperandId OperandIndex, RegisterClassIndexType ClassIndex)
+  constexpr OperandConstraint(OperandId OperandIndex,
+                              RegisterClassIndexType ClassIndex)
       : OperandIndex(OperandIndex), ClassIndex(ClassIndex), IfElse(nullptr) {}
   // Construct a conditional reference.
-  OperandConstraint(ConditionalRef<OperandConstraint> *IfElse)
+  constexpr OperandConstraint(ConditionalRef<OperandConstraint> *IfElse)
       : IfElse(IfElse) {}
 
   int getOperandIndex() const { return OperandIndex; }
