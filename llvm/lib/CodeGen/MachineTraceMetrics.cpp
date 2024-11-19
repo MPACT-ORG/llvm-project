@@ -130,8 +130,6 @@ MachineTraceMetrics::getResources(const MachineBasicBlock *MBB) {
     if (MI.isCall())
       FBI->HasCalls = true;
 
-    // MI.dump();
-
     // Count processor resources used for MDL-based model.
     if (SchedModel.hasInstrMdlModel()) {
       Instr Ins(&MI, SchedModel.getSubtargetInfo());
@@ -141,9 +139,6 @@ MachineTraceMetrics::getResources(const MachineBasicBlock *MBB) {
           for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
             if (Ref.isFus() && Ref.hasResourceId() && Ref.getCycles()) {
               PRCycles[Ref.getResourceId()] += Ref.getCycles() * ResFactor;
-    //        dbgs() << "    --- "
-    //               << SchedModel.getResourceName(Ref.getResourceId())
-    //               << "  " << Ref.getCycles() * ResFactor << "c\n";
             }
 
         if (auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
@@ -153,9 +148,6 @@ MachineTraceMetrics::getResources(const MachineBasicBlock *MBB) {
               int Cycles = Ref.getCycles() * Factor;
               for (int res = Ref.getFirst(); res <= Ref.getLast(); res++) {
                 PRCycles[Ref.getResourceIds()[res]] += Cycles;
-    //          dbgs() << "    --- "
-    //             << SchedModel.getResourceName(Ref.getResourceIds()[res])
-    //             << "  " << Cycles << "c\n";
               }
             }
       }

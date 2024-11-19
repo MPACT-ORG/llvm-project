@@ -178,8 +178,11 @@ void SchedReadWrite::AddSchedModel(const std::string &sched_model,
                                    bool is_single_issue, bool retire_ooo) {
   auto model = FixAttribute(sched_model);
 
-  assert(!sched_model_info_.count(model) &&
-         formatv("Duplicate SchedModel:{0}", model).c_str());
+  if (sched_model_info_.count(model)) {
+    std::cout << formatv("Duplicate SchedModel for resource {0}:{1}, ignored\n",
+                name(), model);
+    return;
+  }
 
   sched_model_info_.emplace(model,
           SchedModelRef(latency, micro_ops, is_write, is_begin_group,
