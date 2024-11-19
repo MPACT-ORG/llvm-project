@@ -424,7 +424,7 @@ class ResourceRef {
   ReferenceType Type;              // type of the reference (def, use, etc)
   ReferenceFlag Flags = 0;         // protected, unprotected, or duplicate ref
   union {
-    OperandId OperandIndex; // = 0;    // operand index for shared resources.
+    OperandId OperandIndex = 0;    // operand index for shared resources.
     MicroOpsType MicroOps;         // number of microops for this resource.
   };
   PipePhaseType Phase = 0;         // pipeline phase of the reference
