@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "flang/Common/Fortran.h"
+#include "flang/Common/Fortran-features.h"
 
 namespace Fortran::common {
 
@@ -102,7 +103,14 @@ std::string AsFortran(IgnoreTKRSet tkr) {
 /// dummy argument attribute while `y` represents the actual argument attribute.
 bool AreCompatibleCUDADataAttrs(std::optional<CUDADataAttr> x,
     std::optional<CUDADataAttr> y, IgnoreTKRSet ignoreTKR,
-    bool allowUnifiedMatchingRule) {
+    std::optional<std::string> *warning, bool allowUnifiedMatchingRule,
+    const LanguageFeatureControl *features) {
+  bool isCudaManaged{features
+          ? features->IsEnabled(common::LanguageFeature::CudaManaged)
+          : false};
+  bool isCudaUnified{features
+          ? features->IsEnabled(common::LanguageFeature::CudaUnified)
+          : false};
   if (!x && !y) {
     return true;
   } else if (x && y && *x == *y) {
@@ -120,19 +128,31 @@ bool AreCompatibleCUDADataAttrs(std::optional<CUDADataAttr> x,
     return true;
   } else if (allowUnifiedMatchingRule) {
     if (!x) { // Dummy argument has no attribute -> host
-      if (y && (*y == CUDADataAttr::Managed || *y == CUDADataAttr::Unified)) {
+      if ((y && (*y == CUDADataAttr::Managed || *y == CUDADataAttr::Unified)) ||
+          (!y && (isCudaUnified || isCudaManaged))) {
         return true;
       }
     } else {
-      if (*x == CUDADataAttr::Device && y &&
-          (*y == CUDADataAttr::Managed || *y == CUDADataAttr::Unified)) {
-        return true;
-      } else if (*x == CUDADataAttr::Managed && y &&
-          *y == CUDADataAttr::Unified) {
-        return true;
-      } else if (*x == CUDADataAttr::Unified && y &&
-          *y == CUDADataAttr::Managed) {
-        return true;
+      if (*x == CUDADataAttr::Device) {
+        if ((y &&
+                (*y == CUDADataAttr::Managed || *y == CUDADataAttr::Unified ||
+                    *y == CUDADataAttr::Shared)) ||
+            (!y && (isCudaUnified || isCudaManaged))) {
+          if (y && *y == CUDADataAttr::Shared && warning) {
+            *warning = "SHARED attribute ignored"s;
+          }
+          return true;
+        }
+      } else if (*x == CUDADataAttr::Managed) {
+        if ((y && *y == CUDADataAttr::Unified) ||
+            (!y && (isCudaUnified || isCudaManaged))) {
+          return true;
+        }
+      } else if (*x == CUDADataAttr::Unified) {
+        if ((y && *y == CUDADataAttr::Managed) ||
+            (!y && (isCudaUnified || isCudaManaged))) {
+          return true;
+        }
       }
     }
     return false;

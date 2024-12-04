@@ -18,14 +18,14 @@ attributes(global) subroutine devsub()
 end
 
 ! CHECK-LABEL: Subprogram scope: devsub
-! CHECK: syncthreads, EXTERNAL, PUBLIC (Subroutine): Use from __cuda_device_builtins_syncthreads in __cuda_device_builtins
-! CHECK: syncthreads_and, EXTERNAL, PUBLIC (Function): Use from __cuda_device_builtins_syncthreads_and in __cuda_device_builtins
-! CHECK: syncthreads_count, EXTERNAL, PUBLIC (Function): Use from __cuda_device_builtins_syncthreads_count in __cuda_device_builtins
-! CHECK: syncthreads_or, EXTERNAL, PUBLIC (Function): Use from __cuda_device_builtins_syncthreads_or in __cuda_device_builtins
-! CHECK: syncwarp, EXTERNAL, PUBLIC (Subroutine): Use from __cuda_device_builtins_syncwarp in __cuda_device_builtins
-! CHECK: threadfence, EXTERNAL, PUBLIC (Subroutine): Use from __cuda_device_builtins_threadfence in __cuda_device_builtins
-! CHECK: threadfence_block, EXTERNAL, PUBLIC (Subroutine): Use from __cuda_device_builtins_threadfence_block in __cuda_device_builtins
-! CHECK: threadfence_system, EXTERNAL, PUBLIC (Subroutine): Use from __cuda_device_builtins_threadfence_system in __cuda_device_builtins
+! CHECK: syncthreads (Subroutine): Use from syncthreads in cudadevice
+! CHECK: syncthreads_and (Function): Use from syncthreads_and in cudadevice
+! CHECK: syncthreads_count (Function): Use from syncthreads_count in cudadevice
+! CHECK: syncthreads_or (Function): Use from syncthreads_or in cudadevice
+! CHECK: syncwarp (Subroutine): Use from syncwarp in cudadevice
+! CHECK: threadfence (Subroutine): Use from threadfence in cudadevice
+! CHECK: threadfence_block (Subroutine): Use from threadfence_block in cudadevice
+! CHECK: threadfence_system (Subroutine): Use from threadfence_system in cudadevice
 
 subroutine host()
   call syncthreads()
