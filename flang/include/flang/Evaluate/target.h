@@ -13,6 +13,8 @@
 #define FORTRAN_EVALUATE_TARGET_H_
 
 #include "flang/Common/Fortran.h"
+#include "flang/Common/enum-class.h"
+#include "flang/Common/enum-set.h"
 #include "flang/Evaluate/common.h"
 #include <cstdint>
 
@@ -32,6 +34,11 @@ struct Rounding {
 #endif
 };
 
+ENUM_CLASS(IeeeFeature, Denormal, Divide, Flags, Halting, Inf, Io, NaN,
+    Rounding, Sqrt, Standard, Subnormal, UnderflowControl)
+
+using IeeeFeatures = common::EnumSet<IeeeFeature, 16>;
+
 class TargetCharacteristics {
 public:
   TargetCharacteristics();
@@ -44,6 +51,12 @@ public:
     return areSubnormalsFlushedToZero_;
   }
   void set_areSubnormalsFlushedToZero(bool yes = true);
+
+  // Check if a given real kind has flushing control.
+  bool hasSubnormalFlushingControl(int kind) const;
+  // Check if any or all real kinds have flushing control.
+  bool hasSubnormalFlushingControl(bool any = false) const;
+  void set_hasSubnormalFlushingControl(int kind, bool yes = true);
 
   Rounding roundingMode() const { return roundingMode_; }
   void set_roundingMode(Rounding);
@@ -95,13 +108,23 @@ public:
   bool isPPC() const { return isPPC_; }
   void set_isPPC(bool isPPC = false);
 
+  bool isOSWindows() const { return isOSWindows_; }
+  void set_isOSWindows(bool isOSWindows = false) {
+    isOSWindows_ = isOSWindows;
+  };
+
+  IeeeFeatures &ieeeFeatures() { return ieeeFeatures_; }
+  const IeeeFeatures &ieeeFeatures() const { return ieeeFeatures_; }
+
 private:
-  static constexpr int maxKind{32};
-  std::uint8_t byteSize_[common::TypeCategory_enumSize][maxKind]{};
-  std::uint8_t align_[common::TypeCategory_enumSize][maxKind]{};
+  static constexpr int maxKind{16};
+  std::uint8_t byteSize_[common::TypeCategory_enumSize][maxKind + 1]{};
+  std::uint8_t align_[common::TypeCategory_enumSize][maxKind + 1]{};
   bool isBigEndian_{false};
   bool isPPC_{false};
+  bool isOSWindows_{false};
   bool areSubnormalsFlushedToZero_{false};
+  bool hasSubnormalFlushingControl_[maxKind + 1]{};
   Rounding roundingMode_{defaultRounding};
   std::size_t procedurePointerByteSize_{8};
   std::size_t procedurePointerAlignment_{8};
@@ -110,6 +133,11 @@ private:
   std::size_t maxAlignment_{8 /*at least*/};
   std::string compilerOptionsString_;
   std::string compilerVersionString_;
+  IeeeFeatures ieeeFeatures_{IeeeFeature::Denormal, IeeeFeature::Divide,
+      IeeeFeature::Flags, IeeeFeature::Halting, IeeeFeature::Inf,
+      IeeeFeature::Io, IeeeFeature::NaN, IeeeFeature::Rounding,
+      IeeeFeature::Sqrt, IeeeFeature::Standard, IeeeFeature::Subnormal,
+      IeeeFeature::UnderflowControl};
 };
 
 } // namespace Fortran::evaluate

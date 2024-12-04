@@ -137,8 +137,12 @@ getCapabilitiesEnabledByExtension(SPIRV::Extension::Extension Extension) {
 
   CapabilityList Capabilities;
   while (Entry &&
-         Entry->Category == SPIRV::OperandCategory::CapabilityOperand &&
-         Entry->ReqExtension == Extension) {
+         Entry->Category == SPIRV::OperandCategory::CapabilityOperand) {
+    // Some capabilities' codes might go not in order.
+    if (Entry->ReqExtension != Extension) {
+      ++Entry;
+      continue;
+    }
     Capabilities.push_back(
         static_cast<SPIRV::Capability::Capability>(Entry->Value));
     ++Entry;
@@ -198,6 +202,8 @@ std::string getExtInstSetName(SPIRV::InstructionSet::InstructionSet Set) {
     return "OpenCL.std";
   case SPIRV::InstructionSet::GLSL_std_450:
     return "GLSL.std.450";
+  case SPIRV::InstructionSet::NonSemantic_Shader_DebugInfo_100:
+    return "NonSemantic.Shader.DebugInfo.100";
   case SPIRV::InstructionSet::SPV_AMD_shader_trinary_minmax:
     return "SPV_AMD_shader_trinary_minmax";
   }
@@ -206,8 +212,9 @@ std::string getExtInstSetName(SPIRV::InstructionSet::InstructionSet Set) {
 
 SPIRV::InstructionSet::InstructionSet
 getExtInstSetFromString(std::string SetName) {
-  for (auto Set : {SPIRV::InstructionSet::GLSL_std_450,
-                   SPIRV::InstructionSet::OpenCL_std}) {
+  for (auto Set :
+       {SPIRV::InstructionSet::GLSL_std_450, SPIRV::InstructionSet::OpenCL_std,
+        SPIRV::InstructionSet::NonSemantic_Shader_DebugInfo_100}) {
     if (SetName == getExtInstSetName(Set))
       return Set;
   }
