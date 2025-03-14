@@ -1122,6 +1122,25 @@ inline bool isTransient(const MachineInstr *MI) {
   }
 }
 
+// Types of resources that can be defined.
+enum ResourceType {
+  kFuncUnit,         // Is a functional unit instance resource.
+  kResource,         // Is a general resource.
+  kIssueSlot,        // Is an issue slot resource.
+};
+
+// Information about a singled defined resource.
+struct ResourceInfo {
+  const char *Name;        // Name of a resource (for debugging purposes).
+  ResourceType Type;       // Type of resource defined.
+
+  std::string getTypeFormat() {
+    return (Type == kFuncUnit) ? "kFuncUnit" :
+           (Type == kResource) ? "kResource" :
+           (Type == kIssueSlot) ? "kIssueSlot" : "";
+  }
+};
+
 ///----------------------------------------------------------------------------
 /// Information for each defined CPU. Each MDL CPU corresponds to a single
 /// LLVM target or, roughly, a single SchedMachineModel. CpuInfo contains
@@ -1144,7 +1163,7 @@ class CpuInfo {
   int8_t **ForwardTable = nullptr;       // forwarding info table, or null
   const SubunitId *Subunits = nullptr;   // instruction-to-subunit id mapping
   unsigned ResourceFactor = 1;           // Cpu-specific resource factor
-  const char **ResourceNames = nullptr;  // Names of resources
+  ResourceInfo *Resources = nullptr;     // Names/types of resources
 
   // A CPU can have a set of Target-library predicates, which are only used
   // if the LLVM Target library is included in an application. This vector is
@@ -1161,7 +1180,7 @@ public:
           unsigned MaxResourcePhase, const SubunitId *(*InitSubunitTable)(),
           const InitializationVectorBase **SubunitTable,
           int8_t **ForwardTable, unsigned ResourceFactor,
-          const char **ResourceNames)
+          RewsourceInfo *Resources)
       : MaxUsedResourceId(MaxUsedResourceId),
         MaxFuncUnitId(MaxFuncUnitId), PoolCount(PoolCount),
         MaxPoolAllocation(MaxPoolAllocation), MaxIssue(MaxIssue),
@@ -1169,7 +1188,7 @@ public:
         LoadPhase(LoadPhase), HighLatencyDefPhase(HighLatencyDefPhase),
         MaxResourcePhase(MaxResourcePhase), InitSubunitTable(InitSubunitTable),
         SubunitTable(SubunitTable), ForwardTable(ForwardTable),
-        ResourceFactor(ResourceFactor), ResourceNames(ResourceNames) {}
+        ResourceFactor(ResourceFactor), Resources(Resources) {}
   CpuInfo() {}
   virtual ~CpuInfo() = default;
 
@@ -1192,7 +1211,8 @@ public:
   unsigned getMaxResourcePhase() const { return MaxResourcePhase; }
   int8_t **getForwardTable() const { return ForwardTable; }
   unsigned getResourceFactor() const { return ResourceFactor; }
-  std::string getResourceName(unsigned Id) { return ResourceNames[Id]; }
+  std::string getResourceName(unsigned Id) { return Resources[Id].Name; }
+  ResourceType getResourceType(unsigned Id) { return Resources[Id].Type; }
 
   //------------------------------------------------------------------------
   // Functions for managing the subunit and predicate tables.

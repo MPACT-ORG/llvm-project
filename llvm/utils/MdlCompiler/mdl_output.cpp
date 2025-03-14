@@ -1536,7 +1536,7 @@ void OutputState::writeInstructionTables() const {
                        Family, Iname, Id, SubunitListName(Id));
         if (Info[0]->getInstruct()->getDerived())
           for (auto *Derived : *Info[0]->getInstruct()->getDerived())
-            Out += formatv("  [::llvm::{0}::{1}] = {2}, // {3}\n",
+            Out += formatv("         [::llvm::{0}::{1}] = {2}, // {3}\n",
                            Family, Derived->getName(), Id, SubunitListName(Id));
 
         InstrCount++;
@@ -1708,7 +1708,7 @@ void OutputState::writeCpuList() const {
                        formatv("&SUNITS_{0}", Cpu->getName()) : kNull;
     CpuDefs +=
         formatv("CpuConfig<CpuParams<{0},{1},{2},{3},{4}>> "
-                "CPU_{5}({6},SubunitTable,NAMES_{7},{8},{9},"
+                "CPU_{5}({6},SubunitTable,RES_INFO_{7},{8},{9},"
                 "{10},{11},{12},{13},{14});\n",
                 Cpu->getMaxUsedResourceId(),     // Template param 1
                 Cpu->getPoolCount(),             // Template param 2
@@ -2007,6 +2007,13 @@ void OutputState::writeLLVMDefinitions() {
   outputH() << formatv("\n  }; // enum\n");
 }
 
+// Types of resources that can be defined.
+enum ResourceType {
+  kFuncUnit,         // Is a functional unit instance resource.
+  kResource,         // Is a general resource.
+  kIssueSlot,        // Is an issue slot resource.
+};
+
 // Format the fully-qualified C++ name of a resource.
 std::string ResourceCppName(MdlSpec &Spec, CpuInstance *Cpu,
                          ClusterInstance *Cluster, ResourceDef *Res) {
@@ -2019,8 +2026,7 @@ std::string ResourceCppName(MdlSpec &Spec, CpuInstance *Cpu,
 }
 
 // Format a debug name for a used resource.
-std::string ResourceName(MdlSpec &Spec, ClusterInstance *Cluster,
-                         ResourceDef *Res) {
+std::string ResourceName(ClusterInstance *Cluster, ResourceDef *Res) {
   std::string Name;
   if (Cluster && !Cluster->isNull())
     Name += formatv("{0}:", Cluster->getName());
@@ -2031,20 +2037,36 @@ std::string ResourceName(MdlSpec &Spec, ClusterInstance *Cluster,
   return Name + Res->getName();
 }
 
+// Information about a singled defined resource.
+struct ResourceInfo {
+  ResourceInfo() : Name(""), Type(kResource) {}
+  ResourceInfo(std::string Name, ResourceType Type) : Name(Name), Type(Type) {}
+  std::string Name;        // Name of a resource (for debugging purposes).
+  ResourceType Type;       // Type of resource defined.
+
+  std::string getTypeFormat() {
+    return (Type == kFuncUnit) ? "kFuncUnit" :
+           (Type == kResource) ? "kResource" :
+           (Type == kIssueSlot) ? "kIssueSlot" : "";
+  }
+};
+
 void SaveResourceName(ResourceDef *Res, std::string Name,
-                      std::vector<std::string> &ResNames) {
+                      ResourceType Type, std::vector<ResourceInfo> &ResInfo) {
   int Id = Res->getResourceId();
   if (Res->getPoolSize() <= 1)
-    ResNames[Id] = Name;
+    ResInfo[Id] = ResourceInfo(Name, Type);
   else
     for (int I = 0; I < Res->getPoolSize(); I++)
-      ResNames[Id + I] = formatv("{0}[{1}]", Name, I);
+      ResInfo[Id + I] = ResourceInfo(formatv("{0}[{1}]", Name, I), Type);
 }
 
 // Write out a single resource definition.
 void AddResourceDef(std::string *Out, MdlSpec &Spec, CpuInstance *Cpu,
                     ClusterInstance *Cluster, ResourceDef *Res,
-                    std::string note, std::vector<std::string> &ResNames) {
+                    ResourceType Type, std::vector<ResourceInfo> &ResInfo) {
+  std::string Note = (Type == kFuncUnit) ? "func unit" :
+                     (Type == kResource) ? "resource" : "issue";
   std::string prefix = "  ";
   if (Cluster && !Cluster->isNull())
     prefix += "  ";
@@ -2053,8 +2075,8 @@ void AddResourceDef(std::string *Out, MdlSpec &Spec, CpuInstance *Cpu,
   if (!Res->isGroupDef()) {
     auto Name = ResourceCppName(Spec, Cpu, Cluster, Res);
     *Out += formatv("{0}  const int {1} = {2};      // {3} ({4})\n", prefix,
-                    Res->getName(), Res->getResourceId(), Name, note);
-    SaveResourceName(Res, ResourceName(Spec, Cluster, Res), ResNames);
+                    Res->getName(), Res->getResourceId(), Name, Note);
+    SaveResourceName(Res, ResourceName(Cluster, Res), Type, ResInfo);
   }
 }
 
@@ -2067,17 +2089,18 @@ void OutputState::writeResourceDefinitions() {
   outputC() << formatv("{0}// Resource name tables{0}", Divider);
 
   for (auto *Cpu : Spec.getCpus()) {
-    std::vector<std::string> ResNames;
-    ResNames.resize(Cpu->getMaxResourceId() + 1);
+    std::vector<ResourceInfo> ResInfo;
+    ResInfo.resize(Cpu->getMaxResourceId() + 1);
 
     Out += formatv("{0}// Resource Definitions for {1}{0}", Divider,
                    Cpu->getName());
     Out += formatv("  namespace {0} {{\n", Cpu->getName());
     for (auto *Res : *Cpu->getResources())
-      AddResourceDef(&Out, Spec, Cpu, nullptr, Res, "resource", ResNames);
+      AddResourceDef(&Out, Spec, Cpu, nullptr, Res, kResource, ResInfo);
 
-    // Write out C++ definitions for resources associated with a cluster.
-    // Note that we DON'T write definitions for resources associated with
+    // For each cluster, we write out C++ name definitions for functional unit
+    // instances, issue slots, and cluster-defined resources.
+    // Note that we DON'T write definitions for resources defined in
     // functional unit instances. (Its messy dealing with resource scoping).
     for (auto *Cluster : *Cpu->getClusters()) {
       if (!Cluster->isNull())
@@ -2085,35 +2108,38 @@ void OutputState::writeResourceDefinitions() {
 
       // Write out functional unit resource definitions. We only write names
       // for top-level functional unit resources, and don't write out
-      // catchall units. We also add functional unit instance resources to the
-      // name table (even though we don't write out definitions).
+      // catchall units.
       for (auto *Fu : Cluster->getFuInstantiations()) {
         if (Fu->getParent() == nullptr && Fu->getFuResource()->isUsed() &&
             !Fu->getInstance()->isCatchallUnit()) {
           auto *Res = Fu->getFuResource();
-          AddResourceDef(&Out, Spec, Cpu, Cluster, Res, "func unit", ResNames);
+          AddResourceDef(&Out, Spec, Cpu, Cluster, Res, kFuncUnit, ResInfo);
         }
+        // Add resources defined in the instance to the resource info table.
         for (auto *Res : Fu->getResources())
           if (!Res->isGroupDef())
-            SaveResourceName(Res, ResourceName(Spec, Cluster, Res), ResNames);
+            SaveResourceName(Res, ResourceName(Cluster, Res), kResource,
+                             ResInfo);
       }
 
       for (auto *Issue : *Cluster->getIssues())
-        AddResourceDef(&Out, Spec, Cpu, Cluster, Issue, "issue", ResNames);
+        AddResourceDef(&Out, Spec, Cpu, Cluster, Issue, kIssueSlot, ResInfo);
       for (auto *Res : *Cluster->getResources())
-        AddResourceDef(&Out, Spec, Cpu, Cluster, Res, "resource", ResNames);
+        AddResourceDef(&Out, Spec, Cpu, Cluster, Res, kResource, ResInfo);
       if (!Cluster->isNull())
         Out += formatv("    }  // namespace {0}\n", Cluster->getName());
     }
     Out += formatv("  }  // namespace {0}\n", Cpu->getName());
 
-    // Write out resource names for this CPU.
-    std::string Names;
-    for (unsigned idx = 1; idx < ResNames.size(); idx++)
-      Names += "\"" + ResNames[idx] + "\",";
-    if (!Names.empty()) Names.pop_back();
-    outputC() << formatv("const char *NAMES_{0}[] = {{\"\",{1}};\n",
-                          Cpu->getName(), Names);
+    // Write out resource information table for this CPU.
+    std::string Info;
+    for (unsigned idx = 1; idx < ResInfo.size(); idx++) {
+      Info += "\n        { \"" + ResInfo[idx].Name + "\", " +
+                         ResInfo[idx].getTypeFormat() + " },   // ID:" +
+                         std::to_string(idx);
+    }
+    outputC() << formatv("const ResourceInfo RES_INFO_{0}[] = {{\"\",{1}\n};\n",
+                          Cpu->getName(), Info);
   }
 
   outputH() << "\nnamespace Mdl {\n";

@@ -41,10 +41,8 @@ static cl::opt<int> RegPressureThreshold(
     "dfa-sched-reg-pressure-threshold", cl::Hidden, cl::init(5),
     cl::desc("Track reg pressure and switch priority to in-depth"));
 
-ResourcePriorityQueue::ResourcePriorityQueue(
-    SelectionDAGISel *IS, ScheduleHazardRecognizer *HazardRec)
-    : Picker(this), InstrItins(IS->MF->getSubtarget().getInstrItineraryData()),
-      HazardRec(HazardRec) {
+ResourcePriorityQueue::ResourcePriorityQueue(SelectionDAGISel *IS)
+    : Picker(this), InstrItins(IS->MF->getSubtarget().getInstrItineraryData()) {
   const TargetSubtargetInfo &STI = IS->MF->getSubtarget();
   TRI = STI.getRegisterInfo();
   TLI = IS->TLI;

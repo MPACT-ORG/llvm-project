@@ -64,7 +64,6 @@ public:
       : ScheduleDAGSDNodes(MF), AvailableQueue(AvailableQueue) {
     const TargetSubtargetInfo &STI = MF.getSubtarget();
     HazardRec = STI.getInstrInfo()->CreateTargetHazardRecognizer(&STI, this);
-    AvailableQueue = new ResourcePriorityQueue(IS, HazardRec);
   }
 
   ~ScheduleDAGVLIW() override {
