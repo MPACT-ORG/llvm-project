@@ -50,6 +50,30 @@ void collectDebugInfoFromInstructions(const Function &F,
       DIFinder.processInstruction(*M, I);
   }
 }
+
+// Create a predicate that matches the metadata that should be identity mapped
+// during function cloning.
+MetadataPredicate createIdentityMDPredicate(const Function &F,
+                                            CloneFunctionChangeType Changes) {
+  if (Changes >= CloneFunctionChangeType::DifferentModule)
+    return [](const Metadata *MD) { return false; };
+
+  DISubprogram *SPClonedWithinModule = F.getSubprogram();
+  return [=](const Metadata *MD) {
+    // Avoid cloning types, compile units, and (other) subprograms.
+    if (isa<DICompileUnit>(MD) || isa<DIType>(MD))
+      return true;
+
+    if (auto *SP = dyn_cast<DISubprogram>(MD))
+      return SP != SPClonedWithinModule;
+
+    // If a subprogram isn't going to be cloned skip its lexical blocks as well.
+    if (auto *LScope = dyn_cast<DILocalScope>(MD))
+      return LScope->getSubprogram() != SPClonedWithinModule;
+
+    return false;
+  };
+}
 } // namespace
 
 /// See comments in Cloning.h.
@@ -142,61 +166,6 @@ void llvm::CloneFunctionAttributesInto(Function *NewFunc,
   NewFunc->setAttributes(
       AttributeList::get(NewFunc->getContext(), OldAttrs.getFnAttrs(),
                          OldAttrs.getRetAttrs(), NewArgAttrs));
-}
-
-DISubprogram *llvm::CollectDebugInfoForCloning(const Function &F,
-                                               CloneFunctionChangeType Changes,
-                                               DebugInfoFinder &DIFinder) {
-  // CloneModule takes care of cloning debug info for ClonedModule. Cloning into
-  // DifferentModule is taken care of separately in ClonedFunctionInto as part
-  // of llvm.dbg.cu update.
-  if (Changes >= CloneFunctionChangeType::DifferentModule)
-    return nullptr;
-
-  DISubprogram *SPClonedWithinModule = nullptr;
-  if (Changes < CloneFunctionChangeType::DifferentModule) {
-    SPClonedWithinModule = F.getSubprogram();
-  }
-  if (SPClonedWithinModule)
-    DIFinder.processSubprogram(SPClonedWithinModule);
-
-  collectDebugInfoFromInstructions(F, DIFinder);
-
-  return SPClonedWithinModule;
-}
-
-MetadataSetTy
-llvm::FindDebugInfoToIdentityMap(CloneFunctionChangeType Changes,
-                                 DebugInfoFinder &DIFinder,
-                                 DISubprogram *SPClonedWithinModule) {
-  if (Changes >= CloneFunctionChangeType::DifferentModule)
-    return {};
-
-  if (DIFinder.subprogram_count() == 0)
-    assert(!SPClonedWithinModule &&
-           "Subprogram should be in DIFinder->subprogram_count()...");
-
-  MetadataSetTy MD;
-
-  // Avoid cloning types, compile units, and (other) subprograms.
-  for (DISubprogram *ISP : DIFinder.subprograms())
-    if (ISP != SPClonedWithinModule)
-      MD.insert(ISP);
-
-  // If a subprogram isn't going to be cloned skip its lexical blocks as well.
-  for (DIScope *S : DIFinder.scopes()) {
-    auto *LScope = dyn_cast<DILocalScope>(S);
-    if (LScope && LScope->getSubprogram() != SPClonedWithinModule)
-      MD.insert(S);
-  }
-
-    for (DICompileUnit *CU : DIFinder.compile_units())
-      MD.insert(CU);
-
-    for (DIType *Type : DIFinder.types())
-      MD.insert(Type);
-
-  return MD;
 }
 
 void llvm::CloneFunctionMetadataInto(Function &NewFunc, const Function &OldFunc,
@@ -325,13 +294,7 @@ void llvm::CloneFunctionInto(Function *NewFunc, const Function *OldFunc,
     }
   }
 
-  DISubprogram *SPClonedWithinModule =
-      CollectDebugInfoForCloning(*OldFunc, Changes, DIFinder);
-
-  MetadataPredicate IdentityMD =
-      [MDSet =
-           FindDebugInfoToIdentityMap(Changes, DIFinder, SPClonedWithinModule)](
-          const Metadata *MD) { return MDSet.contains(MD); };
+  MetadataPredicate IdentityMD = createIdentityMDPredicate(*OldFunc, Changes);
 
   // Cloning is always a Module level operation, since Metadata needs to be
   // cloned.
