@@ -130,7 +130,7 @@ struct CUFAddConstructor
           if (auto boxTy =
                   mlir::dyn_cast<fir::BaseBoxType>(globalOp.getType())) {
             mlir::Type structTy = typeConverter.convertBoxTypeAsStruct(boxTy);
-            size = dl->getTypeSizeInBits(structTy) / 8;
+            size = dl->getTypeSizeInBytes(structTy);
           }
           if (!size) {
             size = fir::getTypeSizeAndAlignmentOrCrash(loc, globalOp.getType(),

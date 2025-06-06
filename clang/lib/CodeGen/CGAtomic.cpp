@@ -333,7 +333,7 @@ static RValue emitAtomicLibcall(CodeGenFunction &CGF,
 /// Does a store of the given IR type modify the full expected width?
 static bool isFullSizeType(CodeGenModule &CGM, llvm::Type *type,
                            uint64_t expectedSize) {
-  return (CGM.getDataLayout().getTypeStoreSize(type) * 8 == expectedSize);
+  return (CGM.getDataLayout().getTypeStoreSizeInBits(type) == expectedSize);
 }
 
 /// Does the atomic type require memsetting to zero before initialization?

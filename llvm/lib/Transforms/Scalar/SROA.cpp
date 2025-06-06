@@ -2792,13 +2792,15 @@ public:
                 : nullptr),
         VecTy(PromotableVecTy),
         ElementTy(VecTy ? VecTy->getElementType() : nullptr),
-        ElementSize(VecTy ? DL.getTypeSizeInBits(ElementTy).getFixedValue() / 8
+        ElementSize(VecTy ? DL.getTypeSizeInBytes(ElementTy).getFixedValue()
                           : 0),
         PHIUsers(PHIUsers), SelectUsers(SelectUsers),
         IRB(NewAI.getContext(), ConstantFolder()) {
     if (VecTy) {
-      assert((DL.getTypeSizeInBits(ElementTy).getFixedValue() % 8) == 0 &&
-             "Only multiple-of-8 sized vector elements are viable");
+      auto ByteWidth = DL.getByteWidth();
+      assert(
+          (DL.getTypeSizeInBits(ElementTy).getFixedValue() % ByteWidth) == 0 &&
+          "Only multiple-of-bytewidth sized vector elements are viable");
       ++NumVectorized;
     }
     assert((!IntTy && !VecTy) || (IntTy && !VecTy) || (!IntTy && VecTy));
@@ -3321,7 +3323,7 @@ private:
              "Too many elements!");
 
       Value *Splat = getIntegerSplat(
-          II.getValue(), DL.getTypeSizeInBits(ElementTy).getFixedValue() / 8);
+          II.getValue(), DL.getTypeSizeInBytes(ElementTy).getFixedValue());
       Splat = convertValue(DL, IRB, Splat, ElementTy);
       if (NumElements > 1)
         Splat = getVectorSplat(Splat, NumElements);
@@ -3355,7 +3357,7 @@ private:
       assert(NewEndOffset == NewAllocaEndOffset);
 
       V = getIntegerSplat(II.getValue(),
-                          DL.getTypeSizeInBits(ScalarTy).getFixedValue() / 8);
+                          DL.getTypeSizeInBytes(ScalarTy).getFixedValue());
       if (VectorType *AllocaVecTy = dyn_cast<VectorType>(AllocaTy))
         V = getVectorSplat(
             V, cast<FixedVectorType>(AllocaVecTy)->getNumElements());

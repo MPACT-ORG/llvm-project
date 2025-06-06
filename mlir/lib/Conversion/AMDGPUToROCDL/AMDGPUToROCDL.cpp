@@ -190,7 +190,7 @@ struct FatRawBufferCastLowering
 
     DataLayout dataLayout = DataLayout::closest(op);
     int64_t elementByteWidth =
-        dataLayout.getTypeSizeInBits(memrefType.getElementType()) / 8;
+        dataLayout.getTypeSizeInBytes(memrefType.getElementType());
 
     int64_t unusedOffset = 0;
     SmallVector<int64_t, 5> strideVals;
@@ -292,7 +292,7 @@ struct RawBufferOpLowering : public ConvertOpToLLVMPattern<GpuOp> {
     // Get the type size in bytes.
     DataLayout dataLayout = DataLayout::closest(gpuOp);
     int64_t elementByteWidth =
-        dataLayout.getTypeSizeInBits(memrefType.getElementType()) / 8;
+        dataLayout.getTypeSizeInBytes(memrefType.getElementType());
     Value byteWidthConst = createI32Constant(rewriter, loc, elementByteWidth);
 
     // If we want to load a vector<NxT> with total size <= 32
