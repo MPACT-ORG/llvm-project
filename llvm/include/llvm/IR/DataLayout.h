@@ -406,6 +406,12 @@ public:
     return getPointerSpec(AS).IndexBitWidth;
   }
 
+  /// The size in bits of the "store" size of the index. This accounts for the
+  /// the fact that ByteWidth * getIndexSize() may be >= getIndexSizeInBits.
+  unsigned getIndexStoreSizeInBits(unsigned AS) const {
+    return getIndexSize(AS) * ByteWidth;
+  }
+
   /// The size in bits of an address in for the given AS. This is defined to
   /// return the same value as getIndexSizeInBits() since there is currently no
   /// target that requires these two properties to have different values. See
@@ -464,6 +470,9 @@ public:
   /// For example, returns 36 for i36 and 80 for x86_fp80. The type passed must
   /// have a size (Type::isSized() must return true).
   TypeSize getTypeSizeInBits(Type *Ty) const;
+
+  /// Equivalent function but scales the size by ByteWidth.
+  TypeSize getTypeSizeInBytes(Type *Ty) const;
 
   /// Returns the maximum number of bytes that may be overwritten by
   /// storing the specified type.
@@ -730,6 +739,11 @@ inline TypeSize DataLayout::getTypeSizeInBits(Type *Ty) const {
   default:
     llvm_unreachable("DataLayout::getTypeSizeInBits(): Unsupported type");
   }
+}
+
+inline TypeSize DataLayout::getTypeSizeInBytes(Type *Ty) const {
+  TypeSize SizeInBits = getTypeSizeInBits(Ty);
+  return {SizeInBits.getKnownMinValue() / ByteWidth, SizeInBits.isScalable()};
 }
 
 } // end namespace llvm
