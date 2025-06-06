@@ -95,7 +95,7 @@ public:
 
 private:
   bool BigEndian = false;
-
+  unsigned ByteWidth = 8;
   unsigned AllocaAddrSpace = 0;
   unsigned ProgramAddrSpace = 0;
   unsigned DefaultGlobalsAddrSpace = 0;
@@ -131,7 +131,8 @@ private:
   /// The string representation used to create this DataLayout
   std::string StringRepresentation;
 
-  /// Struct type ABI and preferred alignments. The default spec is "a:8:64".
+  /// Struct type ABI and preferred alignments. The default spec is "a:8:64"
+  /// assuming an 8 bit byte.
   Align StructABIAlignment = Align::Constant<1>();
   Align StructPrefAlignment = Align::Constant<8>();
 
@@ -156,6 +157,9 @@ private:
 
   /// Internal helper method that returns requested alignment for type.
   Align getAlignment(Type *Ty, bool abi_or_pref) const;
+
+  /// Attempts to parse byte size specification ('b')
+  Error parseByteWidthSpec(StringRef Spec);
 
   /// Attempts to parse primitive specification ('i', 'f', or 'v').
   Error parsePrimitiveSpec(StringRef Spec);
@@ -206,6 +210,9 @@ public:
   const std::string &getStringRepresentation() const {
     return StringRepresentation;
   }
+
+  /// Get ByteWidth.
+  unsigned getByteWidth() const { return ByteWidth; }
 
   /// Test if the DataLayout was constructed from an empty string.
   bool isDefault() const { return StringRepresentation.empty(); }
@@ -429,7 +436,7 @@ public:
   }
 
   unsigned getPointerTypeSize(Type *Ty) const {
-    return getPointerTypeSizeInBits(Ty) / 8;
+    return getPointerTypeSizeInBits(Ty) / ByteWidth;
   }
 
   /// Size examples:
@@ -467,21 +474,22 @@ public:
   /// For example, returns 5 for i36 and 10 for x86_fp80.
   TypeSize getTypeStoreSize(Type *Ty) const {
     TypeSize StoreSizeInBits = getTypeStoreSizeInBits(Ty);
-    return {StoreSizeInBits.getKnownMinValue() / 8,
+    return {StoreSizeInBits.getKnownMinValue() / ByteWidth,
             StoreSizeInBits.isScalable()};
   }
 
   /// Returns the maximum number of bits that may be overwritten by
-  /// storing the specified type; always a multiple of 8.
+  /// storing the specified type; always a multiple of ByteWidth, which is
+  /// usually 8.
   ///
   /// If Ty is a scalable vector type, the scalable property will be set and
   /// the runtime size will be a positive integer multiple of the base size.
   ///
-  /// For example, returns 40 for i36 and 80 for x86_fp80.
+  /// For example (for 8 bit bytes), returns 40 for i36 and 80 for x86_fp80.
   TypeSize getTypeStoreSizeInBits(Type *Ty) const {
     TypeSize BaseSize = getTypeSizeInBits(Ty);
     uint64_t AlignedSizeInBits =
-        alignToPowerOf2(BaseSize.getKnownMinValue(), 8);
+        alignToPowerOf2(BaseSize.getKnownMinValue(), ByteWidth);
     return {AlignedSizeInBits, BaseSize.isScalable()};
   }
 
@@ -500,14 +508,15 @@ public:
   /// the runtime size will be a positive integer multiple of the base size.
   ///
   /// This is the amount that alloca reserves for this type. For example,
-  /// returns 12 or 16 for x86_fp80, depending on alignment.
+  /// returns 12 or 16 for x86_fp80 (byte size 8), depending on alignment.
   TypeSize getTypeAllocSize(Type *Ty) const {
     // Round up to the next alignment boundary.
     return alignTo(getTypeStoreSize(Ty), getABITypeAlign(Ty).value());
   }
 
   /// Returns the offset in bits between successive objects of the
-  /// specified type, including alignment padding; always a multiple of 8.
+  /// specified type, including alignment padding; always a multiple of
+  /// ByteWidth (default 8).
   ///
   /// If Ty is a scalable vector type, the scalable property will be set and
   /// the runtime size will be a positive integer multiple of the base size.
@@ -515,7 +524,7 @@ public:
   /// This is the amount that alloca reserves for this type. For example,
   /// returns 96 or 128 for x86_fp80, depending on alignment.
   TypeSize getTypeAllocSizeInBits(Type *Ty) const {
-    return 8 * getTypeAllocSize(Ty);
+    return ByteWidth * getTypeAllocSize(Ty);
   }
 
   /// Returns the minimum ABI-required alignment for the specified type.
@@ -630,11 +639,12 @@ class StructLayout final : private TrailingObjects<StructLayout, TypeSize> {
   Align StructAlignment;
   unsigned IsPadded : 1;
   unsigned NumElements : 31;
+  unsigned ByteWidth;
 
 public:
   TypeSize getSizeInBytes() const { return StructSize; }
 
-  TypeSize getSizeInBits() const { return 8 * StructSize; }
+  TypeSize getSizeInBits() const { return ByteWidth * StructSize; }
 
   Align getAlignment() const { return StructAlignment; }
 
@@ -660,7 +670,7 @@ public:
   }
 
   TypeSize getElementOffsetInBits(unsigned Idx) const {
-    return getElementOffset(Idx) * 8;
+    return getElementOffset(Idx) * ByteWidth;
   }
 
 private:
