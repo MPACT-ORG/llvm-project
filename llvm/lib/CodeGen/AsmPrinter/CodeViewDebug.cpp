@@ -483,7 +483,7 @@ TypeIndex CodeViewDebug::recordTypeIndexForDINode(const DINode *Node,
 }
 
 unsigned CodeViewDebug::getPointerSizeInBytes() {
-  return MMI->getModule()->getDataLayout().getPointerSizeInBits() / 8;
+  return MMI->getModule()->getDataLayout().getPointerSize();
 }
 
 void CodeViewDebug::recordLocalVariable(LocalVariable &&Var,
