@@ -1394,7 +1394,7 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
     if (PtrTy.isPointerOrPointerVector()) {
       const DataLayout &DL = MF->getDataLayout();
       unsigned AS = PtrTy.getAddressSpace();
-      unsigned IndexSizeInBits = DL.getIndexSize(AS) * 8;
+      unsigned IndexSizeInBits = DL.getIndexStoreSizeInBits(AS);
       if (OffsetTy.getScalarSizeInBits() != IndexSizeInBits) {
         report("gep offset operand must match index size for address space",
                MI);

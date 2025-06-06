@@ -326,7 +326,7 @@ struct CUFAllocOpConversion : public mlir::OpRewritePattern<cuf::AllocOp> {
         std::size_t size = 0;
         if (fir::isa_derived(seqTy.getEleTy())) {
           mlir::Type structTy = typeConverter->convertType(seqTy.getEleTy());
-          size = dl->getTypeSizeInBits(structTy) / 8;
+          size = dl->getTypeSizeInBytes(structTy);
         } else {
           size = computeWidth(loc, seqTy.getEleTy(), kindMap);
         }
@@ -347,7 +347,7 @@ struct CUFAllocOpConversion : public mlir::OpRewritePattern<cuf::AllocOp> {
         bytes = rewriter.create<mlir::arith::MulIOp>(loc, nbElem, width);
       } else if (fir::isa_derived(op.getInType())) {
         mlir::Type structTy = typeConverter->convertType(op.getInType());
-        std::size_t structSize = dl->getTypeSizeInBits(structTy) / 8;
+        std::size_t structSize = dl->getTypeSizeInBytes(structTy);
         bytes = builder.createIntegerConstant(loc, builder.getIndexType(),
                                               structSize);
       } else {
@@ -379,7 +379,7 @@ struct CUFAllocOpConversion : public mlir::OpRewritePattern<cuf::AllocOp> {
         fir::factory::locationToLineNo(builder, loc, fTy.getInput(2));
 
     mlir::Type structTy = typeConverter->convertBoxTypeAsStruct(boxTy);
-    std::size_t boxSize = dl->getTypeSizeInBits(structTy) / 8;
+    std::size_t boxSize = dl->getTypeSizeInBytes(structTy);
     mlir::Value sizeInBytes =
         builder.createIntegerConstant(loc, builder.getIndexType(), boxSize);
 
@@ -694,7 +694,7 @@ struct CUFDataTransferOpConversion
       if (fir::isa_derived(fir::unwrapSequenceType(dstTy))) {
         mlir::Type structTy =
             typeConverter->convertType(fir::unwrapSequenceType(dstTy));
-        width = dl->getTypeSizeInBits(structTy) / 8;
+        width = dl->getTypeSizeInBytes(structTy);
       } else {
         width = computeWidth(loc, dstTy, kindMap);
       }

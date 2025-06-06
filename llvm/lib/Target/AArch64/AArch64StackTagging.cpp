@@ -294,7 +294,7 @@ public:
       }
     }
     return IRB.CreateBitOrPointerCast(
-        V, IRB.getIntNTy(DL->getTypeStoreSize(V->getType()) * 8));
+        V, IRB.getIntNTy(DL->getTypeStoreSizeInBits(V->getType())));
   }
 };
 

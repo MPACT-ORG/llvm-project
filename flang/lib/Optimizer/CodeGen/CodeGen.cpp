@@ -1284,7 +1284,7 @@ genCUFAllocDescriptor(mlir::Location loc,
                                         fctTy);
 
   mlir::Type structTy = typeConverter.convertBoxTypeAsStruct(boxTy);
-  std::size_t boxSize = dl->getTypeSizeInBits(structTy) / 8;
+  std::size_t boxSize = dl->getTypeSizeInBytes(structTy);
   mlir::Value sizeInBytes =
       genConstantIndex(loc, llvmIntPtrType, rewriter, boxSize);
   llvm::SmallVector args = {sizeInBytes, sourceFile, sourceLine};

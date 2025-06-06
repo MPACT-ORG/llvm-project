@@ -2210,7 +2210,7 @@ CGCallee ItaniumCXXABI::getVirtualFunctionPointer(CodeGenFunction &CGF,
 
   llvm::Type *ComponentTy = CGM.getVTables().getVTableComponentType();
   uint64_t ByteOffset =
-      VTableIndex * CGM.getDataLayout().getTypeSizeInBits(ComponentTy) / 8;
+      VTableIndex * CGM.getDataLayout().getTypeSizeInBytes(ComponentTy);
 
   if (!Schema && CGF.ShouldEmitVTableTypeCheckedLoad(MethodDecl->getParent())) {
     VFunc = CGF.EmitVTableTypeCheckedLoad(MethodDecl->getParent(), VTable,

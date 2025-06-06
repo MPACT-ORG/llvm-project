@@ -7267,7 +7267,7 @@ void LoongArchTargetLowering::emitExpandAtomicRMW(AtomicRMWInst *AI) const {
   ShiftAmt = Builder.CreateTrunc(ShiftAmt, WordType, "ShiftAmt");
   Value *Mask = Builder.CreateShl(
       ConstantInt::get(WordType,
-                       (1 << (DL.getTypeStoreSize(ValueType) * 8)) - 1),
+                       (1 << (DL.getTypeStoreSizeInBits(ValueType))) - 1),
       ShiftAmt, "Mask");
   Value *Inv_Mask = Builder.CreateNot(Mask, "Inv_Mask");
   Value *ValOperand_Shifted =

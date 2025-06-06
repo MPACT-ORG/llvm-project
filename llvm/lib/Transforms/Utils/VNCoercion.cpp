@@ -344,9 +344,8 @@ static Value *getStoreValueForLoadHelper(Value *SrcVal, unsigned Offset,
     return SrcVal;
   }
 
-  uint64_t StoreSize =
-      (DL.getTypeSizeInBits(SrcVal->getType()).getFixedValue() + 7) / 8;
-  uint64_t LoadSize = (DL.getTypeSizeInBits(LoadTy).getFixedValue() + 7) / 8;
+  uint64_t StoreSize = DL.getTypeStoreSize(SrcVal->getType()).getFixedValue();
+  uint64_t LoadSize = DL.getTypeStoreSize(LoadTy).getFixedValue();
   // Compute which bits of the stored value are being used by the load.  Convert
   // to an integer type to start with.
   if (SrcVal->getType()->isPtrOrPtrVectorTy())
@@ -409,7 +408,7 @@ Value *getMemInstValueForLoad(MemIntrinsic *SrcInst, unsigned Offset,
                               Type *LoadTy, Instruction *InsertPt,
                               const DataLayout &DL) {
   LLVMContext &Ctx = LoadTy->getContext();
-  uint64_t LoadSize = DL.getTypeSizeInBits(LoadTy).getFixedValue() / 8;
+  uint64_t LoadSize = DL.getTypeSizeInBytes(LoadTy).getFixedValue();
   IRBuilder<> Builder(InsertPt);
 
   // We know that this method is only called when the mem transfer fully
@@ -456,7 +455,8 @@ Value *getMemInstValueForLoad(MemIntrinsic *SrcInst, unsigned Offset,
 Constant *getConstantMemInstValueForLoad(MemIntrinsic *SrcInst, unsigned Offset,
                                          Type *LoadTy, const DataLayout &DL) {
   LLVMContext &Ctx = LoadTy->getContext();
-  uint64_t LoadSize = DL.getTypeSizeInBits(LoadTy).getFixedValue() / 8;
+  // FIXME: Should this be getTypeStoreSize instead?
+  uint64_t LoadSize = DL.getTypeSizeInBytes(LoadTy).getFixedValue();
 
   // We know that this method is only called when the mem transfer fully
   // provides the bits for the load.
