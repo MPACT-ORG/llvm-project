@@ -1663,7 +1663,7 @@ LLVMValueRef LLVMConstArray2(LLVMTypeRef ElementTy, LLVMValueRef *ConstantVals,
 LLVMValueRef LLVMConstDataArray(LLVMTypeRef ElementTy, const char *Data,
                                 size_t SizeInBytes) {
   Type *Ty = unwrap(ElementTy);
-  size_t Len = SizeInBytes / (Ty->getPrimitiveSizeInBits() / 8);
+  size_t Len = SizeInBytes / (Ty->getPrimitiveSizeInBytes());
   return wrap(ConstantDataArray::getRaw(StringRef(Data, SizeInBytes), Len, Ty));
 }
 

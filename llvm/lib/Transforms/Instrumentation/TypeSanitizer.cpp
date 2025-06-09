@@ -121,7 +121,7 @@ TypeSanitizer::TypeSanitizer(Module &M)
       AnonNameRegex("^_ZTS.*N[1-9][0-9]*_GLOBAL__N") {
   const DataLayout &DL = M.getDataLayout();
   IntptrTy = DL.getIntPtrType(M.getContext());
-  PtrShift = countr_zero(IntptrTy->getPrimitiveSizeInBits() / 8);
+  PtrShift = countr_zero(IntptrTy->getPrimitiveSizeInBytes());
 
   TysanGlobalsSetTypeFunction = M.getFunction("__tysan_set_globals_types");
   initializeCallbacks(M);

@@ -457,7 +457,7 @@ convertDenseElementsAttr(Location loc, DenseElementsAttr denseElementsAttr,
   // mechanism for other dimensions.
   SmallVector<llvm::Constant *> constants;
   int64_t aggregateSize = denseElementsAttr.getType().getShape().back() *
-                          (innermostLLVMType->getScalarSizeInBits() / 8);
+                          (innermostLLVMType->getScalarSizeInBytes());
   constants.reserve(numAggregates);
   for (unsigned i = 0; i < numAggregates; ++i) {
     StringRef data(denseElementsAttr.getRawData().data() + i * aggregateSize,
@@ -551,7 +551,7 @@ static llvm::Constant *convertDenseResourceElementsAttr(
   // mechanism for other dimensions.
   SmallVector<llvm::Constant *> constants;
   int64_t aggregateSize = denseResourceAttr.getType().getShape().back() *
-                          (innermostLLVMType->getScalarSizeInBits() / 8);
+                          (innermostLLVMType->getScalarSizeInBytes());
   constants.reserve(numAggregates);
   for (unsigned i = 0; i < numAggregates; ++i) {
     StringRef data(rawData.data() + i * aggregateSize, aggregateSize);

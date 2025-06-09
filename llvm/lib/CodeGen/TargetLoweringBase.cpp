@@ -470,7 +470,7 @@ RTLIB::Libcall RTLIB::getOUTLINE_ATOMIC(unsigned Opc, AtomicOrdering Order,
                                         MVT VT) {
   if (!VT.isScalarInteger())
     return UNKNOWN_LIBCALL;
-  uint64_t MemSize = VT.getScalarSizeInBits() / 8;
+  uint64_t MemSize = VT.getScalarSizeInBytes();
 
 #define LCALLS(A, B)                                                           \
   { A##B##_RELAX, A##B##_ACQ, A##B##_REL, A##B##_ACQ_REL }
