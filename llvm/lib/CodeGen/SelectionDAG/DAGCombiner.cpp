@@ -254,7 +254,7 @@ namespace {
       ForCodeSize = DAG.shouldOptForSize();
       DisableGenericCombines =
           DisableCombines || (STI && STI->disableGenericCombines(OptLevel));
-
+      DLByteWidth = D.getDataLayout().getByteWidth();
       MaximumLegalStoreInBits = 0;
       // We use the minimum store size here, since that's all we can guarantee
       // for the scalable vector types.
@@ -334,6 +334,7 @@ namespace {
 
   private:
     unsigned MaximumLegalStoreInBits;
+    unsigned DLByteWidth = 0;
 
     /// Check the specified integer node value to see if it can be simplified or
     /// if things it uses can be simplified by bit propagation.
@@ -6718,9 +6719,9 @@ bool DAGCombiner::isLegalNarrowLdSt(LSBaseSDNode *LDST,
     return false;
 
   // Only allow byte offsets.
-  if (ShAmt % 8)
+  if (ShAmt % DLByteWidth)
     return false;
-  const unsigned ByteShAmt = ShAmt / 8;
+  const unsigned ByteShAmt = ShAmt / DLByteWidth;
 
   // Do not generate loads of non-round integer types since these can
   // be expensive (and would be wrong if the type is not byte sized).
@@ -8978,9 +8979,9 @@ calculateByteProvider(SDValue Op, unsigned Index, unsigned Depth,
     return std::nullopt;
 
   unsigned BitWidth = Op.getValueSizeInBits();
-  if (BitWidth % 8 != 0)
+  if (BitWidth % DLByteWidth != 0)
     return std::nullopt;
-  unsigned ByteWidth = BitWidth / 8;
+  unsigned ByteWidth = BitWidth / DLByteWidth;
   assert(Index < ByteWidth && "invalid index requested");
   (void) ByteWidth;
 
@@ -9008,9 +9009,9 @@ calculateByteProvider(SDValue Op, unsigned Index, unsigned Depth,
 
     uint64_t BitShift = ShiftOp->getZExtValue();
 
-    if (BitShift % 8 != 0)
+    if (BitShift % DLByteWidth != 0)
       return std::nullopt;
-    uint64_t ByteShift = BitShift / 8;
+    uint64_t ByteShift = BitShift / DLByteWidth;
 
     // If we are shifting by an amount greater than the index we are trying to
     // provide, then do not provide anything. Otherwise, subtract the index by
@@ -9025,9 +9026,9 @@ calculateByteProvider(SDValue Op, unsigned Index, unsigned Depth,
   case ISD::ZERO_EXTEND: {
     SDValue NarrowOp = Op->getOperand(0);
     unsigned NarrowBitWidth = NarrowOp.getScalarValueSizeInBits();
-    if (NarrowBitWidth % 8 != 0)
+    if (NarrowBitWidth % DLByteWidth != 0)
       return std::nullopt;
-    uint64_t NarrowByteWidth = NarrowBitWidth / 8;
+    uint64_t NarrowByteWidth = NarrowBitWidth / DLByteWidth;
 
     if (Index >= NarrowByteWidth)
       return Op.getOpcode() == ISD::ZERO_EXTEND
@@ -9049,7 +9050,7 @@ calculateByteProvider(SDValue Op, unsigned Index, unsigned Depth,
 
     SDValue NarrowOp = Op->getOperand(0);
     unsigned NarrowBitWidth = NarrowOp.getScalarValueSizeInBits();
-    if (NarrowBitWidth % 8 != 0)
+    if (NarrowBitWidth % DLByteWidth != 0)
       return std::nullopt;
     uint64_t NarrowByteWidth = NarrowBitWidth / 8;
     // EXTRACT_VECTOR_ELT can extend the element type to the width of the return
@@ -9077,9 +9078,9 @@ calculateByteProvider(SDValue Op, unsigned Index, unsigned Depth,
       return std::nullopt;
 
     unsigned NarrowBitWidth = L->getMemoryVT().getSizeInBits();
-    if (NarrowBitWidth % 8 != 0)
+    if (NarrowBitWidth % DLByteWidth != 0)
       return std::nullopt;
-    uint64_t NarrowByteWidth = NarrowBitWidth / 8;
+    uint64_t NarrowByteWidth = NarrowBitWidth / DLByteWidth;
 
     // If the width of the load does not reach byte we are trying to provide for
     // and it is not a ZEXTLOAD, then the load does not provide for the byte in
@@ -9402,9 +9403,9 @@ SDValue DAGCombiner::MatchLoadCombine(SDNode *N) {
 
     unsigned LoadBitWidth = Load->getMemoryVT().getScalarSizeInBits();
 
-    assert(LoadBitWidth % 8 == 0 &&
+    assert(LoadBitWidth % DLByteWidth == 0 &&
            "can only analyze providers for individual bytes not bit");
-    unsigned LoadByteWidth = LoadBitWidth / 8;
+    unsigned LoadByteWidth = LoadBitWidth / DLByteWidth;
     return IsBigEndianTarget ? bigEndianByteAt(LoadByteWidth, P.DestOffset)
                              : littleEndianByteAt(LoadByteWidth, P.DestOffset);
   };
@@ -9457,7 +9458,7 @@ SDValue DAGCombiner::MatchLoadCombine(SDNode *N) {
     // the index multiplied by the byte size of each element in the vector.
     if (L->getMemoryVT().isVector()) {
       unsigned LoadWidthInBit = L->getMemoryVT().getScalarSizeInBits();
-      if (LoadWidthInBit % 8 != 0)
+      if (LoadWidthInBit % DLByteWidth != 0)
         return SDValue();
       unsigned ByteOffsetFromVector = P->SrcOffset * LoadWidthInBit / 8;
       Ptr.addToOffset(ByteOffsetFromVector);
@@ -11118,18 +11119,20 @@ SDValue DAGCombiner::visitFunnelShift(SDNode *N) {
     // TODO - bigendian support once we have test coverage.
     // TODO - can we merge this with CombineConseutiveLoads/MatchLoadCombine?
     // TODO - permit LHS EXTLOAD if extensions are shifted out.
-    if ((BitWidth % 8) == 0 && (ShAmt % 8) == 0 && !VT.isVector() &&
-        !DAG.getDataLayout().isBigEndian()) {
+    if ((BitWidth % DLByteWidth) == 0 && (ShAmt % DLByteWidth) == 0
+        && !VT.isVector() && !DAG.getDataLayout().isBigEndian()) {
       auto *LHS = dyn_cast<LoadSDNode>(N0);
       auto *RHS = dyn_cast<LoadSDNode>(N1);
       if (LHS && RHS && LHS->isSimple() && RHS->isSimple() &&
           LHS->getAddressSpace() == RHS->getAddressSpace() &&
           (LHS->hasNUsesOfValue(1, 0) || RHS->hasNUsesOfValue(1, 0)) &&
           ISD::isNON_EXTLoad(RHS) && ISD::isNON_EXTLoad(LHS)) {
-        if (DAG.areNonVolatileConsecutiveLoads(LHS, RHS, BitWidth / 8, 1)) {
+        if (DAG.areNonVolatileConsecutiveLoads(LHS, RHS, BitWidth / DLByteWidth,
+                                               1)) {
           SDLoc DL(RHS);
           uint64_t PtrOff =
-              IsFSHL ? (((BitWidth - ShAmt) % BitWidth) / 8) : (ShAmt / 8);
+              IsFSHL ? (((BitWidth - ShAmt) % BitWidth) / DLByteWidth)
+                     : (ShAmt / DLByteWidth);
           Align NewAlign = commonAlignment(RHS->getAlign(), PtrOff);
           unsigned Fast = 0;
           if (TLI.allowsMemoryAccess(*DAG.getContext(), DAG.getDataLayout(), VT,
@@ -11369,7 +11372,7 @@ SDValue DAGCombiner::visitBSWAP(SDNode *N) {
       N0.hasOneUse()) {
     auto *ShAmt = dyn_cast<ConstantSDNode>(N0.getOperand(1));
     if (ShAmt && ShAmt->getAPIntValue().ult(BW) &&
-        ShAmt->getZExtValue() % 8 == 0) {
+        ShAmt->getZExtValue() % DLByteWidth == 0) {
       SDValue NewSwap = DAG.getNode(ISD::BSWAP, DL, VT, N0.getOperand(0));
       unsigned InverseShift = N0.getOpcode() == ISD::SHL ? ISD::SRL : ISD::SHL;
       return DAG.getNode(InverseShift, DL, VT, NewSwap, N0.getOperand(1));
@@ -22850,7 +22853,7 @@ SDValue DAGCombiner::combineInsertEltToLoad(SDNode *N, unsigned InsIndex) {
     return SDValue();
 
   int EltSize = ScalarLoad->getValueType(0).getScalarSizeInBits();
-  if (EltSize == 0 || EltSize % 8 != 0 || !ScalarLoad->isSimple() ||
+  if (EltSize == 0 || EltSize % DLByteWidth != 0 || !ScalarLoad->isSimple() ||
       !VecLoad->isSimple() || VecLoad->getExtensionType() != ISD::NON_EXTLOAD ||
       ScalarLoad->getExtensionType() != ISD::NON_EXTLOAD ||
       ScalarLoad->getAddressSpace() != VecLoad->getAddressSpace())
@@ -27869,8 +27872,8 @@ SDValue DAGCombiner::XformToShuffleWithZero(SDNode *N) {
 
   // Determine maximum split level (byte level masking).
   int MaxSplit = 1;
-  if (RVT.getScalarSizeInBits() % 8 == 0)
-    MaxSplit = RVT.getScalarSizeInBits() / 8;
+  if (RVT.getScalarSizeInBits() % DLByteWidth == 0)
+    MaxSplit = RVT.getScalarSizeInBytes();
 
   for (int Split = 1; Split <= MaxSplit; ++Split)
     if (RVT.getScalarSizeInBits() % Split == 0)

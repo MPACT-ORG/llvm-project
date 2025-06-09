@@ -228,9 +228,27 @@ TypeSize Type::getPrimitiveSizeInBits() const {
   }
 }
 
+TypeSize Type::getPrimitiveSizeInBytes() const {
+  auto bits = getPrimitiveSizeInBits();
+  if (bits.getFixedValue() == 0) return TypeSize::getFixed(0);
+  if (ByteWidth == 0) {
+    assert(!C.pImpl->OwnedModules.empty() && "No module available");
+    ByteWidth = C.pImpl->OwnedModules.begin()->getDataLayout()->getByteWidth();
+  }
+  return {divideCeil(bits.getFixedValue(), ByteWidth), bits.isScalable()};
+}
+
 unsigned Type::getScalarSizeInBits() const {
   // It is safe to assume that the scalar types have a fixed size.
   return getScalarType()->getPrimitiveSizeInBits().getFixedValue();
+}
+
+unsigned Type::getScalarSizeInBytes() const {
+  if (ByteWidth == 0) {
+    assert(!C.pImpl->OwnedModules.empty() && "No module available");
+    ByteWidth = C.pImpl->OwnedModules.begin()->getDataLayout()->getByteWidth();
+  }
+  return divideCeil(getScalarSizeInBits(), ByteWidth);
 }
 
 int Type::getFPMantissaWidth() const {

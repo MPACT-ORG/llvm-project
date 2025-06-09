@@ -174,7 +174,7 @@ static void scalarizeMaskedLoad(const DataLayout &DL, bool HasBranchDivergence,
 
   // Adjust alignment for the scalar instruction.
   const Align AdjustedAlignVal =
-      commonAlignment(AlignVal, EltTy->getPrimitiveSizeInBits() / 8);
+      commonAlignment(AlignVal, EltTy->getPrimitiveSizeInBytes());
   unsigned VectorWidth = cast<FixedVectorType>(VecType)->getNumElements();
 
   // The result vector
@@ -344,7 +344,7 @@ static void scalarizeMaskedStore(const DataLayout &DL, bool HasBranchDivergence,
 
   // Adjust alignment for the scalar instruction.
   const Align AdjustedAlignVal =
-      commonAlignment(AlignVal, EltTy->getPrimitiveSizeInBits() / 8);
+      commonAlignment(AlignVal, EltTy->getPrimitiveSizeInBytes());
   unsigned VectorWidth = cast<FixedVectorType>(VecType)->getNumElements();
 
   if (isConstantIntVector(Mask)) {
@@ -723,7 +723,7 @@ static void scalarizeMaskedExpandLoad(const DataLayout &DL,
 
   // Adjust alignment for the scalar instruction.
   const Align AdjustedAlignment =
-      commonAlignment(Alignment, EltTy->getPrimitiveSizeInBits() / 8);
+      commonAlignment(Alignment, EltTy->getPrimitiveSizeInBytes());
 
   // Shorten the way if the mask is a vector of constants.
   // Create a build_vector pattern, with loads/poisons as necessary and then
@@ -856,7 +856,7 @@ static void scalarizeMaskedCompressStore(const DataLayout &DL,
 
   // Adjust alignment for the scalar instruction.
   const Align AdjustedAlignment =
-      commonAlignment(Alignment, EltTy->getPrimitiveSizeInBits() / 8);
+      commonAlignment(Alignment, EltTy->getPrimitiveSizeInBytes());
 
   unsigned VectorWidth = VecType->getNumElements();
 

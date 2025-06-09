@@ -10442,7 +10442,7 @@ TargetLowering::IncrementMemoryAddress(SDValue Addr, SDValue Mask,
     Increment = DAG.getNode(ISD::CTPOP, DL, MaskIntVT, MaskInIntReg);
     Increment = DAG.getZExtOrTrunc(Increment, DL, AddrVT);
     // Scale is an element size in bytes.
-    SDValue Scale = DAG.getConstant(DataVT.getScalarSizeInBits() / 8, DL,
+    SDValue Scale = DAG.getConstant(DataVT.getScalarSizeInBytes(), DL,
                                     AddrVT);
     Increment = DAG.getNode(ISD::MUL, DL, AddrVT, Increment, Scale);
   } else if (DataVT.isScalableVector()) {
