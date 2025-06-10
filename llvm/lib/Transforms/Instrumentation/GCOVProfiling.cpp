@@ -1362,7 +1362,7 @@ Function *GCOVProfiler::insertReset(
     auto *GVTy = cast<ArrayType>(GV->getValueType());
     Builder.CreateMemSet(GV, Constant::getNullValue(Type::getInt8Ty(C)),
                          GVTy->getNumElements() *
-                             GVTy->getElementType()->getScalarSizeInBits() / 8,
+                             GVTy->getElementType()->getScalarSizeInBytes(),
                          GV->getAlign());
   }
 

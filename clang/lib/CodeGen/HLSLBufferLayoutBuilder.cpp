@@ -42,9 +42,9 @@ static unsigned getScalarOrVectorSizeInBytes(llvm::Type *Ty) {
   if (Ty->isVectorTy()) {
     llvm::FixedVectorType *FVT = cast<llvm::FixedVectorType>(Ty);
     return FVT->getNumElements() *
-           (FVT->getElementType()->getScalarSizeInBits() / 8);
+           (FVT->getElementType()->getScalarSizeInBytes());
   }
-  return Ty->getScalarSizeInBits() / 8;
+  return Ty->getScalarSizeInBytes();
 }
 
 } // namespace
@@ -237,12 +237,12 @@ bool HLSLBufferLayoutBuilder::layoutField(const FieldDecl *FD,
       // align vectors by sub element size
       const llvm::FixedVectorType *FVT =
           cast<llvm::FixedVectorType>(ElemLayoutTy);
-      unsigned SubElemSize = FVT->getElementType()->getScalarSizeInBits() / 8;
+      unsigned SubElemSize = FVT->getElementType()->getScalarSizeInBytes();
       ElemSize = FVT->getNumElements() * SubElemSize;
       Align = SubElemSize;
     } else {
       assert(ElemLayoutTy->isIntegerTy() || ElemLayoutTy->isFloatingPointTy());
-      ElemSize = ElemLayoutTy->getScalarSizeInBits() / 8;
+      ElemSize = ElemLayoutTy->getScalarSizeInBytes();
       Align = ElemSize;
     }
 

@@ -29,6 +29,7 @@
 #include "llvm/TargetParser/RISCVTargetParser.h"
 #include <cassert>
 #include <utility>
+#include <iostream>
 
 using namespace llvm;
 
@@ -228,9 +229,29 @@ TypeSize Type::getPrimitiveSizeInBits() const {
   }
 }
 
+unsigned Type::getPrimitiveSizeInBytes() {
+  auto bits = getPrimitiveSizeInBits();
+  if (bits.getFixedValue() == 0) return TypeSize::getFixed(0);
+  if (ByteWidth == 0) {
+    assert(!Context.pImpl->OwnedModules.empty() && "No module available");
+    auto iter = Context.pImpl->OwnedModules.begin();
+    ByteWidth = (*iter)->getDataLayout().getByteWidth();
+  }
+  return divideCeil(bits.getFixedValue(), ByteWidth);
+}
+
 unsigned Type::getScalarSizeInBits() const {
   // It is safe to assume that the scalar types have a fixed size.
   return getScalarType()->getPrimitiveSizeInBits().getFixedValue();
+}
+
+unsigned Type::getScalarSizeInBytes() {
+  if (ByteWidth == 0) {
+    assert(!Context.pImpl->OwnedModules.empty() && "No module available");
+    auto iter = Context.pImpl->OwnedModules.begin();
+    ByteWidth = (*iter)->getDataLayout().getByteWidth();
+  }
+  return divideCeil(getScalarSizeInBits(), ByteWidth);
 }
 
 int Type::getFPMantissaWidth() const {
