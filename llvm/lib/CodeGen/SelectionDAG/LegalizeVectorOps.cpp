@@ -1463,8 +1463,9 @@ SDValue VectorLegalizer::ExpandZERO_EXTEND_VECTOR_INREG(SDNode *Node) {
                      DAG.getVectorShuffle(SrcVT, DL, Zero, Src, ShuffleMask));
 }
 
-static void createBSWAPShuffleMask(EVT VT, SmallVectorImpl<int> &ShuffleMask) {
-  int ScalarSizeInBytes = VT.getScalarSizeInBits() / 8;
+static void createBSWAPShuffleMask(EVT VT, SmallVectorImpl<int> &ShuffleMask,
+                                   unsigned ByteWidth) {
+  int ScalarSizeInBytes = VT.getScalarSizeInBits() / ByteWidth;
   for (int I = 0, E = VT.getVectorNumElements(); I != E; ++I)
     for (int J = ScalarSizeInBytes - 1; J >= 0; --J)
       ShuffleMask.push_back((I * ScalarSizeInBytes) + J);
@@ -1479,7 +1480,7 @@ SDValue VectorLegalizer::ExpandBSWAP(SDNode *Node) {
 
   // Generate a byte wise shuffle mask for the BSWAP.
   SmallVector<int, 16> ShuffleMask;
-  createBSWAPShuffleMask(VT, ShuffleMask);
+  createBSWAPShuffleMask(VT, ShuffleMask, DAG.getDataLayout().getByteWidth());
   EVT ByteVT = EVT::getVectorVT(*DAG.getContext(), MVT::i8, ShuffleMask.size());
 
   // Only emit a shuffle if the mask is legal.
@@ -1519,7 +1520,7 @@ SDValue VectorLegalizer::ExpandBITREVERSE(SDNode *Node) {
   unsigned ScalarSizeInBits = VT.getScalarSizeInBits();
   if (ScalarSizeInBits > 8 && (ScalarSizeInBits % 8) == 0) {
     SmallVector<int, 16> BSWAPMask;
-    createBSWAPShuffleMask(VT, BSWAPMask);
+    createBSWAPShuffleMask(VT, BSWAPMask, DAG.getDataLayout().getByteWidth());
 
     EVT ByteVT = EVT::getVectorVT(*DAG.getContext(), MVT::i8, BSWAPMask.size());
     if (TLI.isShuffleMaskLegal(BSWAPMask, ByteVT) &&

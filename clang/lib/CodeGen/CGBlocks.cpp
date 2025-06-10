@@ -25,6 +25,7 @@
 #include "clang/CodeGen/ConstantInitBuilder.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/ScopedPrinter.h"
 #include <algorithm>
 #include <cstdio>
@@ -482,13 +483,16 @@ static void initializeForBlockHeader(CodeGenModule &CGM, CGBlockInfo &info,
                              SmallVectorImpl<llvm::Type*> &elementTypes) {
 
   assert(elementTypes.empty());
+  auto ByteWidth = CGM.getDataLayout().getByteWidth();
   if (CGM.getLangOpts().OpenCL) {
     // The header is basically 'struct { int; int; generic void *;
     // custom_fields; }'. Assert that struct is packed.
     auto GenPtrAlign = CharUnits::fromQuantity(
-        CGM.getTarget().getPointerAlign(LangAS::opencl_generic) / 8);
+        llvm::divideCeil(
+          CGM.getTarget().getPointerAlign(LangAS::opencl_generic), ByteWidth));
     auto GenPtrSize = CharUnits::fromQuantity(
-        CGM.getTarget().getPointerWidth(LangAS::opencl_generic) / 8);
+        llvm::divideCeil(
+          CGM.getTarget().getPointerWidth(LangAS::opencl_generic), ByteWidth));
     assert(CGM.getIntSize() <= GenPtrSize);
     assert(CGM.getIntAlign() <= GenPtrAlign);
     assert((2 * CGM.getIntSize()).isMultipleOf(GenPtrAlign));
@@ -786,8 +790,10 @@ llvm::Value *CodeGenFunction::EmitBlockLiteral(const CGBlockInfo &blockInfo) {
   auto GenVoidPtrTy =
       IsOpenCL ? CGM.getOpenCLRuntime().getGenericVoidPointerType() : VoidPtrTy;
   LangAS GenVoidPtrAddr = IsOpenCL ? LangAS::opencl_generic : LangAS::Default;
+  auto ByteWidth = CGM.getDataLayout().getByteWidth();
   auto GenVoidPtrSize = CharUnits::fromQuantity(
-      CGM.getTarget().getPointerWidth(GenVoidPtrAddr) / 8);
+      llvm::divideCeil(CGM.getTarget().getPointerWidth(GenVoidPtrAddr), 
+                       ByteWidth));
   // Using the computed layout, generate the actual block function.
   bool isLambdaConv = blockInfo.getBlockDecl()->isConversionFromLambda();
   CodeGenFunction BlockCGF{CGM, true};

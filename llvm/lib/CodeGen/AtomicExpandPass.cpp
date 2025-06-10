@@ -233,7 +233,7 @@ static bool atomicSizeSupported(const TargetLowering *TLI, Inst *I) {
   unsigned Size = getAtomicOpSize(I);
   Align Alignment = I->getAlign();
   return Alignment >= Size &&
-         Size <= TLI->getMaxAtomicSizeInBitsSupported() / 8;
+         Size <= TLI->getMaxAtomicSizeInBytesSupported();
 }
 
 bool AtomicExpandImpl::processAtomicInstr(Instruction *I) {
@@ -667,7 +667,7 @@ bool AtomicExpandImpl::tryExpandAtomicRMW(AtomicRMWInst *AI) {
   case TargetLoweringBase::AtomicExpansionKind::None:
     return false;
   case TargetLoweringBase::AtomicExpansionKind::LLSC: {
-    unsigned MinCASSize = TLI->getMinCmpXchgSizeInBits() / 8;
+    unsigned MinCASSize = TLI->getMinCmpXchgSizeInBytes();
     unsigned ValueSize = getAtomicOpSize(AI);
     if (ValueSize < MinCASSize) {
       expandPartwordAtomicRMW(AI,
@@ -683,7 +683,7 @@ bool AtomicExpandImpl::tryExpandAtomicRMW(AtomicRMWInst *AI) {
     return true;
   }
   case TargetLoweringBase::AtomicExpansionKind::CmpXChg: {
-    unsigned MinCASSize = TLI->getMinCmpXchgSizeInBits() / 8;
+    unsigned MinCASSize = TLI->getMinCmpXchgSizeInBytes();
     unsigned ValueSize = getAtomicOpSize(AI);
     if (ValueSize < MinCASSize) {
       expandPartwordAtomicRMW(AI,
@@ -706,7 +706,7 @@ bool AtomicExpandImpl::tryExpandAtomicRMW(AtomicRMWInst *AI) {
     return true;
   }
   case TargetLoweringBase::AtomicExpansionKind::MaskedIntrinsic: {
-    unsigned MinCASSize = TLI->getMinCmpXchgSizeInBits() / 8;
+    unsigned MinCASSize = TLI->getMinCmpXchgSizeInBytes();
     unsigned ValueSize = getAtomicOpSize(AI);
     if (ValueSize < MinCASSize) {
       AtomicRMWInst::BinOp Op = AI->getOperation();
@@ -973,7 +973,7 @@ void AtomicExpandImpl::expandPartwordAtomicRMW(
 
   PartwordMaskValues PMV =
       createMaskInstrs(Builder, AI, AI->getType(), AI->getPointerOperand(),
-                       AI->getAlign(), TLI->getMinCmpXchgSizeInBits() / 8);
+                       AI->getAlign(), TLI->getMinCmpXchgSizeInBytes());
 
   Value *ValOperand_Shifted = nullptr;
   if (Op == AtomicRMWInst::Xchg || Op == AtomicRMWInst::Add ||
@@ -1017,7 +1017,7 @@ AtomicRMWInst *AtomicExpandImpl::widenPartwordAtomicRMW(AtomicRMWInst *AI) {
 
   PartwordMaskValues PMV =
       createMaskInstrs(Builder, AI, AI->getType(), AI->getPointerOperand(),
-                       AI->getAlign(), TLI->getMinCmpXchgSizeInBits() / 8);
+                       AI->getAlign(), TLI->getMinCmpXchgSizeInBytes());
 
   Value *ValOperand_Shifted =
       Builder.CreateShl(Builder.CreateZExt(AI->getValOperand(), PMV.WordType),
@@ -1101,7 +1101,7 @@ bool AtomicExpandImpl::expandPartwordCmpXchg(AtomicCmpXchgInst *CI) {
 
   PartwordMaskValues PMV =
       createMaskInstrs(Builder, CI, CI->getCompareOperand()->getType(), Addr,
-                       CI->getAlign(), TLI->getMinCmpXchgSizeInBits() / 8);
+                       CI->getAlign(), TLI->getMinCmpXchgSizeInBytes());
 
   // Shift the incoming values over, into the right location in the word.
   Value *NewVal_Shifted =
@@ -1185,7 +1185,7 @@ void AtomicExpandImpl::expandAtomicRMWToMaskedIntrinsic(AtomicRMWInst *AI) {
 
   PartwordMaskValues PMV =
       createMaskInstrs(Builder, AI, AI->getType(), AI->getPointerOperand(),
-                       AI->getAlign(), TLI->getMinCmpXchgSizeInBits() / 8);
+                       AI->getAlign(), TLI->getMinCmpXchgSizeInBytes());
 
   // The value operand must be sign-extended for signed min/max so that the
   // target's signed comparison instructions can be used. Otherwise, just
@@ -1212,7 +1212,7 @@ void AtomicExpandImpl::expandAtomicCmpXchgToMaskedIntrinsic(
 
   PartwordMaskValues PMV = createMaskInstrs(
       Builder, CI, CI->getCompareOperand()->getType(), CI->getPointerOperand(),
-      CI->getAlign(), TLI->getMinCmpXchgSizeInBits() / 8);
+      CI->getAlign(), TLI->getMinCmpXchgSizeInBytes());
 
   Value *CmpVal_Shifted = Builder.CreateShl(
       Builder.CreateZExt(CI->getCompareOperand(), PMV.WordType), PMV.ShiftAmt,
@@ -1429,7 +1429,7 @@ bool AtomicExpandImpl::expandAtomicCmpXchg(AtomicCmpXchgInst *CI) {
 
   PartwordMaskValues PMV =
       createMaskInstrs(Builder, CI, CI->getCompareOperand()->getType(), Addr,
-                       CI->getAlign(), TLI->getMinCmpXchgSizeInBits() / 8);
+                       CI->getAlign(), TLI->getMinCmpXchgSizeInBytes());
   Builder.CreateBr(StartBB);
 
   // Start the main loop block now that we've taken care of the preliminaries.
@@ -1659,7 +1659,7 @@ Value *AtomicExpandImpl::insertRMWCmpXchgLoop(
 }
 
 bool AtomicExpandImpl::tryExpandAtomicCmpXchg(AtomicCmpXchgInst *CI) {
-  unsigned MinCASSize = TLI->getMinCmpXchgSizeInBits() / 8;
+  unsigned MinCASSize = TLI->getMinCmpXchgSizeInBytes();
   unsigned ValueSize = getAtomicOpSize(CI);
 
   switch (TLI->shouldExpandAtomicCmpXchgInIR(CI)) {

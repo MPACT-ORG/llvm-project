@@ -1393,6 +1393,7 @@ Address AtomicInfo::castToAtomicIntPointer(Address addr) const {
 Address AtomicInfo::convertToAtomicIntPointer(Address Addr) const {
   llvm::Type *Ty = Addr.getElementType();
   uint64_t SourceSizeInBits = CGF.CGM.getDataLayout().getTypeSizeInBits(Ty);
+  auto ByteWidth = CGF.CGM.getDataLayout().getByteWidth();
   if (SourceSizeInBits != AtomicSizeInBits) {
     Address Tmp = CreateTempAlloca();
     CGF.Builder.CreateMemCpy(Tmp, Addr,

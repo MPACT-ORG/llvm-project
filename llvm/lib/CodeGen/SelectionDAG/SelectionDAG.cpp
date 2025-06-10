@@ -8140,7 +8140,7 @@ static SDValue getMemsetStringVal(EVT VT, const SDLoc &dl, SelectionDAG &DAG,
 
   assert(!VT.isVector() && "Can't handle vector type here!");
   unsigned NumVTBits = VT.getSizeInBits();
-  unsigned NumVTBytes = NumVTBits / 8;
+  unsigned NumVTBytes = NumVTBits / DAG.getDataLayout().getByteWidth();
   unsigned NumBytes = std::min(NumVTBytes, unsigned(Slice.Length));
 
   APInt Val(NumVTBits, 0);
@@ -8322,7 +8322,7 @@ static SDValue getMemcpyLoadsAndStores(
   uint64_t SrcOff = 0, DstOff = 0;
   for (unsigned i = 0; i != NumMemOps; ++i) {
     EVT VT = MemOps[i];
-    unsigned VTSize = VT.getSizeInBits() / 8;
+    unsigned VTSize = VT.getSizeInBits() / DAG.getDataLayout().getByteWidth();
     SDValue Value, Store;
 
     if (VTSize > Size) {
@@ -8512,7 +8512,7 @@ static SDValue getMemmoveLoadsAndStores(SelectionDAG &DAG, const SDLoc &dl,
   unsigned NumMemOps = MemOps.size();
   for (unsigned i = 0; i < NumMemOps; i++) {
     EVT VT = MemOps[i];
-    unsigned VTSize = VT.getSizeInBits() / 8;
+    unsigned VTSize = VT.getSizeInBits() / DAG.getDataLayout().getByteWidth();
     SDValue Value;
 
     bool isDereferenceable =
@@ -8533,7 +8533,7 @@ static SDValue getMemmoveLoadsAndStores(SelectionDAG &DAG, const SDLoc &dl,
   OutChains.clear();
   for (unsigned i = 0; i < NumMemOps; i++) {
     EVT VT = MemOps[i];
-    unsigned VTSize = VT.getSizeInBits() / 8;
+    unsigned VTSize = VT.getSizeInBits() / DAG.getDataLayout().getByteWidth();
     SDValue Store;
 
     Store = DAG.getStore(
@@ -8634,7 +8634,7 @@ static SDValue getMemsetStores(SelectionDAG &DAG, const SDLoc &dl,
 
   for (unsigned i = 0; i < NumMemOps; i++) {
     EVT VT = MemOps[i];
-    unsigned VTSize = VT.getSizeInBits() / 8;
+    unsigned VTSize = VT.getSizeInBits() / DAG.getDataLayout().getByteWidth();
     if (VTSize > Size) {
       // Issuing an unaligned load / store pair  that overlaps with the previous
       // pair. Adjust the offset accordingly.
@@ -8674,7 +8674,7 @@ static SDValue getMemsetStores(SelectionDAG &DAG, const SDLoc &dl,
         isVol ? MachineMemOperand::MOVolatile : MachineMemOperand::MONone,
         NewAAInfo);
     OutChains.push_back(Store);
-    DstOff += VT.getSizeInBits() / 8;
+    DstOff += VT.getSizeInBits() / DAG.getDataLayout().getByteWidth();
     Size -= VTSize;
   }
 
@@ -12959,7 +12959,7 @@ bool SelectionDAG::areNonVolatileConsecutiveLoads(LoadSDNode *LD,
   if (LD->getChain() != Base->getChain())
     return false;
   EVT VT = LD->getMemoryVT();
-  if (VT.getSizeInBits() / 8 != Bytes)
+  if (VT.getSizeInBits() / getDataLayout().getByteWidth() != Bytes)
     return false;
 
   auto BaseLocDecomp = BaseIndexOffset::match(Base, *this);
