@@ -8959,8 +8959,8 @@ SDValue DAGCombiner::MatchRotate(SDValue LHS, SDValue RHS, const SDLoc &DL,
 using SDByteProvider = ByteProvider<SDNode *>;
 
 static std::optional<SDByteProvider>
-calculateByteProvider(SDValue Op, unsigned Index, unsigned Depth,
-                      std::optional<uint64_t> VectorIndex,
+calculateByteProvider(unsigned DLByteWidth, SDValue Op, unsigned Index,
+                      unsigned Depth, std::optional<uint64_t> VectorIndex,
                       unsigned StartingIndex = 0) {
 
   // Typical i64 by i8 pattern requires recursion up to 8 calls depth
@@ -8988,11 +8988,13 @@ calculateByteProvider(SDValue Op, unsigned Index, unsigned Depth,
   switch (Op.getOpcode()) {
   case ISD::OR: {
     auto LHS =
-        calculateByteProvider(Op->getOperand(0), Index, Depth + 1, VectorIndex);
+        calculateByteProvider(DLByteWidth, Op->getOperand(0), Index, Depth + 1,
+                              VectorIndex);
     if (!LHS)
       return std::nullopt;
     auto RHS =
-        calculateByteProvider(Op->getOperand(1), Index, Depth + 1, VectorIndex);
+        calculateByteProvider(DLByteWidth, Op->getOperand(1), Index, Depth + 1,
+                              VectorIndex);
     if (!RHS)
       return std::nullopt;
 
@@ -9018,7 +9020,8 @@ calculateByteProvider(SDValue Op, unsigned Index, unsigned Depth,
     // the amount we shifted by.
     return Index < ByteShift
                ? SDByteProvider::getConstantZero()
-               : calculateByteProvider(Op->getOperand(0), Index - ByteShift,
+               : calculateByteProvider(DLByteWidth, Op->getOperand(0),
+                                       Index - ByteShift,
                                        Depth + 1, VectorIndex, Index);
   }
   case ISD::ANY_EXTEND:
@@ -9035,12 +9038,13 @@ calculateByteProvider(SDValue Op, unsigned Index, unsigned Depth,
                  ? std::optional<SDByteProvider>(
                        SDByteProvider::getConstantZero())
                  : std::nullopt;
-    return calculateByteProvider(NarrowOp, Index, Depth + 1, VectorIndex,
-                                 StartingIndex);
+    return calculateByteProvider(DLByteWidth, NarrowOp, Index, Depth + 1,
+                                 VectorIndex, StartingIndex);
   }
   case ISD::BSWAP:
-    return calculateByteProvider(Op->getOperand(0), ByteWidth - Index - 1,
-                                 Depth + 1, VectorIndex, StartingIndex);
+    return calculateByteProvider(DLByteWidth, Op->getOperand(0),
+                                 ByteWidth - Index - 1, Depth + 1, VectorIndex,
+                                 StartingIndex);
   case ISD::EXTRACT_VECTOR_ELT: {
     auto OffsetOp = dyn_cast<ConstantSDNode>(Op->getOperand(1));
     if (!OffsetOp)
@@ -9069,8 +9073,8 @@ calculateByteProvider(SDValue Op, unsigned Index, unsigned Depth,
     if ((*VectorIndex + 1) * NarrowByteWidth <= StartingIndex)
       return std::nullopt;
 
-    return calculateByteProvider(Op->getOperand(0), Index, Depth + 1,
-                                 VectorIndex, StartingIndex);
+    return calculateByteProvider(DLByteWidth, Op->getOperand(0), Index,
+                                 Depth + 1, VectorIndex, StartingIndex);
   }
   case ISD::LOAD: {
     auto L = cast<LoadSDNode>(Op.getNode());
@@ -9423,7 +9427,8 @@ SDValue DAGCombiner::MatchLoadCombine(SDNode *N) {
   unsigned ZeroExtendedBytes = 0;
   for (int i = ByteWidth - 1; i >= 0; --i) {
     auto P =
-        calculateByteProvider(SDValue(N, 0), i, 0, /*VectorIndex*/ std::nullopt,
+        calculateByteProvider(DLByteWidth, SDValue(N, 0), i, 0,
+                              /*VectorIndex*/ std::nullopt,
                               /*StartingIndex*/ i);
     if (!P)
       return SDValue();
@@ -27873,7 +27878,7 @@ SDValue DAGCombiner::XformToShuffleWithZero(SDNode *N) {
   // Determine maximum split level (byte level masking).
   int MaxSplit = 1;
   if (RVT.getScalarSizeInBits() % DLByteWidth == 0)
-    MaxSplit = RVT.getScalarSizeInBytes();
+    MaxSplit = RVT.getScalarSizeInBits() / DLByteWidth;
 
   for (int Split = 1; Split <= MaxSplit; ++Split)
     if (RVT.getScalarSizeInBits() % Split == 0)

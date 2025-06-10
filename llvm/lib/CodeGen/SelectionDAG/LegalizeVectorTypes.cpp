@@ -3189,7 +3189,7 @@ void DAGTypeLegalizer::SplitVecRes_VP_REVERSE(SDNode *N, SDValue &Lo,
       PtrInfo, MachineMemOperand::MOLoad, LocationSize::beforeOrAfterPointer(),
       Alignment);
 
-  unsigned EltWidth = VT.getScalarSizeInBytes();
+  unsigned EltWidth = VT.getScalarSizeInBits() / 8;
   SDValue NumElemMinus1 =
       DAG.getNode(ISD::SUB, DL, PtrVT, DAG.getZExtOrTrunc(EVL, DL, PtrVT),
                   DAG.getConstant(1, DL, PtrVT));

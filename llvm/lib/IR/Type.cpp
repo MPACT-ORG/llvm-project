@@ -29,6 +29,7 @@
 #include "llvm/TargetParser/RISCVTargetParser.h"
 #include <cassert>
 #include <utility>
+#include <iostream>
 
 using namespace llvm;
 
@@ -228,14 +229,15 @@ TypeSize Type::getPrimitiveSizeInBits() const {
   }
 }
 
-TypeSize Type::getPrimitiveSizeInBytes() const {
+unsigned Type::getPrimitiveSizeInBytes() {
   auto bits = getPrimitiveSizeInBits();
   if (bits.getFixedValue() == 0) return TypeSize::getFixed(0);
   if (ByteWidth == 0) {
-    assert(!C.pImpl->OwnedModules.empty() && "No module available");
-    ByteWidth = C.pImpl->OwnedModules.begin()->getDataLayout()->getByteWidth();
+    assert(!Context.pImpl->OwnedModules.empty() && "No module available");
+    auto iter = Context.pImpl->OwnedModules.begin();
+    ByteWidth = (*iter)->getDataLayout().getByteWidth();
   }
-  return {divideCeil(bits.getFixedValue(), ByteWidth), bits.isScalable()};
+  return divideCeil(bits.getFixedValue(), ByteWidth);
 }
 
 unsigned Type::getScalarSizeInBits() const {
@@ -243,10 +245,11 @@ unsigned Type::getScalarSizeInBits() const {
   return getScalarType()->getPrimitiveSizeInBits().getFixedValue();
 }
 
-unsigned Type::getScalarSizeInBytes() const {
+unsigned Type::getScalarSizeInBytes() {
   if (ByteWidth == 0) {
-    assert(!C.pImpl->OwnedModules.empty() && "No module available");
-    ByteWidth = C.pImpl->OwnedModules.begin()->getDataLayout()->getByteWidth();
+    assert(!Context.pImpl->OwnedModules.empty() && "No module available");
+    auto iter = Context.pImpl->OwnedModules.begin();
+    ByteWidth = (*iter)->getDataLayout().getByteWidth();
   }
   return divideCeil(getScalarSizeInBits(), ByteWidth);
 }
