@@ -337,7 +337,7 @@ public:
   // Return the size in "bytes", where a byte may have more than 8 bits. The
   // "byte width" is obtained from DataLayout. The returned value is rounded up
   // if the number of bits is not an integral number of bytes.
-  LLVM_ABI TypeSize getPrimitiveSizeInBytes() const LLVM_READONLY;
+  LLVM_ABI unsigned getPrimitiveSizeInBytes() LLVM_READONLY;
 
   /// If this is a vector type, return the getPrimitiveSizeInBits value for the
   /// element type. Otherwise return the getPrimitiveSizeInBits value for this
@@ -347,7 +347,7 @@ public:
   // Return the size in "bytes", where a byte may have more than 8 bits. The
   // "byte width" is obtained from DataLayout. The returned value is rounded up
   // if the number of bits is not an itegral number of bits.
-  LLVM_ABI unsigned getScalarSizeInBytes() const LLVM_READONLY;
+  LLVM_ABI unsigned getScalarSizeInBytes() LLVM_READONLY;
 
   /// Return the width of the mantissa of this type. This is only valid on
   /// floating-point types. If the FP type does not have a stable mantissa (e.g.

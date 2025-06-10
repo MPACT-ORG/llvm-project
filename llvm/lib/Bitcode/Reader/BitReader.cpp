@@ -66,7 +66,6 @@ LLVMBool LLVMParseBitcodeInContext2(LLVMContextRef ContextRef,
     *OutModule = wrap((Module *)nullptr);
     return 1;
   }
-
   *OutModule = wrap(ModuleOrErr.get().release());
   return 0;
 }
