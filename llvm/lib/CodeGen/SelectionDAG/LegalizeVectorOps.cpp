@@ -1465,7 +1465,7 @@ SDValue VectorLegalizer::ExpandZERO_EXTEND_VECTOR_INREG(SDNode *Node) {
 
 static void createBSWAPShuffleMask(EVT VT, SmallVectorImpl<int> &ShuffleMask,
                                    unsigned ByteWidth) {
-  int ScalarSizeInBytes = VT.getScalarSizeInBits() / ByteWidth;
+  int ScalarSizeInBytes = divideCeil(VT.getScalarSizeInBits(), ByteWidth);
   for (int I = 0, E = VT.getVectorNumElements(); I != E; ++I)
     for (int J = ScalarSizeInBytes - 1; J >= 0; --J)
       ShuffleMask.push_back((I * ScalarSizeInBytes) + J);

@@ -21,6 +21,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/Support/MathExtras.h"
 
 using namespace clang;
 using namespace CodeGen;
@@ -1396,8 +1397,10 @@ Address AtomicInfo::convertToAtomicIntPointer(Address Addr) const {
   auto ByteWidth = CGF.CGM.getDataLayout().getByteWidth();
   if (SourceSizeInBits != AtomicSizeInBits) {
     Address Tmp = CreateTempAlloca();
-    CGF.Builder.CreateMemCpy(Tmp, Addr,
-                             std::min(AtomicSizeInBits, SourceSizeInBits) / 8);
+    CGF.Builder.CreateMemCpy(
+        Tmp, Addr, llvm::divideCeil(std::min(AtomicSizeInBits,
+                                             SourceSizeInBits),
+                                    ByteWidth));
     Addr = Tmp;
   }
 
