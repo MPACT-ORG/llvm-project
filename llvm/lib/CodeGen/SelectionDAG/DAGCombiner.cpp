@@ -9056,7 +9056,7 @@ calculateByteProvider(unsigned DLByteWidth, SDValue Op, unsigned Index,
     unsigned NarrowBitWidth = NarrowOp.getScalarValueSizeInBits();
     if (NarrowBitWidth % DLByteWidth != 0)
       return std::nullopt;
-    uint64_t NarrowByteWidth = NarrowBitWidth / 8;
+    uint64_t NarrowByteWidth = NarrowBitWidth / DLByteWidth;
     // EXTRACT_VECTOR_ELT can extend the element type to the width of the return
     // type, leaving the high bits undefined.
     if (Index >= NarrowByteWidth)
@@ -9310,11 +9310,11 @@ SDValue DAGCombiner::mergeTruncStores(StoreSDNode *N) {
   auto checkOffsets = [&](bool MatchLittleEndian) {
     if (MatchLittleEndian) {
       for (unsigned i = 0; i != NumStores; ++i)
-        if (OffsetMap[i] != i * (NarrowNumBits / 8) + FirstOffset)
+        if (OffsetMap[i] != i * (NarrowNumBits / DLByteWidth) + FirstOffset)
           return false;
     } else { // MatchBigEndian by reversing loop counter.
       for (unsigned i = 0, j = NumStores - 1; i != NumStores; ++i, --j)
-        if (OffsetMap[j] != i * (NarrowNumBits / 8) + FirstOffset)
+        if (OffsetMap[j] != i * (NarrowNumBits / DLByteWidth) + FirstOffset)
           return false;
     }
     return true;
@@ -9398,7 +9398,7 @@ SDValue DAGCombiner::MatchLoadCombine(SDNode *N) {
   EVT VT = N->getValueType(0);
   if (VT != MVT::i16 && VT != MVT::i32 && VT != MVT::i64)
     return SDValue();
-  unsigned ByteWidth = VT.getSizeInBits() / 8;
+  unsigned ByteWidth = VT.getSizeInBits() / DLByteWidth;
 
   bool IsBigEndianTarget = DAG.getDataLayout().isBigEndian();
   auto MemoryByteOffset = [&](SDByteProvider P) {
@@ -9465,7 +9465,8 @@ SDValue DAGCombiner::MatchLoadCombine(SDNode *N) {
       unsigned LoadWidthInBit = L->getMemoryVT().getScalarSizeInBits();
       if (LoadWidthInBit % DLByteWidth != 0)
         return SDValue();
-      unsigned ByteOffsetFromVector = P->SrcOffset * LoadWidthInBit / 8;
+      unsigned ByteOffsetFromVector = 
+          P->SrcOffset * LoadWidthInBit / DLByteWidth;
       Ptr.addToOffset(ByteOffsetFromVector);
     }
 
@@ -15179,7 +15180,7 @@ SDValue DAGCombiner::reduceLoadWidth(SDNode *N) {
   unsigned PtrAdjustmentInBits =
       DAG.getDataLayout().isBigEndian() ? AdjustBigEndianShift(ShAmt) : ShAmt;
 
-  uint64_t PtrOff = PtrAdjustmentInBits / 8;
+  uint64_t PtrOff = PtrAdjustmentInBits / DLByteWidth;
   SDLoc DL(LN0);
   // The original load itself didn't wrap, so an offset within it doesn't.
   SDValue NewPtr =
@@ -20762,7 +20763,7 @@ SDValue DAGCombiner::ReduceLoadOpStoreWidth(SDNode *N) {
       unsigned PtrAdjustmentInBits = DAG.getDataLayout().isBigEndian()
                                          ? VTStoreSize - NewBW - ShAmt
                                          : ShAmt;
-      PtrOff = PtrAdjustmentInBits / 8;
+      PtrOff = divideCeil(PtrAdjustmentInBits, DLByteWidth);
 
       // Now check if narrow access is allowed and fast, considering alignments.
       unsigned IsFast = 0;
@@ -22225,7 +22226,8 @@ SDValue DAGCombiner::replaceStoreOfInsertLoad(StoreSDNode *ST) {
   // info
   SDValue NewPtr;
   if (auto *CIdx = dyn_cast<ConstantSDNode>(Idx)) {
-    unsigned COffset = CIdx->getSExtValue() * EltVT.getSizeInBits() / 8;
+    unsigned COffset = 
+        CIdx->getSExtValue() * divideCeil(EltVT.getSizeInBits(), DLByteWidth);
     NewPtr = DAG.getMemBasePlusOffset(Ptr, TypeSize::getFixed(COffset), DL);
     PointerInfo = ST->getPointerInfo().getWithOffset(COffset);
   } else {
@@ -22644,10 +22646,15 @@ SDValue DAGCombiner::splitMergedValStore(StoreSDNode *ST) {
   SDValue St0 = DAG.getStore(Chain, DL, Lo, Ptr, ST->getPointerInfo(),
                              ST->getBaseAlign(), MMOFlags, AAInfo);
   Ptr =
-      DAG.getMemBasePlusOffset(Ptr, TypeSize::getFixed(HalfValBitSize / 8), DL);
+      DAG.getMemBasePlusOffset(Ptr, 
+                               TypeSize::getFixed(divideCeil(HalfValBitSize,
+                                                             DLByteWidth)),
+                               DL);
   // Higher value store.
-  SDValue St1 = DAG.getStore(
-      St0, DL, Hi, Ptr, ST->getPointerInfo().getWithOffset(HalfValBitSize / 8),
+  SDValue St1 = DAG.getStore(St0, DL, Hi, Ptr, 
+                             ST->getPointerInfo()
+                               .getWithOffset(divideCeil(HalfValBitSize,
+                                                         DLByteWidth)),
       ST->getBaseAlign(), MMOFlags, AAInfo);
   return St1;
 }
@@ -22867,18 +22874,21 @@ SDValue DAGCombiner::combineInsertEltToLoad(SDNode *N, unsigned InsIndex) {
   // Check that the offset between the pointers to produce a single continuous
   // load.
   if (InsIndex == 0) {
-    if (!DAG.areNonVolatileConsecutiveLoads(ScalarLoad, VecLoad, EltSize / 8,
+    if (!DAG.areNonVolatileConsecutiveLoads(ScalarLoad, VecLoad, 
+                                            divideCeil(EltSize, DLByteWidth),
                                             -1))
       return SDValue();
   } else {
     if (!DAG.areNonVolatileConsecutiveLoads(
-            VecLoad, ScalarLoad, VT.getVectorNumElements() * EltSize / 8, -1))
+            VecLoad, ScalarLoad, 
+            VT.getVectorNumElements() * divideCeil(EltSize, DLByteWidth), -1))
       return SDValue();
   }
 
   // And that the new unaligned load will be fast.
   unsigned IsFast = 0;
-  Align NewAlign = commonAlignment(VecLoad->getAlign(), EltSize / 8);
+  Align NewAlign = commonAlignment(VecLoad->getAlign(),
+                                   divideCeil(EltSize, DLByteWidth));
   if (!TLI.allowsMemoryAccess(*DAG.getContext(), DAG.getDataLayout(),
                               Vec.getValueType(), VecLoad->getAddressSpace(),
                               NewAlign, VecLoad->getMemOperand()->getFlags(),
@@ -22891,10 +22901,12 @@ SDValue DAGCombiner::combineInsertEltToLoad(SDNode *N, unsigned InsIndex) {
   SDValue Ptr = ScalarLoad->getBasePtr();
   if (InsIndex != 0)
     Ptr = DAG.getNode(ISD::ADD, DL, Ptr.getValueType(), VecLoad->getBasePtr(),
-                      DAG.getConstant(EltSize / 8, DL, Ptr.getValueType()));
+                      DAG.getConstant(divideCeil(EltSize, DLByteWidth), DL, 
+                      Ptr.getValueType()));
   MachinePointerInfo PtrInfo =
       InsIndex == 0 ? ScalarLoad->getPointerInfo()
-                    : VecLoad->getPointerInfo().getWithOffset(EltSize / 8);
+                    : VecLoad->getPointerInfo()
+                             .getWithOffset(divideCeil(EltSize, DLByteWidth));
 
   SDValue Load = DAG.getLoad(VecLoad->getValueType(0), DL,
                              ScalarLoad->getChain(), Ptr, PtrInfo, NewAlign);
@@ -27878,7 +27890,7 @@ SDValue DAGCombiner::XformToShuffleWithZero(SDNode *N) {
   // Determine maximum split level (byte level masking).
   int MaxSplit = 1;
   if (RVT.getScalarSizeInBits() % DLByteWidth == 0)
-    MaxSplit = RVT.getScalarSizeInBits() / DLByteWidth;
+    MaxSplit = divideCeil(RVT.getScalarSizeInBits(), DLByteWidth);
 
   for (int Split = 1; Split <= MaxSplit; ++Split)
     if (RVT.getScalarSizeInBits() % Split == 0)
@@ -29481,7 +29493,8 @@ bool DAGCombiner::parallelizeChainedStores(StoreSDNode *St) {
     return false;
 
   // Add ST's interval.
-  Intervals.insert(0, (St->getMemoryVT().getSizeInBits() + 7) / 8,
+  Intervals.insert(0, divideCeil(St->getMemoryVT().getSizeInBits(),
+                                  DLByteWidth),
                    std::monostate{});
 
   while (StoreSDNode *Chain = dyn_cast<StoreSDNode>(STChain->getChain())) {
@@ -29501,7 +29514,8 @@ bool DAGCombiner::parallelizeChainedStores(StoreSDNode *St) {
     int64_t Offset;
     if (!BasePtr.equalBaseIndex(Ptr, DAG, Offset))
       break;
-    int64_t Length = (Chain->getMemoryVT().getSizeInBits() + 7) / 8;
+    int64_t Length = divideCeil(Chain->getMemoryVT().getSizeInBits(),
+                                DLByteWidth);
     // Make sure we don't overlap with other intervals by checking the ones to
     // the left or right before inserting.
     auto I = Intervals.find(Offset);

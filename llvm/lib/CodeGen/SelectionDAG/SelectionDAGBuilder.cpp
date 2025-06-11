@@ -1902,7 +1902,9 @@ SDValue SelectionDAGBuilder::getValueImpl(const Value *V) {
           DAG.getNode(
               ISD::SPLAT_VECTOR, getCurSDLoc(),
               EVT::getVectorVT(*DAG.getContext(), MVT::i8,
-                               VT.getSizeInBits().getKnownMinValue() / 8, true),
+                               divideCeil(VT.getSizeInBits().getKnownMinValue(), 
+                                          DAG.getDataLayout().getByteWidth()),
+                               true),
               DAG.getConstant(0, getCurSDLoc(), MVT::getIntegerVT(8))));
     }
 
@@ -3018,7 +3020,9 @@ static SDValue getLoadStackGuard(SelectionDAG &DAG, const SDLoc &DL,
     auto Flags = MachineMemOperand::MOLoad | MachineMemOperand::MOInvariant |
                  MachineMemOperand::MODereferenceable;
     MachineMemOperand *MemRef = MF.getMachineMemOperand(
-        MPInfo, Flags, PtrTy.getSizeInBits() / 8, DAG.getEVTAlign(PtrTy));
+        MPInfo, Flags, 
+        divideCeil(PtrTy.getSizeInBits(), DAG.getDataLayout().getByteWidth()),
+        DAG.getEVTAlign(PtrTy));
     DAG.setNodeMemRefs(Node, {MemRef});
   }
   if (PtrTy != PtrMemTy)
@@ -5147,7 +5151,8 @@ void SelectionDAGBuilder::visitAtomicLoad(const LoadInst &I) {
   EVT MemVT = TLI.getMemValueType(DAG.getDataLayout(), I.getType());
 
   if (!TLI.supportsUnalignedAtomics() &&
-      I.getAlign().value() < MemVT.getSizeInBits() / 8)
+      I.getAlign().value() < divideCeil(MemVT.getSizeInBits(),
+                                        DAG.getDataLayout().getByteWidth()))
     report_fatal_error("Cannot generate unaligned atomic load");
 
   auto Flags = TLI.getLoadMemOperandFlags(I, DAG.getDataLayout(), AC, LibInfo);
@@ -5184,7 +5189,8 @@ void SelectionDAGBuilder::visitAtomicStore(const StoreInst &I) {
       TLI.getMemValueType(DAG.getDataLayout(), I.getValueOperand()->getType());
 
   if (!TLI.supportsUnalignedAtomics() &&
-      I.getAlign().value() < MemVT.getSizeInBits() / 8)
+      I.getAlign().value() < divideCeil(MemVT.getSizeInBits(),
+                                        DAG.getDataLayout().getByteWidth()))
     report_fatal_error("Cannot generate unaligned atomic store");
 
   auto Flags = TLI.getStoreMemOperandFlags(I, DAG.getDataLayout());
@@ -10942,7 +10948,10 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
       uint64_t Offset = OldOffsets[i];
       MVT RegisterVT = getRegisterType(CLI.RetTy->getContext(), RetVT);
       unsigned NumRegs = getNumRegisters(CLI.RetTy->getContext(), RetVT);
-      unsigned RegisterVTByteSZ = RegisterVT.getSizeInBits() / 8;
+      unsigned RegisterVTByteSZ = divideCeil(RegisterVT.getSizeInBits(),
+                                             getTargetMachine()
+                                                 .getDataLayout()
+                                                 .getByteWidth());
       RetTys.append(NumRegs, RegisterVT);
       for (unsigned j = 0; j != NumRegs; ++j)
         Offsets.push_back(TypeSize::getFixed(Offset + j * RegisterVTByteSZ));

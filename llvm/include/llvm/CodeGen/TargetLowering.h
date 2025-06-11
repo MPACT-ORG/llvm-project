@@ -2183,6 +2183,10 @@ public:
     return MaxAtomicSizeInBitsSupported;
   }
 
+  /// Returns the maximum atomic operation size in bytes supported by the
+  /// backend.
+  unsigned getMaxAtomicSizeInBytesSupported() const;
+
   /// Returns the size in bits of the maximum div/rem the backend supports.
   /// Larger operations will be expanded by ExpandLargeDivRem.
   unsigned getMaxDivRemBitWidthSupported() const {
@@ -2203,6 +2207,10 @@ public:
   /// are still natively supported below the minimum; they just
   /// require a more complex expansion.
   unsigned getMinCmpXchgSizeInBits() const { return MinCmpXchgSizeInBits; }
+
+  /// Returns the size in bytes of the smallest cmpxchg or ll/sc/instruction
+  /// the backend supports.
+  unsigned getMinCmpXchgSizeInBytes() const;
 
   /// Whether the target supports unaligned atomic operations.
   bool supportsUnalignedAtomics() const { return SupportsUnalignedAtomics; }

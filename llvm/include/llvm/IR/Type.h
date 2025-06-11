@@ -465,6 +465,7 @@ public:
   LLVM_ABI static IntegerType *getInt32Ty(LLVMContext &C);
   LLVM_ABI static IntegerType *getInt64Ty(LLVMContext &C);
   LLVM_ABI static IntegerType *getInt128Ty(LLVMContext &C);
+  // TODO(torerik): Delete this?? It doesn't make sense.
   template <typename ScalarTy> static Type *getScalarTy(LLVMContext &C) {
     int noOfBits = sizeof(ScalarTy) * CHAR_BIT;
     if (std::is_integral<ScalarTy>::value) {

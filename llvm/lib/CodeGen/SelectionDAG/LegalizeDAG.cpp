@@ -574,7 +574,7 @@ void SelectionDAGLegalize::LegalizeStoreOps(SDNode *Node) {
                              RoundVT, ST->getBaseAlign(), MMOFlags, AAInfo);
 
       // Store the remaining ExtraWidth bits.
-      IncrementSize = RoundWidth / 8;
+      IncrementSize = divideCeil(RoundWidth, DL.getByteWidth());
       Ptr =
           DAG.getMemBasePlusOffset(Ptr, TypeSize::getFixed(IncrementSize), dl);
       Hi = DAG.getNode(
@@ -596,7 +596,7 @@ void SelectionDAGLegalize::LegalizeStoreOps(SDNode *Node) {
                              ST->getBaseAlign(), MMOFlags, AAInfo);
 
       // Store the remaining ExtraWidth bits.
-      IncrementSize = RoundWidth / 8;
+      IncrementSize = divideCeil(RoundWidth, DL.getByteWidth());
       Ptr = DAG.getNode(ISD::ADD, dl, Ptr.getValueType(), Ptr,
                         DAG.getConstant(IncrementSize, dl,
                                         Ptr.getValueType()));
@@ -795,7 +795,7 @@ void SelectionDAGLegalize::LegalizeLoadOps(SDNode *Node) {
                           MMOFlags, AAInfo);
 
       // Load the remaining ExtraWidth bits.
-      IncrementSize = RoundWidth / 8;
+      IncrementSize = divideCeil(RoundWidth, DL.getByteWidth());
       Ptr =
           DAG.getMemBasePlusOffset(Ptr, TypeSize::getFixed(IncrementSize), dl);
       Hi = DAG.getExtLoad(ExtType, dl, Node->getValueType(0), Chain, Ptr,
@@ -824,7 +824,7 @@ void SelectionDAGLegalize::LegalizeLoadOps(SDNode *Node) {
                           MMOFlags, AAInfo);
 
       // Load the remaining ExtraWidth bits.
-      IncrementSize = RoundWidth / 8;
+      IncrementSize = divideCeil(RoundWidth, DL.getByteWidth());
       Ptr =
           DAG.getMemBasePlusOffset(Ptr, TypeSize::getFixed(IncrementSize), dl);
       Lo = DAG.getExtLoad(ISD::ZEXTLOAD, dl, Node->getValueType(0), Chain, Ptr,
@@ -1583,7 +1583,8 @@ SDValue SelectionDAGLegalize::ExpandVectorBuildThroughStack(SDNode* Node) {
 
   // Emit a store of each element to the stack slot.
   SmallVector<SDValue, 8> Stores;
-  unsigned TypeByteSize = MemVT.getSizeInBits() / 8;
+  unsigned TypeByteSize = divideCeil(MemVT.getSizeInBits(),
+                                     TM.getDataLayout().getByteWidth());
   assert(TypeByteSize > 0 && "Vector element type too small for stack store!");
 
   // If the destination vector element type of a BUILD_VECTOR is narrower than
@@ -1659,7 +1660,7 @@ void SelectionDAGLegalize::getSignAsIntValue(FloatSignAsInt &State,
     State.IntPointerInfo = State.FloatPointerInfo;
   } else {
     // Advance the pointer so that the loaded byte will contain the sign bit.
-    unsigned ByteOffset = (NumBits / 8) - 1;
+    unsigned ByteOffset = divideCeil(NumBits, DataLayout.getByteWidth()) - 1;
     IntPtr =
         DAG.getMemBasePlusOffset(StackPtr, TypeSize::getFixed(ByteOffset), DL);
     State.IntPointerInfo = MachinePointerInfo::getFixedStack(MF, FI,

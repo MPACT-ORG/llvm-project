@@ -37,6 +37,18 @@
 #include <deque>
 using namespace llvm;
 
+unsigned TargetLoweringBase::getMaxAtomicSizeInBytesSupported() const
+{
+  return divideCeil(getMaxAtomicSizeInBitsSupported(),
+                    getTargetMachine().getDataLayout().getByteWidth());
+}
+
+unsigned TargetLoweringBase::getMinCmpXchgSizeInBytes() const
+{
+  return divideCeil(getMinCmpXchgSizeInBits(),
+                    getTargetMachine().getDataLayout().getByteWidth());
+}
+
 /// NOTE: The TargetMachine owns TLOF.
 TargetLowering::TargetLowering(const TargetMachine &tm)
     : TargetLoweringBase(tm) {}
@@ -213,13 +225,14 @@ bool TargetLowering::findOptimalMemOpLowering(
 
   EVT VT = getOptimalMemOpType(Op, FuncAttributes);
 
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
   if (VT == MVT::Other) {
     // Use the largest integer type whose alignment constraints are satisfied.
     // We only need to check DstAlign here as SrcAlign is always greater or
     // equal to DstAlign (or zero).
     VT = MVT::LAST_INTEGER_VALUETYPE;
     if (Op.isFixedDstAlign())
-      while (Op.getDstAlign() < (VT.getSizeInBits() / 8) &&
+      while (Op.getDstAlign() < (divideCeil(VT.getSizeInBits(), ByteWidth)) &&
              !allowsMisalignedMemoryAccesses(VT, DstAS, Op.getDstAlign()))
         VT = (MVT::SimpleValueType)(VT.getSimpleVT().SimpleTy - 1);
     assert(VT.isInteger());
@@ -239,7 +252,7 @@ bool TargetLowering::findOptimalMemOpLowering(
   unsigned NumMemOps = 0;
   uint64_t Size = Op.size();
   while (Size) {
-    unsigned VTSize = VT.getSizeInBits() / 8;
+    unsigned VTSize = divideCeil(VT.getSizeInBits(), ByteWidth);
     while (VTSize > Size) {
       // For now, only use non-vector load / store's for the left-over pieces.
       EVT NewVT = VT;
@@ -267,7 +280,7 @@ bool TargetLowering::findOptimalMemOpLowering(
             break;
         } while (!isSafeMemOpType(NewVT.getSimpleVT()));
       }
-      NewVTSize = NewVT.getSizeInBits() / 8;
+      NewVTSize = divideCeil(NewVT.getSizeInBits(), ByteWidth);
 
       // If the new VT cannot cover all of the remaining bits, then consider
       // issuing a (or a pair of) unaligned and overlapping load / store.
@@ -4718,6 +4731,7 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
         isa<LoadSDNode>(N0.getOperand(0)) &&
         N0.getOperand(0).getNode()->hasOneUse() &&
         isa<ConstantSDNode>(N0.getOperand(1))) {
+      auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
       auto *Lod = cast<LoadSDNode>(N0.getOperand(0));
       APInt bestMask;
       unsigned bestWidth = 0, bestOffset = 0;
@@ -4746,14 +4760,16 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
                   Layout.isLittleEndian() ? offset : memWidth - width - offset;
               unsigned IsFast = 0;
               assert((ptrOffset % 8) == 0 && "Non-Bytealigned pointer offset");
-              Align NewAlign = commonAlignment(Lod->getAlign(), ptrOffset / 8);
+              Align NewAlign = 
+                  commonAlignment(Lod->getAlign(),
+                                  divideCeil(ptrOffset, ByteWidth));
               if (shouldReduceLoadWidth(Lod, ISD::NON_EXTLOAD, newVT,
-                                        ptrOffset / 8) &&
+                                        divideCeil(ptrOffset, ByteWidth)) &&
                   allowsMemoryAccess(
                       *DAG.getContext(), Layout, newVT, Lod->getAddressSpace(),
                       NewAlign, Lod->getMemOperand()->getFlags(), &IsFast) &&
                   IsFast) {
-                bestOffset = ptrOffset / 8;
+                bestOffset = divideCeil(ptrOffset, ByteWidth);
                 bestMask = Mask.lshr(offset);
                 bestWidth = width;
                 break;
@@ -10037,7 +10053,8 @@ TargetLowering::scalarizeVectorLoad(LoadSDNode *LD,
     return std::make_pair(Value, Load.getValue(1));
   }
 
-  unsigned Stride = SrcEltVT.getSizeInBits() / 8;
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
+  unsigned Stride = divideCeil(SrcEltVT.getSizeInBits(), ByteWidth);
   assert(SrcEltVT.isByteSized());
 
   SmallVector<SDValue, 8> Vals;
@@ -10113,7 +10130,8 @@ SDValue TargetLowering::scalarizeVectorStore(StoreSDNode *ST,
   }
 
   // Store Stride in bytes
-  unsigned Stride = MemSclVT.getSizeInBits() / 8;
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
+  unsigned Stride = divideCeil(MemSclVT.getSizeInBits(), ByteWidth);
   assert(Stride && "Zero stride!");
   // Extract each of the elements from the original vector and save them into
   // memory individually.
@@ -10146,6 +10164,7 @@ TargetLowering::expandUnalignedLoad(LoadSDNode *LD, SelectionDAG &DAG) const {
   EVT LoadedVT = LD->getMemoryVT();
   SDLoc dl(LD);
   auto &MF = DAG.getMachineFunction();
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
 
   if (VT.isFloatingPoint() || VT.isVector()) {
     EVT intVT = EVT::getIntegerVT(*DAG.getContext(), LoadedVT.getSizeInBits());
@@ -10172,7 +10191,7 @@ TargetLowering::expandUnalignedLoad(LoadSDNode *LD, SelectionDAG &DAG) const {
     // loads and stores, then do a (aligned) load from the stack slot.
     MVT RegVT = getRegisterType(*DAG.getContext(), intVT);
     unsigned LoadedBytes = LoadedVT.getStoreSize();
-    unsigned RegBytes = RegVT.getSizeInBits() / 8;
+    unsigned RegBytes = divideCeil(RegVT.getSizeInBits(), ByteWidth);
     unsigned NumRegs = (LoadedBytes + RegBytes - 1) / RegBytes;
 
     // Make sure the stack slot is also aligned for the register type.
@@ -10242,7 +10261,7 @@ TargetLowering::expandUnalignedLoad(LoadSDNode *LD, SelectionDAG &DAG) const {
   NumBits >>= 1;
 
   Align Alignment = LD->getBaseAlign();
-  unsigned IncrementSize = NumBits / 8;
+  unsigned IncrementSize = divideCeil(NumBits, ByteWidth);
   ISD::LoadExtType HiExtType = LD->getExtensionType();
 
   // If the original load is NON_EXTLOAD, the hi part load must be ZEXTLOAD.
@@ -10297,6 +10316,7 @@ SDValue TargetLowering::expandUnalignedStore(StoreSDNode *ST,
   EVT StoreMemVT = ST->getMemoryVT();
 
   SDLoc dl(ST);
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
   if (StoreMemVT.isFloatingPoint() || StoreMemVT.isVector()) {
     EVT intVT = EVT::getIntegerVT(*DAG.getContext(), VT.getSizeInBits());
     if (isTypeLegal(intVT)) {
@@ -10321,7 +10341,7 @@ SDValue TargetLowering::expandUnalignedStore(StoreSDNode *ST,
         EVT::getIntegerVT(*DAG.getContext(), StoreMemVT.getSizeInBits()));
     EVT PtrVT = Ptr.getValueType();
     unsigned StoredBytes = StoreMemVT.getStoreSize();
-    unsigned RegBytes = RegVT.getSizeInBits() / 8;
+    unsigned RegBytes = divideCeil(RegVT.getSizeInBits(), ByteWidth);
     unsigned NumRegs = (StoredBytes + RegBytes - 1) / RegBytes;
 
     // Make sure the stack slot is also aligned for the register type.
@@ -10382,7 +10402,7 @@ SDValue TargetLowering::expandUnalignedStore(StoreSDNode *ST,
   // Get the half-size VT
   EVT NewStoredVT = StoreMemVT.getHalfSizedIntegerVT(*DAG.getContext());
   unsigned NumBits = NewStoredVT.getFixedSizeInBits();
-  unsigned IncrementSize = NumBits / 8;
+  unsigned IncrementSize = divideCeil(NumBits, ByteWidth);
 
   // Divide the stored value in two parts.
   SDValue ShiftAmount =
@@ -10442,8 +10462,10 @@ TargetLowering::IncrementMemoryAddress(SDValue Addr, SDValue Mask,
     Increment = DAG.getNode(ISD::CTPOP, DL, MaskIntVT, MaskInIntReg);
     Increment = DAG.getZExtOrTrunc(Increment, DL, AddrVT);
     // Scale is an element size in bytes.
-    SDValue Scale = DAG.getConstant(DataVT.getScalarSizeInBits() / 8, DL,
-                                    AddrVT);
+    auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
+    SDValue Scale = DAG.getConstant(divideCeil(DataVT.getScalarSizeInBits(),
+                                               ByteWidth),
+                                    DL, AddrVT);
     Increment = DAG.getNode(ISD::MUL, DL, AddrVT, Increment, Scale);
   } else if (DataVT.isScalableVector()) {
     Increment = DAG.getVScale(DL, AddrVT,
@@ -10509,8 +10531,12 @@ SDValue TargetLowering::getVectorSubVecPointer(SelectionDAG &DAG,
   EVT EltVT = VecVT.getVectorElementType();
 
   // Calculate the element offset and add it to the pointer.
-  unsigned EltSize = EltVT.getFixedSizeInBits() / 8; // FIXME: should be ABI size.
-  assert(EltSize * 8 == EltVT.getFixedSizeInBits() &&
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
+  // FIXME: should be ABI size.
+  unsigned EltSize = divideCeil(EltVT.getFixedSizeInBits(), ByteWidth);
+  // TODO(torerik): loss of precision might happen if EltSize is not a multiple
+  // of ByteWidth.
+  assert(EltSize * ByteWidth == EltVT.getFixedSizeInBits() &&
          "Converting bits to bytes lost precision");
   assert(SubVecVT.getVectorElementType() == EltVT &&
          "Sub-vector must be a vector with matching element type");
