@@ -497,6 +497,7 @@ static void assignCalleeSavedSpillSlots(MachineFunction &F,
     const TargetFrameLowering::SpillSlot *FixedSpillSlots =
         TFI->getCalleeSavedSpillSlots(NumFixedSpillSlots);
 
+    auto ByteWidth = F.getDataLayout().getByteWidth();
     // Now that we know which registers need to be saved and restored, allocate
     // stack slots for them.
     for (auto &CS : CSI) {
@@ -521,10 +522,11 @@ static void assignCalleeSavedSpillSlots(MachineFunction &F,
              FixedSlot->Reg != Reg)
         ++FixedSlot;
 
-      unsigned Size = RegInfo->getSpillSize(*RC);
+      unsigned Size = divideCeil(RegInfo->getSpillSizeInBits(*RC), ByteWidth);
       if (FixedSlot == FixedSpillSlots + NumFixedSpillSlots) {
         // Nope, just spill it anywhere convenient.
-        Align Alignment = RegInfo->getSpillAlign(*RC);
+        Align Alignment = Align(divideCeil(RegInfo->getSpillAlignInBits(*RC),
+                                           ByteWidth));
         // We may not be able to satisfy the desired alignment specification of
         // the TargetRegisterClass if the stack alignment is smaller. Use the
         // min.

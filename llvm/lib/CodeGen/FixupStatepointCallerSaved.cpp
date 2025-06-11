@@ -27,6 +27,7 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/StackMaps.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Statepoint.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
@@ -94,9 +95,10 @@ INITIALIZE_PASS_END(FixupStatepointCallerSavedLegacy, DEBUG_TYPE,
                     "Fixup Statepoint Caller Saved", false, false)
 
 // Utility function to get size of the register.
-static unsigned getRegisterSize(const TargetRegisterInfo &TRI, Register Reg) {
+static unsigned getRegisterSizeInBits(const TargetRegisterInfo &TRI,
+                                      Register Reg) {
   const TargetRegisterClass *RC = TRI.getMinimalPhysRegClass(Reg);
-  return TRI.getSpillSize(*RC);
+  return TRI.getSpillSizeInBits(*RC);
 }
 
 // Try to eliminate redundant copy to register which we're going to
@@ -147,7 +149,7 @@ static Register performCopyPropagation(Register Reg,
 
   Register SrcReg = DestSrc->Source->getReg();
 
-  if (getRegisterSize(TRI, Reg) != getRegisterSize(TRI, SrcReg))
+  if (getRegisterSizeInBits(TRI, Reg) != getRegisterSizeInBits(TRI, SrcReg))
     return Reg;
 
   LLVM_DEBUG(dbgs() << "spillRegisters: perform copy propagation "
@@ -207,6 +209,7 @@ private:
   };
   MachineFrameInfo &MFI;
   const TargetRegisterInfo &TRI;
+  unsigned ByteWidth;
   // Map size to list of frame indexes of this size. If the mode is
   // FixupSCSExtendSlotSize then the key 0 is used to keep all frame indexes.
   // If the size of required spill slot is greater than in a cache then the
@@ -230,8 +233,9 @@ private:
   }
 
 public:
-  FrameIndexesCache(MachineFrameInfo &MFI, const TargetRegisterInfo &TRI)
-      : MFI(MFI), TRI(TRI) {}
+  FrameIndexesCache(MachineFrameInfo &MFI, const TargetRegisterInfo &TRI,
+                    unsigned ByteWidth)
+      : MFI(MFI), TRI(TRI), ByteWidth(ByteWidth) {}
   // Reset the current state of used frame indexes. After invocation of
   // this function all frame indexes are available for allocation with
   // the exception of slots reserved for landing pad processing (if any).
@@ -263,7 +267,7 @@ public:
       }
     }
 
-    unsigned Size = getRegisterSize(TRI, Reg);
+    unsigned Size = divideCeil(getRegisterSizeInBits(TRI, Reg), ByteWidth);
     FrameIndexesPerSize &Line = getCacheBucket(Size);
     while (Line.Index < Line.Slots.size()) {
       int FI = Line.Slots[Line.Index++];
@@ -301,7 +305,7 @@ public:
     if (!FixupSCSExtendSlotSize)
       return;
     llvm::sort(Regs, [&](Register &A, Register &B) {
-      return getRegisterSize(TRI, A) > getRegisterSize(TRI, B);
+      return getRegisterSizeInBits(TRI, A) > getRegisterSizeInBits(TRI, B);
     });
   }
 };
@@ -510,13 +514,14 @@ public:
     // Add End marker.
     OpsToSpill.push_back(MI.getNumOperands());
     unsigned CurOpIdx = 0;
-
+    auto ByteWidth = MF.getDataLayout().getByteWidth();
     for (unsigned I = NumDefs; I < MI.getNumOperands(); ++I) {
       MachineOperand &MO = MI.getOperand(I);
       if (I == OpsToSpill[CurOpIdx]) {
         int FI = RegToSlotIdx[MO.getReg()];
         MIB.addImm(StackMaps::IndirectMemRefOp);
-        MIB.addImm(getRegisterSize(TRI, MO.getReg()));
+        MIB.addImm(divideCeil(getRegisterSizeInBits(TRI, MO.getReg()),
+                              ByteWidth));
         assert(MO.isReg() && "Should be register");
         assert(MO.getReg().isPhysical() && "Should be physical register");
         MIB.addFrameIndex(FI);
@@ -543,7 +548,9 @@ public:
       if (is_contained(RegsToReload, R))
         Flags |= MachineMemOperand::MOStore;
       auto *MMO =
-          MF.getMachineMemOperand(PtrInfo, Flags, getRegisterSize(TRI, R),
+          MF.getMachineMemOperand(PtrInfo, Flags, 
+                                  divideCeil(getRegisterSizeInBits(TRI, R),
+                                             ByteWidth),
                                   MFI.getObjectAlign(FrameIndex));
       NewMI->addMemOperand(MF, MMO);
     }
@@ -567,7 +574,7 @@ private:
 public:
   StatepointProcessor(MachineFunction &MF)
       : MF(MF), TRI(*MF.getSubtarget().getRegisterInfo()),
-        CacheFI(MF.getFrameInfo(), TRI) {}
+        CacheFI(MF.getFrameInfo(), TRI, MF.getDataLayout().getByteWidth()) {}
 
   bool process(MachineInstr &MI, bool AllowGCPtrInCSR) {
     StatepointOpers SO(&MI);

@@ -280,7 +280,9 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
     if (SubRegIdx)
       Offset = TRI->getSubRegIdxOffset(SubRegIdx);
 
-    Locs.emplace_back(Location::Register, TRI->getSpillSize(*RC),
+    auto ByteWidth = AP.MF->getDataLayout().getByteWidth();
+    Locs.emplace_back(Location::Register, 
+                      divideCeil(TRI->getSpillSizeInBits(*RC), ByteWidth),
                       DwarfRegNum, Offset);
     return ++MOI;
   }
@@ -366,7 +368,10 @@ void StackMaps::print(raw_ostream &OS) {
 StackMaps::LiveOutReg
 StackMaps::createLiveOutReg(unsigned Reg, const TargetRegisterInfo *TRI) const {
   unsigned DwarfRegNum = getDwarfRegNum(Reg, TRI);
-  unsigned Size = TRI->getSpillSize(*TRI->getMinimalPhysRegClass(Reg));
+  auto ByteWidth = AP.MF->getDataLayout().getByteWidth();
+  unsigned Size = 
+      divideCeil(TRI->getSpillSizeInBits(*TRI->getMinimalPhysRegClass(Reg)),
+                 ByteWidth);
   return LiveOutReg(Reg, DwarfRegNum, Size);
 }
 

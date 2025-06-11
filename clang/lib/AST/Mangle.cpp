@@ -254,7 +254,8 @@ void MangleContext::mangleName(GlobalDecl GD, raw_ostream &Out) {
     ArgWords += llvm::alignTo(ASTContext.getTypeSize(AT), DefaultPtrWidth) /
                 DefaultPtrWidth;
   }
-  Out << ((DefaultPtrWidth / 8) * ArgWords);
+  auto ByteWidth = ASTContext.getTargetInfo().getByteWidth();
+  Out << (llvm::divideCeil(DefaultPtrWidth, ByteWidth) * ArgWords);
 }
 
 void MangleContext::mangleMSGuidDecl(const MSGuidDecl *GD,
