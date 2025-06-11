@@ -379,7 +379,8 @@ bool clang::interp::DoBitCastPtr(InterpState &S, CodePtr OpPC,
     return false;
 
   const ASTContext &ASTCtx = S.getASTContext();
-  BitcastBuffer Buffer(Bytes(Size).toBits());
+  auto ByteWidth = ASTCtx.getTargetInfo().getByteWidth();
+  BitcastBuffer Buffer(Bytes(Size, ByteWidth).toBits());
   readPointerToBuffer(S.getContext(), FromPtr, Buffer,
                       /*ReturnOnUninit=*/false);
 
@@ -407,7 +408,7 @@ bool clang::interp::DoBitCastPtr(InterpState &S, CodePtr OpPC,
           return true;
         }
 
-        Bits BitWidth;
+        Bits BitWidth(0, ByteWidth);
         if (const FieldDecl *FD = P.getField(); FD && FD->isBitField())
           BitWidth = Bits(std::min(FD->getBitWidthValue(),
                                    (unsigned)FullBitWidth.getQuantity()));
