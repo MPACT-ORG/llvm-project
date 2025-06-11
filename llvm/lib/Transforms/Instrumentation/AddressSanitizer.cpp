@@ -1345,8 +1345,8 @@ PreservedAnalyses AddressSanitizerPass::run(Module &M,
   return PA;
 }
 
-static size_t TypeStoreSizeToSizeIndex(uint32_t TypeSize) {
-  size_t Res = llvm::countr_zero(TypeSize / 8);
+static size_t TypeStoreSizeToSizeIndex(uint32_t TypeSize, int16_t ByteWidth) {
+  size_t Res = llvm::countr_zero(divideCeil(TypeSize, ByteWidth));
   assert(Res < kNumberOfAccessSizes);
   return Res;
 }
@@ -1658,9 +1658,10 @@ void AddressSanitizer::instrumentPointerComparisonOrSubtraction(
 static void doInstrumentAddress(AddressSanitizer *Pass, Instruction *I,
                                 Instruction *InsertBefore, Value *Addr,
                                 MaybeAlign Alignment, unsigned Granularity,
-                                TypeSize TypeStoreSize, bool IsWrite,
-                                Value *SizeArgument, bool UseCalls,
-                                uint32_t Exp, RuntimeCallInserter &RTCI) {
+                                uint16_t ByteWidth, TypeSize TypeStoreSize,
+                                bool IsWrite, Value *SizeArgument,
+                                bool UseCalls, uint32_t Exp,
+                                RuntimeCallInserter &RTCI) {
   // Instrument a 1-, 2-, 4-, 8-, or 16- byte access with one check
   // if the data is properly aligned.
   if (!TypeStoreSize.isScalable()) {
@@ -1672,7 +1673,7 @@ static void doInstrumentAddress(AddressSanitizer *Pass, Instruction *I,
     case 64:
     case 128:
       if (!Alignment || *Alignment >= Granularity ||
-          *Alignment >= FixedSize / 8)
+          *Alignment >= divideCeil(FixedSize, ByteWidth))
         return Pass->instrumentAddress(I, InsertBefore, Addr, Alignment,
                                        FixedSize, IsWrite, nullptr, UseCalls,
                                        Exp, RTCI);
@@ -1743,8 +1744,8 @@ void AddressSanitizer::instrumentMaskedLoadOrStore(
       InstrumentedAddress = IRB.CreateGEP(VTy, Addr, {Zero, Index});
     }
     doInstrumentAddress(Pass, I, &*IRB.GetInsertPoint(), InstrumentedAddress,
-                        Alignment, Granularity, ElemTypeSize, IsWrite,
-                        SizeArgument, UseCalls, Exp, RTCI);
+                        Alignment, Granularity, DL.getByteWidth(), ElemTypeSize,
+                        IsWrite, SizeArgument, UseCalls, Exp, RTCI);
   });
 }
 
@@ -1800,8 +1801,8 @@ void AddressSanitizer::instrumentMop(ObjectSizeOffsetVisitor &ObjSizeVis,
                                 UseCalls, Exp, RTCI);
   } else {
     doInstrumentAddress(this, O.getInsn(), O.getInsn(), Addr, O.Alignment,
-                        Granularity, O.TypeStoreSize, O.IsWrite, nullptr,
-                        UseCalls, Exp, RTCI);
+                        Granularity, DL.getByteWidth(), O.TypeStoreSize,
+                        O.IsWrite, nullptr, UseCalls, Exp, RTCI);
   }
 }
 
@@ -1842,9 +1843,11 @@ Value *AddressSanitizer::createSlowPathCmp(IRBuilder<> &IRB, Value *AddrLong,
   Value *LastAccessedByte =
       IRB.CreateAnd(AddrLong, ConstantInt::get(IntptrTy, Granularity - 1));
   // (Addr & (Granularity - 1)) + size - 1
-  if (TypeStoreSize / 8 > 1)
+  if (divideCeil(TypeStoreSize, DL->getByteWidth()) > 1)
     LastAccessedByte = IRB.CreateAdd(
-        LastAccessedByte, ConstantInt::get(IntptrTy, TypeStoreSize / 8 - 1));
+        LastAccessedByte, 
+        ConstantInt::get(IntptrTy, divideCeil(TypeStoreSize,
+                                              DL->getByteWidth()) - 1));
   // (uint8_t) ((Addr & (Granularity-1)) + size - 1)
   LastAccessedByte =
       IRB.CreateIntCast(LastAccessedByte, ShadowValue->getType(), false);
@@ -1913,7 +1916,8 @@ void AddressSanitizer::instrumentAddress(Instruction *OrigIns,
   }
 
   InstrumentationIRBuilder IRB(InsertBefore);
-  size_t AccessSizeIndex = TypeStoreSizeToSizeIndex(TypeStoreSize);
+  size_t AccessSizeIndex = TypeStoreSizeToSizeIndex(TypeStoreSize,
+                                                    DL->getByteWidth());
 
   if (UseCalls && ClOptimizeCallbacks) {
     const ASanAccessInfo AccessInfo(IsWrite, CompileKernel, AccessSizeIndex);
@@ -3202,8 +3206,9 @@ void FunctionStackPoisoner::copyToShadowInline(ArrayRef<uint8_t> ShadowMask,
   if (Begin >= End)
     return;
 
+  auto ByteWidth = ASan.DL->getByteWidth();
   const size_t LargestStoreSizeInBytes =
-      std::min<size_t>(sizeof(uint64_t), ASan.LongSize / 8);
+      std::min<size_t>(sizeof(uint64_t), divideCeil(ASan.LongSize, ByteWidth));
 
   const bool IsLittleEndian = F.getDataLayout().isLittleEndian();
 
@@ -3647,6 +3652,7 @@ void FunctionStackPoisoner::processStaticAllocas() {
     AI->replaceAllUsesWith(NewAllocaPtr);
   }
 
+  auto ByteWidth = ASan.DL->getByteWidth();
   // The left-most redzone has enough space for at least 4 pointers.
   // Write the Magic value to redzone[0].
   Value *BasePlus0 = IRB.CreateIntToPtr(LocalStackBase, IntptrPtrTy);
@@ -3655,7 +3661,8 @@ void FunctionStackPoisoner::processStaticAllocas() {
   // Write the frame description constant to redzone[1].
   Value *BasePlus1 = IRB.CreateIntToPtr(
       IRB.CreateAdd(LocalStackBase,
-                    ConstantInt::get(IntptrTy, ASan.LongSize / 8)),
+                    ConstantInt::get(IntptrTy,
+                                     divideCeil(ASan.LongSize, ByteWidth))),
       IntptrPtrTy);
   GlobalVariable *StackDescriptionGlobal =
       createPrivateGlobalForString(*F.getParent(), DescriptionString,
@@ -3665,7 +3672,8 @@ void FunctionStackPoisoner::processStaticAllocas() {
   // Write the PC to redzone[2].
   Value *BasePlus2 = IRB.CreateIntToPtr(
       IRB.CreateAdd(LocalStackBase,
-                    ConstantInt::get(IntptrTy, 2 * ASan.LongSize / 8)),
+                    ConstantInt::get(IntptrTy, 
+                                     2 * divideCeil(ASan.LongSize, ByteWidth))),
       IntptrPtrTy);
   IRB.CreateStore(IRB.CreatePointerCast(&F, IntptrTy), BasePlus2);
 
@@ -3729,7 +3737,8 @@ void FunctionStackPoisoner::processStaticAllocas() {
                      ShadowBase);
         Value *SavedFlagPtrPtr = IRBPoison.CreateAdd(
             FakeStack,
-            ConstantInt::get(IntptrTy, ClassSize - ASan.LongSize / 8));
+            ConstantInt::get(IntptrTy, ClassSize - divideCeil(ASan.LongSize,
+                                                              ByteWidth)));
         Value *SavedFlagPtr = IRBPoison.CreateLoad(
             IntptrTy, IRBPoison.CreateIntToPtr(SavedFlagPtrPtr, IntptrPtrTy));
         IRBPoison.CreateStore(
@@ -3858,5 +3867,6 @@ bool AddressSanitizer::isSafeAccess(ObjectSizeOffsetVisitor &ObjSizeVis,
   // . Size >= Offset  (unsigned)
   // . Size - Offset >= NeededSize  (unsigned)
   return Offset >= 0 && Size >= uint64_t(Offset) &&
-         Size - uint64_t(Offset) >= TypeStoreSize / 8;
+         Size - uint64_t(Offset) >= divideCeil(TypeStoreSize,
+                                               DL->getByteWidth());
 }

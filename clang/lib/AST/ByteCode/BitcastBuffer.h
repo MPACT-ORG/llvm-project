@@ -35,6 +35,7 @@ struct Bits {
   static Bits zero() { return Bits(0, 0); }
   explicit Bits(size_t Quantity) : N(Quantity) {}
   size_t getQuantity() const { return N; }
+  // TODO(torerik): Maybe change to divideCeil(N, ByteWidth)
   size_t roundToBytes() const { return N / ByteWidth; }
   size_t getOffsetInByte() const { return N % ByteWidth; }
   bool isFullByte() const { return N % ByteWidth == 0; }
