@@ -201,6 +201,7 @@ public:
 
   /// Create a DataLayout.
   const DataLayout createDataLayout() const { return DL; }
+  const DataLayout getDataLayout() const { return DL; }
 
   /// Test if a DataLayout if compatible with the CodeGen for this target.
   ///
