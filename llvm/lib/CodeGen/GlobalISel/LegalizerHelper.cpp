@@ -4079,10 +4079,10 @@ LegalizerHelper::LegalizeResult LegalizerHelper::lowerLoad(GAnyLoad &LoadMI) {
 
   auto ByteWidth = MIRBuilder.getDataLayout().getByteWidth();
   MachineMemOperand *LargeMMO =
-      MF.getMachineMemOperand(&MMO, 0, LargeSplitSize / ByteWidth);
+      MF.getMachineMemOperand(&MMO, 0, divideCeil(LargeSplitSize, ByteWidth));
   MachineMemOperand *SmallMMO =
-      MF.getMachineMemOperand(&MMO, LargeSplitSize / ByteWidth,
-                              SmallSplitSize / ByteWidth);
+      MF.getMachineMemOperand(&MMO, divideCeil(LargeSplitSize, ByteWidth),
+                              divideCeil(SmallSplitSize, ByteWidth));
 
   LLT PtrTy = MRI.getType(PtrReg);
   unsigned AnyExtSize = PowerOf2Ceil(DstTy.getSizeInBits());
@@ -4091,7 +4091,8 @@ LegalizerHelper::LegalizeResult LegalizerHelper::lowerLoad(GAnyLoad &LoadMI) {
                                              PtrReg, *LargeMMO);
 
   auto OffsetCst = MIRBuilder.buildConstant(LLT::scalar(PtrTy.getSizeInBits()),
-                                            LargeSplitSize / ByteWidth);
+                                            divideCeil(LargeSplitSize,
+                                                       ByteWidth));
   Register PtrAddReg = MRI.createGenericVirtualRegister(PtrTy);
   auto SmallPtr = MIRBuilder.buildPtrAdd(PtrAddReg, PtrReg, OffsetCst);
   auto SmallLoad = MIRBuilder.buildLoadInstr(LoadMI.getOpcode(), AnyExtTy,
@@ -4200,15 +4201,15 @@ LegalizerHelper::LegalizeResult LegalizerHelper::lowerStore(GStore &StoreMI) {
   // Generate the PtrAdd and truncating stores.
   LLT PtrTy = MRI.getType(PtrReg);
   auto OffsetCst = MIRBuilder.buildConstant(
-    LLT::scalar(PtrTy.getSizeInBits()), LargeSplitSize / ByteWidth);
+    LLT::scalar(PtrTy.getSizeInBits()), divideCeil(LargeSplitSize, ByteWidth));
   auto SmallPtr =
     MIRBuilder.buildPtrAdd(PtrTy, PtrReg, OffsetCst);
 
   MachineMemOperand *LargeMMO =
-    MF.getMachineMemOperand(&MMO, 0, LargeSplitSize / ByteWidth);
+    MF.getMachineMemOperand(&MMO, 0, divideCeil(LargeSplitSize, ByteWidth));
   MachineMemOperand *SmallMMO =
-    MF.getMachineMemOperand(&MMO, LargeSplitSize / ByteWidth, 
-                            SmallSplitSize / ByteWidth);
+    MF.getMachineMemOperand(&MMO, divideCeil(LargeSplitSize, ByteWidth), 
+                            divideCeil(SmallSplitSize, ByteWidth));
   MIRBuilder.buildStore(ExtVal, PtrReg, *LargeMMO);
   MIRBuilder.buildStore(SmallVal, SmallPtr, *SmallMMO);
   StoreMI.eraseFromParent();
@@ -4767,7 +4768,8 @@ Register LegalizerHelper::getVectorElementPointer(Register VecPtr, LLT VecTy,
 
   auto ByteWidth = MIRBuilder.getDataLayout().getByteWidth();
   // Calculate the element offset and add it to the pointer.
-  unsigned EltSize = EltTy.getSizeInBits() / ByteWidth; // FIXME: should be ABI size.
+  // FIXME: should be ABI size.
+  unsigned EltSize = divideCeil(EltTy.getSizeInBits(), ByteWidth);
   assert(EltSize * 8 == EltTy.getSizeInBits() &&
          "Converting bits to bytes lost precision");
 
@@ -5274,7 +5276,7 @@ LegalizerHelper::reduceLoadStoreWidth(GLoadStore &LdStMI, unsigned TypeIdx,
     unsigned PartSize = PartTy.getSizeInBits();
     for (unsigned Idx = 0, E = NumParts; Idx != E && Offset < TotalSize;
          ++Idx) {
-      unsigned ByteOffset = Offset / ByteWidth;
+      unsigned ByteOffset = divideCeil(Offset, ByteWidth);
       Register NewAddrReg;
 
       MIRBuilder.materializePtrAdd(NewAddrReg, AddrReg, OffsetTy, ByteOffset);
@@ -9028,12 +9030,12 @@ LegalizerHelper::lowerBitreverse(MachineInstr &MI) {
   if (Size >= ByteWidth) {
     if (SrcTy.isVector() && (VSize % 8 == 0) &&
         (LI.isLegal({TargetOpcode::G_BITREVERSE,
-                     {LLT::fixed_vector(VSize / ByteWidth, ByteWidth),
-                      LLT::fixed_vector(VSize / ByteWidth, ByteWidth)}}))) {
+            {LLT::fixed_vector(divideCeil(VSize, ByteWidth), ByteWidth),
+             LLT::fixed_vector(divideCeil(VSize, ByteWidth), ByteWidth)}}))) {
       // If bitreverse is legal for i8 vector of the same size, then cast
       // to i8 vector type.
       // e.g. v4s32 -> v16s8
-      LLT VTy = LLT::fixed_vector(VSize / ByteWidth, ByteWidth);
+      LLT VTy = LLT::fixed_vector(divideCeil(VSize, ByteWidth), ByteWidth);
       auto BSWAP = MIRBuilder.buildBSwap(SrcTy, Src);
       auto Cast = MIRBuilder.buildBitcast(VTy, BSWAP);
       auto RBIT = MIRBuilder.buildBitReverse(VTy, Cast);

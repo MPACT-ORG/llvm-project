@@ -20875,7 +20875,7 @@ SDValue DAGCombiner::ReduceLoadOpStoreWidth(SDNode *N) {
       unsigned PtrAdjustmentInBits = DAG.getDataLayout().isBigEndian()
                                          ? VTStoreSize - NewBW - ShAmt
                                          : ShAmt;
-      PtrOff = PtrAdjustmentInBits / DLByteWidth;
+      PtrOff = divideCeil(PtrAdjustmentInBits, DLByteWidth);
 
       // Now check if narrow access is allowed and fast, considering alignments.
       unsigned IsFast = 0;
@@ -22339,7 +22339,7 @@ SDValue DAGCombiner::replaceStoreOfInsertLoad(StoreSDNode *ST) {
   SDValue NewPtr;
   if (auto *CIdx = dyn_cast<ConstantSDNode>(Idx)) {
     unsigned COffset = 
-        CIdx->getSExtValue() * EltVT.getSizeInBits() / DLByteWidth;
+        CIdx->getSExtValue() * divideCeil(EltVT.getSizeInBits(), DLByteWidth);
     NewPtr = DAG.getMemBasePlusOffset(Ptr, TypeSize::getFixed(COffset), DL);
     PointerInfo = ST->getPointerInfo().getWithOffset(COffset);
   } else {
@@ -22759,12 +22759,14 @@ SDValue DAGCombiner::splitMergedValStore(StoreSDNode *ST) {
                              ST->getBaseAlign(), MMOFlags, AAInfo);
   Ptr =
       DAG.getMemBasePlusOffset(Ptr, 
-                               TypeSize::getFixed(HalfValBitSize / DLByteWidth),
+                               TypeSize::getFixed(divideCeil(HalfValBitSize,
+                                                             DLByteWidth)),
                                DL);
   // Higher value store.
   SDValue St1 = DAG.getStore(St0, DL, Hi, Ptr, 
                              ST->getPointerInfo()
-                               .getWithOffset(HalfValBitSize / DLByteWidth),
+                               .getWithOffset(divideCeil(HalfValBitSize,
+                                                         DLByteWidth)),
       ST->getBaseAlign(), MMOFlags, AAInfo);
   return St1;
 }
@@ -22985,18 +22987,20 @@ SDValue DAGCombiner::combineInsertEltToLoad(SDNode *N, unsigned InsIndex) {
   // load.
   if (InsIndex == 0) {
     if (!DAG.areNonVolatileConsecutiveLoads(ScalarLoad, VecLoad, 
-                                            EltSize / DLByteWidth, -1))
+                                            divideCeil(EltSize, DLByteWidth),
+                                            -1))
       return SDValue();
   } else {
     if (!DAG.areNonVolatileConsecutiveLoads(
             VecLoad, ScalarLoad, 
-            VT.getVectorNumElements() * EltSize / DLByteWidth, -1))
+            VT.getVectorNumElements() * divideCeil(EltSize, DLByteWidth), -1))
       return SDValue();
   }
 
   // And that the new unaligned load will be fast.
   unsigned IsFast = 0;
-  Align NewAlign = commonAlignment(VecLoad->getAlign(), EltSize / DLByteWidth);
+  Align NewAlign = commonAlignment(VecLoad->getAlign(),
+                                   divideCeil(EltSize, DLByteWidth));
   if (!TLI.allowsMemoryAccess(*DAG.getContext(), DAG.getDataLayout(),
                               Vec.getValueType(), VecLoad->getAddressSpace(),
                               NewAlign, VecLoad->getMemOperand()->getFlags(),
@@ -23009,12 +23013,12 @@ SDValue DAGCombiner::combineInsertEltToLoad(SDNode *N, unsigned InsIndex) {
   SDValue Ptr = ScalarLoad->getBasePtr();
   if (InsIndex != 0)
     Ptr = DAG.getNode(ISD::ADD, DL, Ptr.getValueType(), VecLoad->getBasePtr(),
-                      DAG.getConstant(EltSize / DLByteWidth, DL, 
+                      DAG.getConstant(divideCeil(EltSize, DLByteWidth), DL, 
                       Ptr.getValueType()));
   MachinePointerInfo PtrInfo =
       InsIndex == 0 ? ScalarLoad->getPointerInfo()
                     : VecLoad->getPointerInfo()
-                             .getWithOffset(EltSize / DLByteWidth);
+                             .getWithOffset(divideCeil(EltSize, DLByteWidth));
 
   SDValue Load = DAG.getLoad(VecLoad->getValueType(0), DL,
                              ScalarLoad->getChain(), Ptr, PtrInfo, NewAlign);
@@ -27998,7 +28002,7 @@ SDValue DAGCombiner::XformToShuffleWithZero(SDNode *N) {
   // Determine maximum split level (byte level masking).
   int MaxSplit = 1;
   if (RVT.getScalarSizeInBits() % DLByteWidth == 0)
-    MaxSplit = RVT.getScalarSizeInBits() / DLByteWidth;
+    MaxSplit = divideCeil(RVT.getScalarSizeInBits(), DLByteWidth);
 
   for (int Split = 1; Split <= MaxSplit; ++Split)
     if (RVT.getScalarSizeInBits() % Split == 0)

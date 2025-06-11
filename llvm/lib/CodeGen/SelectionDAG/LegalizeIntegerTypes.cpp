@@ -4812,7 +4812,8 @@ void DAGTypeLegalizer::ExpandIntRes_ShiftThroughStack(SDNode *N, SDValue &Lo,
 
   unsigned VTBitWidth = VT.getScalarSizeInBits();
   assert(VTBitWidth % 8 == 0 && "Shifting a not byte multiple value?");
-  unsigned VTByteWidth = VTBitWidth / DAG.getDataLayout().getByteWidth();
+  unsigned VTByteWidth = divideCeil(VTBitWidth, 
+                                    DAG.getDataLayout().getByteWidth());
   assert(isPowerOf2_32(VTByteWidth) &&
          "Shiftee type size is not a power of two!");
   unsigned StackSlotByteWidth = 2 * VTByteWidth;

@@ -1404,8 +1404,8 @@ void DAGTypeLegalizer::IncrementPointer(MemSDNode *N, EVT MemVT,
                                         MachinePointerInfo &MPI, SDValue &Ptr,
                                         uint64_t *ScaledOffset) {
   SDLoc DL(N);
-  unsigned IncrementSize = MemVT.getSizeInBits().getKnownMinValue() /
-                           DAG.getDataLayout().getByteWidth();
+  unsigned IncrementSize = divideCeil(MemVT.getSizeInBits().getKnownMinValue(),
+                                      DAG.getDataLayout().getByteWidth());
 
   if (MemVT.isScalableVector()) {
     SDValue BytesIncrement = DAG.getVScale(
@@ -2028,8 +2028,8 @@ void DAGTypeLegalizer::SplitVecRes_INSERT_VECTOR_ELT(SDNode *N, SDValue &Lo,
   Store = DAG.getTruncStore(
       Store, dl, Elt, EltPtr, MachinePointerInfo::getUnknownStack(MF), EltVT,
       commonAlignment(SmallestAlign,
-                      EltVT.getFixedSizeInBits() / 
-                      DAG.getDataLayout().getByteWidth()));
+                      divideCeil(EltVT.getFixedSizeInBits(),
+                                 DAG.getDataLayout().getByteWidth())));
 
   EVT LoVT, HiVT;
   std::tie(LoVT, HiVT) = DAG.GetSplitDestVTs(VecVT);
@@ -2284,8 +2284,8 @@ void DAGTypeLegalizer::SplitVecRes_VP_STRIDED_LOAD(VPStridedLoadSDNode *SLD,
     Align Alignment = SLD->getBaseAlign();
     if (LoMemVT.isScalableVector())
       Alignment = commonAlignment(
-          Alignment, LoMemVT.getSizeInBits().getKnownMinValue() /
-                     DAG.getDataLayout().getByteWidth());
+          Alignment, divideCeil(LoMemVT.getSizeInBits().getKnownMinValue(),
+                                DAG.getDataLayout().getByteWidth()));
 
     MachineMemOperand *MMO = DAG.getMachineFunction().getMachineMemOperand(
         MachinePointerInfo(SLD->getPointerInfo().getAddrSpace()),
@@ -3193,8 +3193,8 @@ void DAGTypeLegalizer::SplitVecRes_VP_REVERSE(SDNode *N, SDValue &Lo,
       PtrInfo, MachineMemOperand::MOLoad, LocationSize::beforeOrAfterPointer(),
       Alignment);
 
-  unsigned EltWidth = VT.getScalarSizeInBits() /
-                      DAG.getDataLayout().getByteWidth();
+  unsigned EltWidth = divideCeil(VT.getScalarSizeInBits(),
+                                 DAG.getDataLayout().getByteWidth());
   SDValue NumElemMinus1 =
       DAG.getNode(ISD::SUB, DL, PtrVT, DAG.getZExtOrTrunc(EVL, DL, PtrVT),
                   DAG.getConstant(1, DL, PtrVT));
@@ -3833,8 +3833,9 @@ SDValue DAGTypeLegalizer::SplitVecOp_EXTRACT_VECTOR_ELT(SDNode *N) {
   return DAG.getExtLoad(
       ISD::EXTLOAD, dl, N->getValueType(0), Store, StackPtr,
       MachinePointerInfo::getUnknownStack(DAG.getMachineFunction()), EltVT,
-      commonAlignment(SmallestAlign, EltVT.getFixedSizeInBits() /
-                                     DAG.getDataLayout().getByteWidth()));
+      commonAlignment(SmallestAlign,
+                      divideCeil(EltVT.getFixedSizeInBits(),
+                                 DAG.getDataLayout().getByteWidth())));
 }
 
 SDValue DAGTypeLegalizer::SplitVecOp_ExtVecInRegOp(SDNode *N) {
@@ -3916,9 +3917,10 @@ SDValue DAGTypeLegalizer::SplitVecOp_VP_STORE(VPStoreSDNode *N, unsigned OpNo) {
 
   MachinePointerInfo MPI;
   if (LoMemVT.isScalableVector()) {
-    Alignment = commonAlignment(Alignment,
-                                LoMemVT.getSizeInBits().getKnownMinValue() /
-                                DAG.getDataLayout().getByteWidth());
+    Alignment = 
+        commonAlignment(Alignment,
+                        divideCeil(LoMemVT.getSizeInBits().getKnownMinValue(),
+                                   DAG.getDataLayout().getByteWidth()));
     MPI = MachinePointerInfo(N->getPointerInfo().getAddrSpace());
   } else
     MPI = N->getPointerInfo().getWithOffset(
@@ -3993,9 +3995,10 @@ SDValue DAGTypeLegalizer::SplitVecOp_VP_STRIDED_STORE(VPStridedStoreSDNode *N,
 
   Align Alignment = N->getBaseAlign();
   if (LoMemVT.isScalableVector())
-    Alignment = commonAlignment(Alignment,
-                                LoMemVT.getSizeInBits().getKnownMinValue() /
-                                DAG.getDataLayout().getByteWidth());
+    Alignment = 
+        commonAlignment(Alignment,
+                        divideCeil(LoMemVT.getSizeInBits().getKnownMinValue(),
+                                   DAG.getDataLayout().getByteWidth()));
 
   MachineMemOperand *MMO = DAG.getMachineFunction().getMachineMemOperand(
       MachinePointerInfo(N->getPointerInfo().getAddrSpace()),
@@ -4070,8 +4073,8 @@ SDValue DAGTypeLegalizer::SplitVecOp_MSTORE(MaskedStoreSDNode *N,
     MachinePointerInfo MPI;
     if (LoMemVT.isScalableVector()) {
       Alignment = commonAlignment(
-          Alignment, LoMemVT.getSizeInBits().getKnownMinValue() /
-                     DAG.getDataLayout().getByteWidth());
+          Alignment, divideCeil(LoMemVT.getSizeInBits().getKnownMinValue(),
+                                DAG.getDataLayout().getByteWidth()));
       MPI = MachinePointerInfo(N->getPointerInfo().getAddrSpace());
     } else
       MPI = N->getPointerInfo().getWithOffset(
@@ -8050,8 +8053,8 @@ DAGTypeLegalizer::GenWidenVectorExtLoads(SmallVectorImpl<SDValue> &LdChain,
   // Load each element and widen.
   unsigned WidenNumElts = WidenVT.getVectorNumElements();
   SmallVector<SDValue, 16> Ops(WidenNumElts);
-  unsigned Increment = LdEltVT.getSizeInBits() /
-                       DAG.getDataLayout().getByteWidth();
+  unsigned Increment = divideCeil(LdEltVT.getSizeInBits(),
+                                  DAG.getDataLayout().getByteWidth());
   Ops[0] =
       DAG.getExtLoad(ExtType, dl, EltVT, Chain, BasePtr, LD->getPointerInfo(),
                      LdEltVT, LD->getBaseAlign(), MMOFlags, AAInfo);
