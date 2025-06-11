@@ -40,13 +40,13 @@ using namespace llvm;
 unsigned TargetLoweringBase::getMaxAtomicSizeInBytesSupported() const
 {
   return divideCeil(getMaxAtomicSizeInBitsSupported(),
-                    getTargetMachine().createDataLayout().getByteWidth());
+                    getTargetMachine().getDataLayout().getByteWidth());
 }
 
 unsigned TargetLoweringBase::getMinCmpXchgSizeInBytes() const
 {
   return divideCeil(getMinCmpXchgSizeInBits(),
-                    getTargetMachine().createDataLayout().getByteWidth());
+                    getTargetMachine().getDataLayout().getByteWidth());
 }
 
 /// NOTE: The TargetMachine owns TLOF.
@@ -225,7 +225,7 @@ bool TargetLowering::findOptimalMemOpLowering(
 
   EVT VT = getOptimalMemOpType(Op, FuncAttributes);
 
-  auto ByteWidth = getTargetMachine().createDataLayout().getByteWidth();
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
   if (VT == MVT::Other) {
     // Use the largest integer type whose alignment constraints are satisfied.
     // We only need to check DstAlign here as SrcAlign is always greater or
@@ -4731,7 +4731,7 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
         isa<LoadSDNode>(N0.getOperand(0)) &&
         N0.getOperand(0).getNode()->hasOneUse() &&
         isa<ConstantSDNode>(N0.getOperand(1))) {
-      auto ByteWidth = getTargetMachine().createDataLayout().getByteWidth();
+      auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
       auto *Lod = cast<LoadSDNode>(N0.getOperand(0));
       APInt bestMask;
       unsigned bestWidth = 0, bestOffset = 0;
@@ -10053,7 +10053,7 @@ TargetLowering::scalarizeVectorLoad(LoadSDNode *LD,
     return std::make_pair(Value, Load.getValue(1));
   }
 
-  auto ByteWidth = getTargetMachine().createDataLayout().getByteWidth();
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
   unsigned Stride = divideCeil(SrcEltVT.getSizeInBits(), ByteWidth);
   assert(SrcEltVT.isByteSized());
 
@@ -10130,7 +10130,7 @@ SDValue TargetLowering::scalarizeVectorStore(StoreSDNode *ST,
   }
 
   // Store Stride in bytes
-  auto ByteWidth = getTargetMachine().createDataLayout().getByteWidth();
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
   unsigned Stride = divideCeil(MemSclVT.getSizeInBits(), ByteWidth);
   assert(Stride && "Zero stride!");
   // Extract each of the elements from the original vector and save them into
@@ -10164,7 +10164,7 @@ TargetLowering::expandUnalignedLoad(LoadSDNode *LD, SelectionDAG &DAG) const {
   EVT LoadedVT = LD->getMemoryVT();
   SDLoc dl(LD);
   auto &MF = DAG.getMachineFunction();
-  auto ByteWidth = getTargetMachine().createDataLayout().getByteWidth();
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
 
   if (VT.isFloatingPoint() || VT.isVector()) {
     EVT intVT = EVT::getIntegerVT(*DAG.getContext(), LoadedVT.getSizeInBits());
@@ -10316,7 +10316,7 @@ SDValue TargetLowering::expandUnalignedStore(StoreSDNode *ST,
   EVT StoreMemVT = ST->getMemoryVT();
 
   SDLoc dl(ST);
-  auto ByteWidth = getTargetMachine().createDataLayout().getByteWidth();
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
   if (StoreMemVT.isFloatingPoint() || StoreMemVT.isVector()) {
     EVT intVT = EVT::getIntegerVT(*DAG.getContext(), VT.getSizeInBits());
     if (isTypeLegal(intVT)) {
@@ -10462,7 +10462,7 @@ TargetLowering::IncrementMemoryAddress(SDValue Addr, SDValue Mask,
     Increment = DAG.getNode(ISD::CTPOP, DL, MaskIntVT, MaskInIntReg);
     Increment = DAG.getZExtOrTrunc(Increment, DL, AddrVT);
     // Scale is an element size in bytes.
-    auto ByteWidth = getTargetMachine().createDataLayout().getByteWidth();
+    auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
     SDValue Scale = DAG.getConstant(divideCeil(DataVT.getScalarSizeInBits(),
                                                ByteWidth),
                                     DL, AddrVT);
@@ -10531,7 +10531,7 @@ SDValue TargetLowering::getVectorSubVecPointer(SelectionDAG &DAG,
   EVT EltVT = VecVT.getVectorElementType();
 
   // Calculate the element offset and add it to the pointer.
-  auto ByteWidth = getTargetMachine().createDataLayout().getByteWidth();
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
   // FIXME: should be ABI size.
   unsigned EltSize = divideCeil(EltVT.getFixedSizeInBits(), ByteWidth);
   // TODO(torerik): loss of precision might happen if EltSize is not a multiple

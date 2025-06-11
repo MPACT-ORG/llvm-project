@@ -10950,7 +10950,7 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
       unsigned NumRegs = getNumRegisters(CLI.RetTy->getContext(), RetVT);
       unsigned RegisterVTByteSZ = divideCeil(RegisterVT.getSizeInBits(),
                                              getTargetMachine()
-                                                 .createDataLayout()
+                                                 .getDataLayout()
                                                  .getByteWidth());
       RetTys.append(NumRegs, RegisterVT);
       for (unsigned j = 0; j != NumRegs; ++j)

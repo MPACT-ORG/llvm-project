@@ -1584,7 +1584,7 @@ SDValue SelectionDAGLegalize::ExpandVectorBuildThroughStack(SDNode* Node) {
   // Emit a store of each element to the stack slot.
   SmallVector<SDValue, 8> Stores;
   unsigned TypeByteSize = divideCeil(MemVT.getSizeInBits(),
-                                     TM.createDataLayout().getByteWidth());
+                                     TM.getDataLayout().getByteWidth());
   assert(TypeByteSize > 0 && "Vector element type too small for stack store!");
 
   // If the destination vector element type of a BUILD_VECTOR is narrower than
