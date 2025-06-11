@@ -3230,7 +3230,6 @@ inline bool BitCastPrim(InterpState &S, CodePtr OpPC, bool TargetIsUCharOrByte,
     S.Stk.push<Pointer>();
     return true;
   } else {
-
     size_t BuffSize = ResultBitWidth / 8;
     llvm::SmallVector<std::byte> Buff(BuffSize);
     bool HasIndeterminateBits = false;

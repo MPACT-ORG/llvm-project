@@ -37,6 +37,7 @@
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
@@ -472,8 +473,9 @@ int RegAllocFastImpl::getStackSpaceFor(Register VirtReg) {
 
   // Allocate a new stack object for this spill location...
   const TargetRegisterClass &RC = *MRI->getRegClass(VirtReg);
-  unsigned Size = TRI->getSpillSize(RC);
-  Align Alignment = TRI->getSpillAlign(RC);
+  auto ByteWidth = MBB->getParent()->getDataLayout().getByteWidth();
+  unsigned Size = divideCeil(TRI->getSpillSizeInBits(RC), ByteWidth);
+  Align Alignment = Align(divideCeil(TRI->getSpillAlignInBits(RC), ByteWidth));
   int FrameIdx = MFI->CreateSpillStackObject(Size, Alignment);
 
   // Assign the slot.

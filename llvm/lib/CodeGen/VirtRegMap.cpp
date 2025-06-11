@@ -37,6 +37,7 @@
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/Config/llvm-config.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/MC/LaneBitmask.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Compiler.h"
@@ -94,8 +95,9 @@ void VirtRegMap::assignVirt2Phys(Register virtReg, MCRegister physReg) {
 }
 
 unsigned VirtRegMap::createSpillSlot(const TargetRegisterClass *RC) {
-  unsigned Size = TRI->getSpillSize(*RC);
-  Align Alignment = TRI->getSpillAlign(*RC);
+  auto ByteWidth = MF->getDataLayout().getByteWidth();
+  unsigned Size = divideCeil(TRI->getSpillSizeInBits(*RC), ByteWidth);
+  Align Alignment = Align(divideCeil(TRI->getSpillAlignInBits(*RC), ByteWidth));
   // Set preferred alignment if we are still able to realign the stack
   auto &ST = MF->getSubtarget();
   Align CurrentAlign = ST.getFrameLowering()->getStackAlign();
