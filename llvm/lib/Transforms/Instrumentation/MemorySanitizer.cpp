@@ -822,11 +822,12 @@ void MemorySanitizer::createKernelApi(Module &M, const TargetLibraryInfo &TLI) {
 
   // Requests the per-task context state (kmsan_context_state*) from the
   // runtime library.
+  auto ByteWidth = M.getDataLayout().getByteWidth();
   MsanContextStateTy = StructType::get(
-      ArrayType::get(IRB.getInt64Ty(), kParamTLSSize / 8),
-      ArrayType::get(IRB.getInt64Ty(), kRetvalTLSSize / 8),
-      ArrayType::get(IRB.getInt64Ty(), kParamTLSSize / 8),
-      ArrayType::get(IRB.getInt64Ty(), kParamTLSSize / 8), /* va_arg_origin */
+      ArrayType::get(IRB.getInt64Ty(), divideCeil(kParamTLSSize, ByteWidth)),
+      ArrayType::get(IRB.getInt64Ty(), divideCeil(kRetvalTLSSize, ByteWidth)),
+      ArrayType::get(IRB.getInt64Ty(), divideCeil(kParamTLSSize, ByteWidth)),
+      ArrayType::get(IRB.getInt64Ty(), divideCeil(kParamTLSSize, ByteWidth)), /* va_arg_origin */
       IRB.getInt64Ty(), ArrayType::get(OriginTy, kParamTLSSize / 4), OriginTy,
       OriginTy);
   MsanGetContextStateFn =
@@ -885,16 +886,19 @@ void MemorySanitizer::createUserspaceApi(Module &M,
     WarningFn = M.getOrInsertFunction(WarningFnName, IRB.getVoidTy());
   }
 
+  auto ByteWidth = M.getDataLayout().getByteWidth();
   // Create the global TLS variables.
   RetvalTLS =
       getOrInsertGlobal(M, "__msan_retval_tls",
-                        ArrayType::get(IRB.getInt64Ty(), kRetvalTLSSize / 8));
+                        ArrayType::get(IRB.getInt64Ty(),
+                                       divideCeil(kRetvalTLSSize, ByteWidth)));
 
   RetvalOriginTLS = getOrInsertGlobal(M, "__msan_retval_origin_tls", OriginTy);
 
   ParamTLS =
       getOrInsertGlobal(M, "__msan_param_tls",
-                        ArrayType::get(IRB.getInt64Ty(), kParamTLSSize / 8));
+                        ArrayType::get(IRB.getInt64Ty(),
+                                       divideCeil(kParamTLSSize, ByteWidth)));
 
   ParamOriginTLS =
       getOrInsertGlobal(M, "__msan_param_origin_tls",
@@ -902,7 +906,8 @@ void MemorySanitizer::createUserspaceApi(Module &M,
 
   VAArgTLS =
       getOrInsertGlobal(M, "__msan_va_arg_tls",
-                        ArrayType::get(IRB.getInt64Ty(), kParamTLSSize / 8));
+                        ArrayType::get(IRB.getInt64Ty(),
+                                       divideCeil(kParamTLSSize, ByteWidth)));
 
   VAArgOriginTLS =
       getOrInsertGlobal(M, "__msan_va_arg_origin_tls",
@@ -1130,14 +1135,14 @@ struct MemorySanitizerVisitor;
 static VarArgHelper *CreateVarArgHelper(Function &Func, MemorySanitizer &Msan,
                                         MemorySanitizerVisitor &Visitor);
 
-static unsigned TypeSizeToSizeIndex(TypeSize TS) {
+static unsigned TypeSizeToSizeIndex(TypeSize TS, unsigned ByteWidth) {
   if (TS.isScalable())
     // Scalable types unconditionally take slowpaths.
     return kNumberOfAccessSizes;
   unsigned TypeSizeFixed = TS.getFixedValue();
   if (TypeSizeFixed <= 8)
     return 0;
-  return Log2_32_Ceil((TypeSizeFixed + 7) / 8);
+  return Log2_32_Ceil(divideCeil(TypeSizeFixed, ByteWidth));
 }
 
 namespace {
@@ -1329,7 +1334,8 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     }
 
     TypeSize TypeSizeInBits = DL.getTypeSizeInBits(ConvertedShadow->getType());
-    unsigned SizeIndex = TypeSizeToSizeIndex(TypeSizeInBits);
+    auto ByteWidth = F.getDataLayout().getByteWidth();
+    unsigned SizeIndex = TypeSizeToSizeIndex(TypeSizeInBits, ByteWidth);
     if (instrumentWithCalls(ConvertedShadow) &&
         SizeIndex < kNumberOfAccessSizes && !MS.CompileKernel) {
       FunctionCallee Fn = MS.MaybeStoreOriginFn[SizeIndex];
@@ -1423,7 +1429,8 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
                            Value *Origin) {
     const DataLayout &DL = F.getDataLayout();
     TypeSize TypeSizeInBits = DL.getTypeSizeInBits(ConvertedShadow->getType());
-    unsigned SizeIndex = TypeSizeToSizeIndex(TypeSizeInBits);
+    auto ByteWidth = F.getDataLayout().getByteWidth();
+    unsigned SizeIndex = TypeSizeToSizeIndex(TypeSizeInBits, ByteWidth);
     if (instrumentWithCalls(ConvertedShadow) &&
         SizeIndex < kNumberOfAccessSizes && !MS.CompileKernel) {
       FunctionCallee Fn = MS.MaybeWarningFn[SizeIndex];
