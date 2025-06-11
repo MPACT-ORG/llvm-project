@@ -32,6 +32,7 @@
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -226,8 +227,9 @@ RegScavenger::spill(Register Reg, const TargetRegisterClass &RC, int SPAdj,
   // the requirements of the class RC.
   const MachineFunction &MF = *Before->getMF();
   const MachineFrameInfo &MFI = MF.getFrameInfo();
-  unsigned NeedSize = TRI->getSpillSize(RC);
-  Align NeedAlign = TRI->getSpillAlign(RC);
+  auto ByteWidth = MF.getDataLayout().getByteWidth();
+  unsigned NeedSize = divideCeil(TRI->getSpillSizeInBits(RC), ByteWidth);
+  Align NeedAlign = Align(divideCeil(TRI->getSpillAlignInBits(RC), ByteWidth));
 
   unsigned SI = Scavenged.size(), Diff = std::numeric_limits<unsigned>::max();
   int FIB = MFI.getObjectIndexBegin(), FIE = MFI.getObjectIndexEnd();

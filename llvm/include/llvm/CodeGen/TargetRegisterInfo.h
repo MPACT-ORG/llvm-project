@@ -297,15 +297,23 @@ public:
   }
 
   /// Return the size in bytes of the stack slot allocated to hold a spilled
-  /// copy of a register from class RC.
+  /// copy of a register from class RC. This assumes byte width is 8 bits.
   unsigned getSpillSize(const TargetRegisterClass &RC) const {
     return getRegClassInfo(RC).SpillSize / 8;
   }
 
+  unsigned getSpillSizeInBits(const TargetRegisterClass &RC) const {
+    return getRegClassInfo(RC).SpillSize;
+  }
+
   /// Return the minimum required alignment in bytes for a spill slot for
-  /// a register of this class.
+  /// a register of this class. This assumes byte width is 8 bits.
   Align getSpillAlign(const TargetRegisterClass &RC) const {
     return Align(getRegClassInfo(RC).SpillAlignment / 8);
+  }
+
+  unsigned getSpillAlignInBits(const TargetRegisterClass &RC) const {
+    return getRegClassInfo(RC).SpillAlignment;
   }
 
   /// Return true if the given TargetRegisterClass has the ValueType T.
