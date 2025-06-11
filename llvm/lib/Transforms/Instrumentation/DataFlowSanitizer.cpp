@@ -418,11 +418,7 @@ transformFunctionAttributes(const TransformedFunction &TransformedFunction,
 class DataFlowSanitizer {
   friend struct DFSanFunction;
   friend class DFSanVisitor;
-
-  enum { ShadowWidthBits = 8, ShadowWidthBytes = ShadowWidthBits / 8 };
-
-  enum { OriginWidthBits = 32, OriginWidthBytes = OriginWidthBits / 8 };
-
+  
   /// How should calls to uninstrumented functions be handled?
   enum WrapperKind {
     /// This function is present in an uninstrumented form but we don't know
@@ -510,6 +506,12 @@ class DataFlowSanitizer {
   DenseMap<Value *, Function *> UnwrappedFnMap;
   AttributeMask ReadOnlyNoneAttrs;
   StringSet<> CombineTaintLookupTableNames;
+  int ShadowWidthBits;
+  int OriginWidthBits;
+
+
+  int getShadowWidthBytes() const;
+  int getOriginWidthBytes() const;
 
   /// Memory map parameters used in calculation mapping application addresses
   /// to shadow addresses and origin addresses.
@@ -569,7 +571,9 @@ class DataFlowSanitizer {
   /// Returns the shadow type of V's type.
   Type *getShadowTy(Value *V);
 
-  const uint64_t NumOfElementsInArgOrgTLS = ArgTLSSize / OriginWidthBytes;
+  uint64_t getNumOfElementsInArgOrgTLS() {
+    return ArgTLSSize / getOriginWidthBytes();
+  }
 
 public:
   DataFlowSanitizer(const std::vector<std::string> &ABIListFiles);
@@ -924,7 +928,7 @@ bool DataFlowSanitizer::isZeroShadow(Value *V) {
 }
 
 bool DataFlowSanitizer::hasLoadSizeForFastPath(uint64_t Size) {
-  uint64_t ShadowSize = Size * ShadowWidthBytes;
+  uint64_t ShadowSize = Size * getShadowWidthBytes();
   return ShadowSize % 8 == 0 || ShadowSize == 4;
 }
 
@@ -1147,6 +1151,8 @@ bool DataFlowSanitizer::initializeModule(Module &M) {
 
   Mod = &M;
   Ctx = &M.getContext();
+  ShadowWidthBits = M.getDataLayout().getByteWidth();
+  OriginWidthBits = 32;
   Int8Ptr = PointerType::getUnqual(*Ctx);
   OriginTy = IntegerType::get(*Ctx, OriginWidthBits);
   OriginPtrTy = PointerType::getUnqual(*Ctx);
@@ -1512,14 +1518,17 @@ bool DataFlowSanitizer::runImpl(
     return G;
   };
 
+  auto ByteWidth = M.getDataLayout().getByteWidth();
   // These globals must be kept in sync with the ones in dfsan.cpp.
   ArgTLS =
       GetOrInsertGlobal("__dfsan_arg_tls",
-                        ArrayType::get(Type::getInt64Ty(*Ctx), ArgTLSSize / 8));
+                        ArrayType::get(Type::getInt64Ty(*Ctx),
+                                   divideCeil(ArgTLSSize, ByteWidth)));
   RetvalTLS = GetOrInsertGlobal(
       "__dfsan_retval_tls",
-      ArrayType::get(Type::getInt64Ty(*Ctx), RetvalTLSSize / 8));
-  ArgOriginTLSTy = ArrayType::get(OriginTy, NumOfElementsInArgOrgTLS);
+      ArrayType::get(Type::getInt64Ty(*Ctx), 
+                     divideCeil(RetvalTLSSize, ByteWidth)));
+  ArgOriginTLSTy = ArrayType::get(OriginTy, getNumOfElementsInArgOrgTLS());
   ArgOriginTLS = GetOrInsertGlobal("__dfsan_arg_origin_tls", ArgOriginTLSTy);
   RetvalOriginTLS = GetOrInsertGlobal("__dfsan_retval_origin_tls", OriginTy);
 
@@ -1811,7 +1820,7 @@ Value *DFSanFunction::getOrigin(Value *V) {
     if (Argument *A = dyn_cast<Argument>(V)) {
       if (IsNativeABI)
         return DFS.ZeroOrigin;
-      if (A->getArgNo() < DFS.NumOfElementsInArgOrgTLS) {
+      if (A->getArgNo() < DFS.getNumOfElementsInArgOrgTLS()) {
         Instruction *ArgOriginTLSPos = &*F->getEntryBlock().begin();
         IRBuilder<> IRB(ArgOriginTLSPos);
         Value *ArgOriginPtr = getArgOriginTLS(A->getArgNo(), IRB);
@@ -1888,6 +1897,16 @@ Value *DFSanFunction::getShadow(Value *V) {
 void DFSanFunction::setShadow(Instruction *I, Value *Shadow) {
   assert(!ValShadowMap.count(I));
   ValShadowMap[I] = Shadow;
+}
+
+int DataFlowSanitizer::getShadowWidthBytes() const
+{
+  return divideCeil(ShadowWidthBits, Mod->getDataLayout().getByteWidth());
+}
+
+int DataFlowSanitizer::getOriginWidthBytes() const
+ {
+  return divideCeil(OriginWidthBits, Mod->getDataLayout().getByteWidth());
 }
 
 /// Compute the integer shadow offset that corresponds to a given
@@ -2091,7 +2110,7 @@ void DFSanVisitor::visitInstOperandOrigins(Instruction &I) {
 
 Align DFSanFunction::getShadowAlign(Align InstAlignment) {
   const Align Alignment = ClPreserveAlignment ? InstAlignment : Align(1);
-  return Align(Alignment.value() * DFS.ShadowWidthBytes);
+  return Align(Alignment.value() * DFS.getShadowWidthBytes());
 }
 
 Align DFSanFunction::getOriginAlign(Align InstAlignment) {
@@ -2143,7 +2162,7 @@ std::pair<Value *, Value *> DFSanFunction::loadShadowFast(
     Value *ShadowAddr, Value *OriginAddr, uint64_t Size, Align ShadowAlign,
     Align OriginAlign, Value *FirstOrigin, BasicBlock::iterator Pos) {
   const bool ShouldTrackOrigins = DFS.shouldTrackOrigins();
-  const uint64_t ShadowSize = Size * DFS.ShadowWidthBytes;
+  const uint64_t ShadowSize = Size * DFS.getShadowWidthBytes();
 
   assert(Size >= 4 && "Not large enough load size for fast path!");
 
@@ -2459,7 +2478,7 @@ Value *DFSanFunction::updateOrigin(Value *V, IRBuilder<> &IRB) {
 }
 
 Value *DFSanFunction::originToIntptr(IRBuilder<> &IRB, Value *Origin) {
-  const unsigned OriginSize = DataFlowSanitizer::OriginWidthBytes;
+  const unsigned OriginSize = DFS.getOriginWidthBytes();
   const DataLayout &DL = F->getDataLayout();
   unsigned IntptrSize = DL.getTypeStoreSize(DFS.IntptrTy);
   if (IntptrSize == OriginSize)
@@ -2472,7 +2491,7 @@ Value *DFSanFunction::originToIntptr(IRBuilder<> &IRB, Value *Origin) {
 void DFSanFunction::paintOrigin(IRBuilder<> &IRB, Value *Origin,
                                 Value *StoreOriginAddr,
                                 uint64_t StoreOriginSize, Align Alignment) {
-  const unsigned OriginSize = DataFlowSanitizer::OriginWidthBytes;
+  const unsigned OriginSize = DFS.getOriginWidthBytes();
   const DataLayout &DL = F->getDataLayout();
   const Align IntptrAlignment = DL.getABITypeAlign(DFS.IntptrTy);
   unsigned IntptrSize = DL.getTypeStoreSize(DFS.IntptrTy);
@@ -2933,8 +2952,9 @@ void DFSanVisitor::visitMemTransferInst(MemTransferInst &I) {
   Value *DestShadow = DFSF.DFS.getShadowAddress(I.getDest(), I.getIterator());
   Value *SrcShadow = DFSF.DFS.getShadowAddress(I.getSource(), I.getIterator());
   Value *LenShadow =
-      IRB.CreateMul(I.getLength(), ConstantInt::get(I.getLength()->getType(),
-                                                    DFSF.DFS.ShadowWidthBytes));
+      IRB.CreateMul(I.getLength(), 
+                    ConstantInt::get(I.getLength()->getType(),
+                                     DFSF.DFS.getShadowWidthBytes()));
   auto *MTI = cast<MemTransferInst>(
       IRB.CreateCall(I.getFunctionType(), I.getCalledOperand(),
                      {DestShadow, SrcShadow, LenShadow, I.getVolatileCst()}));
@@ -3373,7 +3393,7 @@ void DFSanVisitor::visitCallBase(CallBase &CB) {
     if (ShouldTrackOrigins) {
       // Ignore overflowed origins
       Value *ArgShadow = DFSF.getShadow(CB.getArgOperand(I));
-      if (I < DFSF.DFS.NumOfElementsInArgOrgTLS &&
+      if (I < DFSF.DFS.getNumOfElementsInArgOrgTLS() &&
           !DFSF.DFS.isZeroShadow(ArgShadow))
         IRB.CreateStore(DFSF.getOrigin(CB.getArgOperand(I)),
                         DFSF.getArgOriginTLS(I, IRB));

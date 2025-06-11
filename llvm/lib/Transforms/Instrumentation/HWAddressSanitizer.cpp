@@ -910,8 +910,8 @@ static unsigned getPointerOperandIndex(Instruction *I) {
   return -1;
 }
 
-static size_t TypeSizeToSizeIndex(uint32_t TypeSize) {
-  size_t Res = llvm::countr_zero(TypeSize / 8);
+static size_t TypeSizeToSizeIndex(uint32_t TypeSize, unsigned ByteWidth) {
+  size_t Res = llvm::countr_zero(divideCeil(TypeSize, ByteWidth));
   assert(Res < kNumberOfAccessSizes);
   return Res;
 }
@@ -1147,11 +1147,14 @@ bool HWAddressSanitizer::instrumentMemAccess(InterestingMemoryOperand &O,
     return false; // FIXME
 
   IRBuilder<> IRB(O.getInsn());
+  auto ByteWidth = DL.getByteWidth();
   if (!O.TypeStoreSize.isScalable() && isPowerOf2_64(O.TypeStoreSize) &&
-      (O.TypeStoreSize / 8 <= (1ULL << (kNumberOfAccessSizes - 1))) &&
+      (divideCeil(O.TypeStoreSize, ByteWidth) <= 
+          (1ULL << (kNumberOfAccessSizes - 1))) &&
       (!O.Alignment || *O.Alignment >= Mapping.getObjectAlignment() ||
-       *O.Alignment >= O.TypeStoreSize / 8)) {
-    size_t AccessSizeIndex = TypeSizeToSizeIndex(O.TypeStoreSize);
+       *O.Alignment >= divideCeil(O.TypeStoreSize, ByteWidth))) {
+    size_t AccessSizeIndex = TypeSizeToSizeIndex(O.TypeStoreSize,
+                                                 DL.getByteWidth());
     if (InstrumentWithCalls) {
       SmallVector<Value *, 2> Args{IRB.CreatePointerCast(Addr, IntptrTy)};
       if (UseMatchAllCallback)

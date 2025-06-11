@@ -113,7 +113,9 @@ AtomicInfo::EmitAtomicLoadLibcall(AtomicOrdering AO) {
   Module *M = Builder->GetInsertBlock()->getModule();
   const DataLayout &DL = M->getDataLayout();
   Args.push_back(
-      ConstantInt::get(DL.getIntPtrType(Ctx), this->getAtomicSizeInBits() / 8));
+      ConstantInt::get(DL.getIntPtrType(Ctx),
+                       divideCeil(this->getAtomicSizeInBits(),
+                                  DL.getByteWidth())));
 
   Value *PtrVal = getAtomicPointer();
   PtrVal = Builder->CreateAddrSpaceCast(PtrVal, PointerType::getUnqual(Ctx));
@@ -152,7 +154,9 @@ void AtomicInfo::EmitAtomicStoreLibcall(AtomicOrdering AO, Value *Source) {
   Module *M = Builder->GetInsertBlock()->getModule();
   const DataLayout &DL = M->getDataLayout();
   Args.push_back(
-      ConstantInt::get(DL.getIntPtrType(Ctx), this->getAtomicSizeInBits() / 8));
+      ConstantInt::get(DL.getIntPtrType(Ctx),
+                       divideCeil(this->getAtomicSizeInBits(),
+                                  DL.getByteWidth())));
 
   Value *PtrVal = getAtomicPointer();
   PtrVal = Builder->CreateAddrSpaceCast(PtrVal, PointerType::getUnqual(Ctx));
