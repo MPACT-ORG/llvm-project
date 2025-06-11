@@ -23,25 +23,33 @@ struct Bytes;
 /// A quantity in bits.
 struct Bits {
   size_t N = 0;
-  Bits() = default;
-  static Bits zero() { return Bits(0); }
+  uint16_t ByteWidth;
+  Bits() = delete;
+  Bits(size_t N, uint16_t ByteWidth) : N(N), ByteWidth(ByteWidth) {}
+  Bits(const Bits &Other) : N(Other.N), ByteWidth(Other.ByteWidth) {}
+  Bits &operator=(const Bits &Other) {
+    N = Other.N;
+    ByteWidth = Other.ByteWidth;
+    return *this;
+  }
+  static Bits zero() { return Bits(0, 0); }
   explicit Bits(size_t Quantity) : N(Quantity) {}
   size_t getQuantity() const { return N; }
-  size_t roundToBytes() const { return N / 8; }
-  size_t getOffsetInByte() const { return N % 8; }
-  bool isFullByte() const { return N % 8 == 0; }
+  size_t roundToBytes() const { return N / ByteWidth; }
+  size_t getOffsetInByte() const { return N % ByteWidth; }
+  bool isFullByte() const { return N % ByteWidth == 0; }
   bool nonZero() const { return N != 0; }
   bool isZero() const { return N == 0; }
   Bytes toBytes() const;
 
-  Bits operator-(Bits Other) const { return Bits(N - Other.N); }
-  Bits operator+(Bits Other) const { return Bits(N + Other.N); }
-  Bits operator+=(size_t O) {
-    N += O;
+  Bits operator-(Bits Other) const { return Bits(N - Other.N, ByteWidth); }
+  Bits operator+(Bits Other) const { return Bits(N + Other.N, ByteWidth); }
+  Bits operator+=(size_t Other) {
+    N += Other;
     return *this;
   }
-  Bits operator+=(Bits O) {
-    N += O.N;
+  Bits operator+=(Bits Other) {
+    N += Other.N;
     return *this;
   }
 
@@ -54,14 +62,17 @@ struct Bits {
 /// A quantity in bytes.
 struct Bytes {
   size_t N;
-  explicit Bytes(size_t Quantity) : N(Quantity) {}
+  uint16_t ByteWidth;
+  Bytes() = delete;
+  explicit Bytes(size_t Quantity, uint16_t ByteWidth) :
+      N(Quantity), ByteWidth(ByteWidth) {}
   size_t getQuantity() const { return N; }
-  Bits toBits() const { return Bits(N * 8); }
+  Bits toBits() const { return Bits(N * ByteWidth, ByteWidth); }
 };
 
 inline Bytes Bits::toBytes() const {
   assert(isFullByte());
-  return Bytes(N / 8);
+  return Bytes(N / ByteWidth, ByteWidth);
 }
 
 /// A bit range. Both Start and End are inclusive.
@@ -83,7 +94,9 @@ struct BitcastBuffer {
   std::unique_ptr<std::byte[]> Data;
   llvm::SmallVector<BitRange> InitializedBits;
 
-  BitcastBuffer(Bits FinalBitSize) : FinalBitSize(FinalBitSize) {
+  BitcastBuffer() = delete;
+  BitcastBuffer(Bits FinalBitSize)
+   : FinalBitSize(FinalBitSize) {
     assert(FinalBitSize.isFullByte());
     unsigned ByteSize = FinalBitSize.roundToBytes();
     Data = std::make_unique<std::byte[]>(ByteSize);
@@ -109,7 +122,7 @@ struct BitcastBuffer {
   /// Copy \p BitWidth bits at offset \p BitOffset from the buffer.
   /// \p TargetEndianness is the endianness of the target we're compiling for.
   ///
-  /// The returned output holds exactly (\p FullBitWidth / 8) bytes.
+  /// The returned output holds exactly (\p FullBitWidth / ByteWidth) bytes.
   std::unique_ptr<std::byte[]> copyBits(Bits BitOffset, Bits BitWidth,
                                         Bits FullBitWidth,
                                         Endian TargetEndianness) const;

@@ -24,11 +24,11 @@ void BitcastBuffer::pushData(const std::byte *In, Bits BitOffset, Bits BitWidth,
     if (!BitValue)
       continue;
 
-    Bits DstBit;
+    Bits DstBit(0, FinalBitSize.ByteWidth);
     if (TargetEndianness == Endian::Little)
-      DstBit = BitOffset + Bits(It);
+      DstBit = BitOffset + Bits(It, FinalBitSize.ByteWidth);
     else
-      DstBit = size() - BitOffset - BitWidth + Bits(It);
+      DstBit = size() - BitOffset - BitWidth + Bits(It, FinalBitSize.ByteWidth);
 
     size_t DstByte = DstBit.roundToBytes();
     Data[DstByte] |= std::byte{1} << DstBit.getOffsetInByte();
@@ -43,7 +43,7 @@ BitcastBuffer::copyBits(Bits BitOffset, Bits BitWidth, Bits FullBitWidth,
   auto Out = std::make_unique<std::byte[]>(FullBitWidth.roundToBytes());
 
   for (unsigned It = 0; It != BitWidth.getQuantity(); ++It) {
-    Bits BitIndex;
+    Bits BitIndex(0, FinalBitSize.ByteWidth);
     if (TargetEndianness == Endian::Little)
       BitIndex = BitOffset + Bits(It);
     else
@@ -111,7 +111,7 @@ bool BitcastBuffer::rangeInitialized(Bits Offset, Bits Length) const {
     return true;
 
   BitRange Range(Offset, Offset + Length - Bits(1));
-  Bits Sum;
+  Bits Sum(0, FinalBitSize.ByteWidth);
   bool FoundStart = false;
   for (BitRange BR : InitializedBits) {
     if (FoundStart) {
