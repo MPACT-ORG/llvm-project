@@ -1914,11 +1914,9 @@ protected:
     unsigned : NumArrayTypeBits;
 
     /// Whether we have a stored size expression.
-    LLVM_PREFERRED_TYPE(bool)
-    unsigned HasExternalSize : 1;
+    bool HasExternalSize;
 
-    LLVM_PREFERRED_TYPE(unsigned)
-    unsigned SizeWidth : 5;
+    uint16_t SizeWidth;
   };
 
   class BuiltinTypeBitfields {
@@ -3702,9 +3700,7 @@ class ConstantArrayType : public ArrayType {
                     ArraySizeModifier SM, unsigned TQ)
       : ArrayType(ConstantArray, Et, Can, SM, TQ, nullptr), Size(Sz) {
     ConstantArrayTypeBits.HasExternalSize = false;
-    ConstantArrayTypeBits.SizeWidth = Width / 8;
-    // The in-structure size stores the size in bytes rather than bits so we
-    // drop the three least significant bits since they're always zero anyways.
+    ConstantArrayTypeBits.SizeWidth = Width;
     assert(Width < 0xFF && "Type width in bits must be less than 8 bits");
   }
 
@@ -3742,14 +3738,14 @@ public:
   llvm::APInt getSize() const {
     return ConstantArrayTypeBits.HasExternalSize
                ? SizePtr->Size
-               : llvm::APInt(ConstantArrayTypeBits.SizeWidth * 8, Size);
+               : llvm::APInt(ConstantArrayTypeBits.SizeWidth, Size);
   }
 
   /// Return the bit width of the size type.
   unsigned getSizeBitWidth() const {
     return ConstantArrayTypeBits.HasExternalSize
                ? SizePtr->Size.getBitWidth()
-               : static_cast<unsigned>(ConstantArrayTypeBits.SizeWidth * 8);
+               : static_cast<unsigned>(ConstantArrayTypeBits.SizeWidth);
   }
 
   /// Return true if the size is zero.

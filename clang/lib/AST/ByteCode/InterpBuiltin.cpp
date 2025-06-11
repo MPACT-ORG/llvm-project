@@ -1826,7 +1826,9 @@ static bool interp__builtin_memcpy(InterpState &S, CodePtr OpPC,
   }
 
   assert(Size.getZExtValue() % DestElemSize == 0);
-  if (!DoMemcpy(S, OpPC, SrcPtr, DestPtr, Bytes(Size.getZExtValue()).toBits()))
+  if (!DoMemcpy(S, OpPC, SrcPtr, DestPtr, 
+                Bytes(Size.getZExtValue(),
+                      ASTCtx.getTargetInfo().getByteWidth()).toBits()))
     return false;
 
   S.Stk.push<Pointer>(DestPtr);
@@ -1879,7 +1881,8 @@ static bool interp__builtin_memcmp(InterpState &S, CodePtr OpPC,
 
   // Now, read both pointers to a buffer and compare those.
   BitcastBuffer BufferA(
-      Bits(ASTCtx.getTypeSize(ElemTypeA) * PtrA.getNumElems()));
+      Bits(ASTCtx.getTypeSize(ElemTypeA) * PtrA.getNumElems(),
+           ASTCtx.getTargetInfo().getByteWidth()));
   readPointerToBuffer(S.getContext(), PtrA, BufferA, false);
   // FIXME: The swapping here is UNDOING something we do when reading the
   // data into the buffer.
@@ -1887,7 +1890,8 @@ static bool interp__builtin_memcmp(InterpState &S, CodePtr OpPC,
     swapBytes(BufferA.Data.get(), BufferA.byteSize().getQuantity());
 
   BitcastBuffer BufferB(
-      Bits(ASTCtx.getTypeSize(ElemTypeB) * PtrB.getNumElems()));
+      Bits(ASTCtx.getTypeSize(ElemTypeB) * PtrB.getNumElems(),
+           ASTCtx.getTargetInfo().getByteWidth()));
   readPointerToBuffer(S.getContext(), PtrB, BufferB, false);
   // FIXME: The swapping here is UNDOING something we do when reading the
   // data into the buffer.

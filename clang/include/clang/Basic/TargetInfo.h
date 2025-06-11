@@ -87,6 +87,7 @@ enum class FloatModeKind {
 /// be copied for targets like AMDGPU that base their ABIs on an auxiliary
 /// CPU target.
 struct TransferrableTargetInfo {
+  unsigned char ByteWidth;
   unsigned char PointerWidth, PointerAlign;
   unsigned char BoolWidth, BoolAlign;
   unsigned char ShortWidth, ShortAlign;
@@ -515,8 +516,10 @@ public:
   /// Return the alignment of '_Bool' and C++ 'bool' for this target.
   unsigned getBoolAlign() const { return BoolAlign; }
 
-  unsigned getCharWidth() const { return 8; } // FIXME
-  unsigned getCharAlign() const { return 8; } // FIXME
+  unsigned getByteWidth() const { return ByteWidth; }
+
+  unsigned getCharWidth() const { return ByteWidth; } // FIXME
+  unsigned getCharAlign() const { return ByteWidth; } // FIXME
 
   /// getShortWidth/Align - Return the size of 'signed short' and
   /// 'unsigned short' for this target, in bits.

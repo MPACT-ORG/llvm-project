@@ -7554,7 +7554,6 @@ class APValueToBufferConverter {
 
         Res.insertBits(EltAsInt, BigEndian ? (NElts - I - 1) : I);
       }
-
       SmallVector<uint8_t, 8> Bytes(NElts / 8);
       llvm::StoreIntToMemory(Res, &*Bytes.begin(), NElts / 8);
       Buffer.writeObject(Offset, Bytes);
