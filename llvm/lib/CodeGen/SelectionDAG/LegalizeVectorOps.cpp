@@ -1520,7 +1520,8 @@ SDValue VectorLegalizer::ExpandBITREVERSE(SDNode *Node) {
   // to BSWAP shuffle the bytes and then perform the BITREVERSE on the byte
   // vector. This greatly reduces the number of bit shifts necessary.
   unsigned ScalarSizeInBits = VT.getScalarSizeInBits();
-  if (ScalarSizeInBits > 8 && (ScalarSizeInBits % 8) == 0) {
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
+  if (ScalarSizeInBits > ByteWidth && (ScalarSizeInBits % ByteWidth) == 0) {
     SmallVector<int, 16> BSWAPMask;
     createBSWAPShuffleMask(VT, BSWAPMask, DAG.getDataLayout().getByteWidth());
 

@@ -561,7 +561,7 @@ void SelectionDAGLegalize::LegalizeStoreOps(SDNode *Node) {
     assert(RoundWidth < StWidthBits);
     unsigned ExtraWidth = StWidthBits - RoundWidth;
     assert(ExtraWidth < RoundWidth);
-    assert(!(RoundWidth % 8) && !(ExtraWidth % 8) &&
+    assert(!(RoundWidth % ByteWidth) && !(ExtraWidth % ByteWidth) &&
            "Store size not an integral number of bytes!");
     EVT RoundVT = EVT::getIntegerVT(*DAG.getContext(), RoundWidth);
     EVT ExtraVT = EVT::getIntegerVT(*DAG.getContext(), ExtraWidth);
@@ -781,7 +781,7 @@ void SelectionDAGLegalize::LegalizeLoadOps(SDNode *Node) {
     assert(RoundWidth < SrcWidthBits);
     unsigned ExtraWidth = SrcWidthBits - RoundWidth;
     assert(ExtraWidth < RoundWidth);
-    assert(!(RoundWidth % 8) && !(ExtraWidth % 8) &&
+    assert(!(RoundWidth % ByteWidth) && !(ExtraWidth % ByteWidth) &&
            "Load size not an integral number of bytes!");
     EVT RoundVT = EVT::getIntegerVT(*DAG.getContext(), RoundWidth);
     EVT ExtraVT = EVT::getIntegerVT(*DAG.getContext(), ExtraWidth);
