@@ -9099,7 +9099,8 @@ bool SelectionDAGBuilder::visitMemCmpBCmpCall(const CallInst &I) {
   // supports the MVT we'll be loading or if it is small enough (<= 4) that
   // we'll only produce a small number of byte loads.
   MVT LoadVT;
-  unsigned NumBitsToCompare = CSize->getZExtValue() * 8;
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
+  unsigned NumBitsToCompare = CSize->getZExtValue() * ByteWidth;
   switch (NumBitsToCompare) {
   default:
     return false;

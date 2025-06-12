@@ -1075,6 +1075,7 @@ static bool isLoadInvariantInLoop(LoadInst *LI, DominatorTree *DT,
   unsigned UsesVisited = 0;
   // Traverse all uses of the load operand value, to see if invariant.start is
   // one of the uses, and whether it dominates the load instruction.
+  auto ByteWidth = DL.getByteWidth();
   for (auto *U : Addr->users()) {
     // Avoid traversing for Load operand with high number of users.
     if (++UsesVisited > MaxNumUsesTraversed)
@@ -1090,7 +1091,7 @@ static bool isLoadInvariantInLoop(LoadInst *LI, DominatorTree *DT,
     // so we should check for that here.
     if (InvariantSize->isNegative())
       continue;
-    uint64_t InvariantSizeInBits = InvariantSize->getSExtValue() * 8;
+    uint64_t InvariantSizeInBits = InvariantSize->getSExtValue() * ByteWidth;
     // Confirm the invariant.start location size contains the load operand size
     // in bits. Also, the invariant.start should dominate the load, and we
     // should not hoist the load out of a loop that contains this dominating

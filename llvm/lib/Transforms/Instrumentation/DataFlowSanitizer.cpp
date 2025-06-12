@@ -2487,7 +2487,8 @@ Value *DFSanFunction::originToIntptr(IRBuilder<> &IRB, Value *Origin) {
     return Origin;
   assert(IntptrSize == OriginSize * 2);
   Origin = IRB.CreateIntCast(Origin, DFS.IntptrTy, /* isSigned */ false);
-  return IRB.CreateOr(Origin, IRB.CreateShl(Origin, OriginSize * 8));
+  return IRB.CreateOr(Origin, IRB.CreateShl(Origin, 
+                                            OriginSize * DL.getByteWidth()));
 }
 
 void DFSanFunction::paintOrigin(IRBuilder<> &IRB, Value *Origin,

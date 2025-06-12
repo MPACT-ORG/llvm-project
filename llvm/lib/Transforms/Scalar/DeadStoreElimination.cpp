@@ -700,9 +700,10 @@ static bool tryToShorten(Instruction *DeadI, int64_t &DeadStart,
     adjustArgAttributes(DeadIntrinsic, 0, ToRemoveSize);
   }
 
-  // Update attached dbg.assign intrinsics. Assume 8-bit byte.
-  shortenAssignment(DeadI, OrigDest, DeadStart * 8, DeadSize * 8, NewSize * 8,
-                    IsOverwriteEnd);
+  // Update attached dbg.assign intrinsics. Get byte width.
+  auto ByteWidth = DeadI->getDataLayout().getByteWidth();
+  shortenAssignment(DeadI, OrigDest, DeadStart * ByteWidth, 
+                    DeadSize * ByteWidth, NewSize * ByteWidth, IsOverwriteEnd);
 
   // Finally update start and size of dead access.
   if (!IsOverwriteEnd)
@@ -796,8 +797,9 @@ tryToMergePartialOverlappingStores(StoreInst *KillingI, StoreInst *DeadI,
     assert(DeadValue.getBitWidth() > KillingValue.getBitWidth());
     KillingValue = KillingValue.zext(DeadValue.getBitWidth());
 
+    auto ByteWidth = DeadI->getDataLayout().getByteWidth();
     // Offset of the smaller store inside the larger store
-    unsigned BitOffsetDiff = (KillingOffset - DeadOffset) * 8;
+    unsigned BitOffsetDiff = (KillingOffset - DeadOffset) * ByteWidth;
     unsigned LShiftAmount =
         DL.isBigEndian() ? DeadValue.getBitWidth() - BitOffsetDiff - KillingBits
                          : BitOffsetDiff;

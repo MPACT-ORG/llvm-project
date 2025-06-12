@@ -2495,7 +2495,7 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
   case Type::HLSLInlineSpirv: {
     const auto *ST = cast<HLSLInlineSpirvType>(T);
     // Size is specified in bytes, convert to bits
-    Width = ST->getSize() * 8;
+    Width = ST->getSize() * Target->getByteWidth();
     Align = ST->getAlignment();
     if (Width == 0 && Align == 0) {
       // We are defaulting to laying out opaque SPIR-V types as 32-bit ints.

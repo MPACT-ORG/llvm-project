@@ -4130,7 +4130,8 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
                           DAG.getConstant(EntrySize, dl, Index.getValueType()));
     SDValue Addr = DAG.getMemBasePlusOffset(Table, Index, dl);
 
-    EVT MemVT = EVT::getIntegerVT(*DAG.getContext(), EntrySize * 8);
+    auto ByteWidth = DAG.getDataLayout().getByteWidth();
+    EVT MemVT = EVT::getIntegerVT(*DAG.getContext(), EntrySize * ByteWidth);
     SDValue LD = DAG.getExtLoad(
         ISD::SEXTLOAD, dl, PTy, Chain, Addr,
         MachinePointerInfo::getJumpTable(DAG.getMachineFunction()), MemVT);
