@@ -9497,7 +9497,8 @@ SDValue DAGCombiner::MatchLoadCombine(SDNode *N) {
   bool NeedsZext = ZeroExtendedBytes > 0;
 
   EVT MemVT =
-      EVT::getIntegerVT(*DAG.getContext(), (ByteWidth - ZeroExtendedBytes) * 8);
+      EVT::getIntegerVT(*DAG.getContext(),
+                        (ByteWidth - ZeroExtendedBytes) * DLByteWidth);
 
   if (!MemVT.isSimple())
     return SDValue();
@@ -9569,7 +9570,8 @@ SDValue DAGCombiner::MatchLoadCombine(SDNode *N) {
 
   SDValue ShiftedLoad =
       NeedsZext ? DAG.getNode(ISD::SHL, SDLoc(N), VT, NewLoad,
-                              DAG.getShiftAmountConstant(ZeroExtendedBytes * 8,
+                              DAG.getShiftAmountConstant(ZeroExtendedBytes *
+                                                             DLByteWidth,
                                                          VT, SDLoc(N)))
                 : NewLoad;
   return DAG.getNode(ISD::BSWAP, SDLoc(N), VT, ShiftedLoad);
@@ -12411,11 +12413,12 @@ SDValue DAGCombiner::visitMSTORE(SDNode *N) {
     if (MST->isUnindexed() && MST->isSimple() && MST1->isUnindexed() &&
         MST1->isSimple() && MST1->getBasePtr() == Ptr &&
         !MST->getBasePtr().isUndef() &&
-        ((Mask == MST1->getMask() && MST->getMemoryVT().getStoreSize() ==
-                                         MST1->getMemoryVT().getStoreSize()) ||
+        ((Mask == MST1->getMask() && 
+          MST->getMemoryVT().getStoreSize(DLByteWidth) ==
+              MST1->getMemoryVT().getStoreSize(DLByteWidth)) ||
          ISD::isConstantSplatVectorAllOnes(Mask.getNode())) &&
-        TypeSize::isKnownLE(MST1->getMemoryVT().getStoreSize(),
-                            MST->getMemoryVT().getStoreSize())) {
+        TypeSize::isKnownLE(MST1->getMemoryVT().getStoreSize(DLByteWidth),
+                            MST->getMemoryVT().getStoreSize(DLByteWidth))) {
       CombineTo(MST1, MST1->getChain());
       if (N->getOpcode() != ISD::DELETED_NODE)
         AddToWorklist(N);
@@ -12481,7 +12484,7 @@ SDValue DAGCombiner::visitVP_STRIDED_STORE(SDNode *N) {
   EVT EltVT = SST->getValue().getValueType().getVectorElementType();
   // Combine strided stores with unit-stride to a regular VP store.
   if (auto *CStride = dyn_cast<ConstantSDNode>(SST->getStride());
-      CStride && CStride->getZExtValue() == EltVT.getStoreSize()) {
+      CStride && CStride->getZExtValue() == EltVT.getStoreSize(DLByteWidth)) {
     return DAG.getStoreVP(SST->getChain(), SDLoc(N), SST->getValue(),
                           SST->getBasePtr(), SST->getOffset(), SST->getMask(),
                           SST->getVectorLength(), SST->getMemoryVT(),
@@ -12780,7 +12783,7 @@ SDValue DAGCombiner::visitVP_STRIDED_LOAD(SDNode *N) {
   EVT EltVT = SLD->getValueType(0).getVectorElementType();
   // Combine strided loads with unit-stride to a regular VP load.
   if (auto *CStride = dyn_cast<ConstantSDNode>(SLD->getStride());
-      CStride && CStride->getZExtValue() == EltVT.getStoreSize()) {
+      CStride && CStride->getZExtValue() == EltVT.getStoreSize(DLByteWidth)) {
     SDValue NewLd = DAG.getLoadVP(
         SLD->getAddressingMode(), SLD->getExtensionType(), SLD->getValueType(0),
         SDLoc(N), SLD->getChain(), SLD->getBasePtr(), SLD->getOffset(),
@@ -13647,7 +13650,7 @@ SDValue DAGCombiner::CombineExtLoad(SDNode *N) {
   SDLoc DL(N);
   const unsigned NumSplits =
       DstVT.getVectorNumElements() / SplitDstVT.getVectorNumElements();
-  const unsigned Stride = SplitSrcVT.getStoreSize();
+  const unsigned Stride = SplitSrcVT.getStoreSize(DLByteWidth);
   SmallVector<SDValue, 4> Loads;
   SmallVector<SDValue, 4> Chains;
 
@@ -15170,8 +15173,9 @@ SDValue DAGCombiner::reduceLoadWidth(SDNode *N) {
 
   auto AdjustBigEndianShift = [&](unsigned ShAmt) {
     unsigned LVTStoreBits =
-        LN0->getMemoryVT().getStoreSizeInBits().getFixedValue();
-    unsigned EVTStoreBits = ExtVT.getStoreSizeInBits().getFixedValue();
+        LN0->getMemoryVT().getStoreSizeInBits(DLByteWidth).getFixedValue();
+    unsigned EVTStoreBits = ExtVT.getStoreSizeInBits(DLByteWidth)
+                                 .getFixedValue();
     return LVTStoreBits - EVTStoreBits - ShAmt;
   };
 
@@ -16008,7 +16012,7 @@ SDValue DAGCombiner::CombineConsecutiveLoads(SDNode *N, EVT VT) {
 
   unsigned LD1Fast = 0;
   EVT LD1VT = LD1->getValueType(0);
-  unsigned LD1Bytes = LD1VT.getStoreSize();
+  unsigned LD1Bytes = LD1VT.getStoreSize(DLByteWidth);
   if ((!LegalOperations || TLI.isOperationLegal(ISD::LOAD, VT)) &&
       DAG.areNonVolatileConsecutiveLoads(LD2, LD1, LD1Bytes, 1) &&
       TLI.allowsMemoryAccess(*DAG.getContext(), DAG.getDataLayout(), VT,
@@ -19737,9 +19741,10 @@ SDValue DAGCombiner::ForwardStoreValueToDirectLoad(LoadSDNode *LD) {
   // n:th least significant byte of the stored value.
   int64_t OrigOffset = Offset;
   if (DAG.getDataLayout().isBigEndian())
-    Offset = ((int64_t)STMemType.getStoreSizeInBits().getFixedValue() -
-              (int64_t)LDMemType.getStoreSizeInBits().getFixedValue()) /
-                 8 -
+    Offset =
+        ((int64_t)STMemType.getStoreSizeInBits(DLByteWidth).getFixedValue() -
+         (int64_t)LDMemType.getStoreSizeInBits(DLByteWidth).getFixedValue()) /
+                 DLByteWidth -
              Offset;
 
   // Check that the stored value cover all bits that are loaded.
@@ -19750,8 +19755,9 @@ SDValue DAGCombiner::ForwardStoreValueToDirectLoad(LoadSDNode *LD) {
   if (LdStScalable)
     STCoversLD = (Offset == 0) && LdMemSize == StMemSize;
   else
-    STCoversLD = (Offset >= 0) && (Offset * 8 + LdMemSize.getFixedValue() <=
-                                   StMemSize.getFixedValue());
+    STCoversLD = (Offset >= 0) && 
+                 (Offset * DLByteWidth + LdMemSize.getFixedValue() <=
+                      StMemSize.getFixedValue());
 
   auto ReplaceLd = [&](LoadSDNode *LD, SDValue Val, SDValue Chain) -> SDValue {
     if (LD->isIndexed()) {
@@ -19795,7 +19801,8 @@ SDValue DAGCombiner::ForwardStoreValueToDirectLoad(LoadSDNode *LD) {
         !LDType.isVector() && isTypeLegal(STType) &&
         TLI.isOperationLegal(ISD::SRL, STType)) {
       Val = DAG.getNode(ISD::SRL, SDLoc(LD), STType, Val,
-                        DAG.getConstant(Offset * 8, SDLoc(LD), STType));
+                        DAG.getConstant(Offset * DLByteWidth, 
+                                        SDLoc(LD), STType));
       Offset = 0;
     }
   }
@@ -20097,7 +20104,8 @@ struct LoadedSlice {
   EVT getLoadedType() const {
     assert(DAG && "Missing context");
     LLVMContext &Ctxt = *DAG->getContext();
-    return EVT::getIntegerVT(Ctxt, getLoadedSize() * 8);
+    auto ByteWidth = DAG->getDataLayout().getByteWidth();
+    return EVT::getIntegerVT(Ctxt, getLoadedSize() * ByteWidth);
   }
 
   /// Get the alignment of the load used for this slice.
@@ -20593,7 +20601,8 @@ ShrinkLoadReplaceStoreWithStore(const std::pair<unsigned, unsigned> &MaskInfo,
   // VT we're shrinking to (i8/i16/i32) is legal or we're still before type
   // legalization. If the source type is legal, but the store type isn't, see
   // if we can use a truncating store.
-  MVT VT = MVT::getIntegerVT(NumBytes * 8);
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
+  MVT VT = MVT::getIntegerVT(NumBytes * ByteWidth);
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   bool UseTruncStore;
   if (DC->isTypeLegal(VT))
@@ -20620,7 +20629,8 @@ ShrinkLoadReplaceStoreWithStore(const std::pair<unsigned, unsigned> &MaskInfo,
     SDLoc DL(IVal);
     IVal = DAG.getNode(
         ISD::SRL, DL, IVal.getValueType(), IVal,
-        DAG.getShiftAmountConstant(ByteShift * 8, IVal.getValueType(), DL));
+        DAG.getShiftAmountConstant(ByteShift * ByteWidth, IVal.getValueType(),
+                                   DL));
   }
 
   // Figure out the offset for the store and the alignment of the access.
@@ -20628,7 +20638,8 @@ ShrinkLoadReplaceStoreWithStore(const std::pair<unsigned, unsigned> &MaskInfo,
   if (DAG.getDataLayout().isLittleEndian())
     StOffset = ByteShift;
   else
-    StOffset = IVal.getValueType().getStoreSize() - ByteShift - NumBytes;
+    StOffset =
+        IVal.getValueType().getStoreSize(ByteWidth) - ByteShift - NumBytes;
 
   SDValue Ptr = St->getBasePtr();
   if (StOffset) {
@@ -20728,7 +20739,7 @@ SDValue DAGCombiner::ReduceLoadOpStoreWidth(SDNode *N) {
     // The narrowing should be profitable, the load/store operation should be
     // legal (or custom) and the store size should be equal to the NewVT width.
     while (NewBW < BitWidth &&
-           (NewVT.getStoreSizeInBits() != NewBW ||
+           (NewVT.getStoreSizeInBits(DLByteWidth) != NewBW ||
             !TLI.isOperationLegalOrCustom(Opc, NewVT) ||
             (!ReduceLoadOpStoreWidthForceNarrowingProfitable &&
              !TLI.isNarrowingProfitable(N, VT, NewVT)))) {
@@ -20745,7 +20756,7 @@ SDValue DAGCombiner::ReduceLoadOpStoreWidth(SDNode *N) {
     // accesses to satisfy preferred alignments as well as avoiding to access
     // memory outside the store size of the orignal access.
 
-    unsigned VTStoreSize = VT.getStoreSizeInBits().getFixedValue();
+    unsigned VTStoreSize = VT.getStoreSizeInBits(DLByteWidth).getFixedValue();
 
     // Let ShAmt denote amount of bits to skip, counted from the least
     // significant bits of Imm. And let PtrOff how much the pointer needs to be
@@ -20989,7 +21000,7 @@ bool DAGCombiner::mergeStoresOfConstantsOrVecElts(
   // The latest Node in the DAG.
   SDLoc DL(StoreNodes[0].MemNode);
 
-  TypeSize ElementSizeBits = MemVT.getStoreSizeInBits();
+  TypeSize ElementSizeBits = MemVT.getStoreSizeInBits(DLByteWidth);
   unsigned SizeInBits = NumStores * ElementSizeBits;
   unsigned NumMemElts = MemVT.isVector() ? MemVT.getVectorNumElements() : 1;
 
@@ -21492,7 +21503,7 @@ bool DAGCombiner::tryStoreMergeOfConstants(
     EVT MemVT, SDNode *RootNode, bool AllowVectors) {
   LLVMContext &Context = *DAG.getContext();
   const DataLayout &DL = DAG.getDataLayout();
-  int64_t ElementSizeBytes = MemVT.getStoreSize();
+  int64_t ElementSizeBytes = MemVT.getStoreSize(DLByteWidth);
   unsigned NumMemElts = MemVT.isVector() ? MemVT.getVectorNumElements() : 1;
   bool MadeChange = false;
 
@@ -21523,7 +21534,7 @@ bool DAGCombiner::tryStoreMergeOfConstants(
       NonZero |= !IsElementZero;
 
       // Find a legal type for the constant store.
-      unsigned SizeInBits = (i + 1) * ElementSizeBytes * 8;
+      unsigned SizeInBits = (i + 1) * ElementSizeBytes * DLByteWidth;
       EVT StoreTy = EVT::getIntegerVT(Context, SizeInBits);
       unsigned IsFast = 0;
 
@@ -21692,7 +21703,7 @@ bool DAGCombiner::tryStoreMergeOfLoads(SmallVectorImpl<MemOpLink> &StoreNodes,
                                        bool IsNonTemporalLoad) {
   LLVMContext &Context = *DAG.getContext();
   const DataLayout &DL = DAG.getDataLayout();
-  int64_t ElementSizeBytes = MemVT.getStoreSize();
+  int64_t ElementSizeBytes = MemVT.getStoreSize(DLByteWidth);
   unsigned NumMemElts = MemVT.isVector() ? MemVT.getVectorNumElements() : 1;
   bool MadeChange = false;
 
@@ -21739,7 +21750,8 @@ bool DAGCombiner::tryStoreMergeOfLoads(SmallVectorImpl<MemOpLink> &StoreNodes,
       // If the loads are reversed, see if we can rotate the halves into place.
       int64_t Offset0 = LoadNodes[0].OffsetFromBase;
       int64_t Offset1 = LoadNodes[1].OffsetFromBase;
-      EVT PairVT = EVT::getIntegerVT(Context, ElementSizeBytes * 8 * 2);
+      EVT PairVT = EVT::getIntegerVT(Context, 
+                                     ElementSizeBytes * DLByteWidth * 2);
       if (Offset0 - Offset1 == ElementSizeBytes &&
           (hasOperation(ISD::ROTL, PairVT) ||
            hasOperation(ISD::ROTR, PairVT))) {
@@ -21805,7 +21817,7 @@ bool DAGCombiner::tryStoreMergeOfLoads(SmallVectorImpl<MemOpLink> &StoreNodes,
       }
 
       // Find a legal type for the integer store.
-      unsigned SizeInBits = (i + 1) * ElementSizeBytes * 8;
+      unsigned SizeInBits = (i + 1) * ElementSizeBytes * DLByteWidth;
       StoreTy = EVT::getIntegerVT(Context, SizeInBits);
       if (TLI.isTypeLegal(StoreTy) &&
           TLI.canMergeStoresTo(FirstStoreAS, StoreTy,
@@ -21889,7 +21901,7 @@ bool DAGCombiner::tryStoreMergeOfLoads(SmallVectorImpl<MemOpLink> &StoreNodes,
       unsigned Elts = NumElem * NumMemElts;
       JointMemOpVT = EVT::getVectorVT(Context, MemVT.getScalarType(), Elts);
     } else {
-      unsigned SizeInBits = NumElem * ElementSizeBytes * 8;
+      unsigned SizeInBits = NumElem * ElementSizeBytes * DLByteWidth;
       JointMemOpVT = EVT::getIntegerVT(Context, SizeInBits);
     }
 
@@ -21934,7 +21946,7 @@ bool DAGCombiner::tryStoreMergeOfLoads(SmallVectorImpl<MemOpLink> &StoreNodes,
           FirstLoad->getPointerInfo(), FirstLoadAlign, LdMMOFlags);
       SDValue StoreOp = NewLoad;
       if (NeedRotate) {
-        unsigned LoadWidth = ElementSizeBytes * 8 * 2;
+        unsigned LoadWidth = ElementSizeBytes * DLByteWidth * 2;
         assert(JointMemOpVT == EVT::getIntegerVT(Context, LoadWidth) &&
                "Unexpected type for rotate-able load pair");
         SDValue RotAmt =
@@ -22001,8 +22013,8 @@ bool DAGCombiner::mergeConsecutiveStores(StoreSDNode *St) {
     return false;
 
   // This function cannot currently deal with non-byte-sized memory sizes.
-  int64_t ElementSizeBytes = MemVT.getStoreSize();
-  if (ElementSizeBytes * 8 != (int64_t)MemVT.getSizeInBits())
+  int64_t ElementSizeBytes = MemVT.getStoreSize(DLByteWidth);
+  if (ElementSizeBytes * DLByteWidth != (int64_t)MemVT.getSizeInBits())
     return false;
 
   // Do not bother looking at stored values that are not constants, loads, or
@@ -22422,8 +22434,9 @@ SDValue DAGCombiner::visitSTORE(SDNode *N) {
         if (ST->getMemoryVT().isScalableVector() ||
             ST1->getMemoryVT().isScalableVector()) {
           if (ST1->getBasePtr() == Ptr &&
-              TypeSize::isKnownLE(ST1->getMemoryVT().getStoreSize(),
-                                  ST->getMemoryVT().getStoreSize())) {
+              TypeSize::isKnownLE(
+                  ST1->getMemoryVT().getStoreSize(DLByteWidth),
+                  ST->getMemoryVT().getStoreSize(DLByteWidth))) {
             CombineTo(ST1, ST1->getChain());
             return SDValue(N, 0);
           }
@@ -22524,7 +22537,7 @@ SDValue DAGCombiner::visitLIFETIME_END(SDNode *N) {
       // TODO: Can relax for unordered atomics (see D66309)
       if (!ST->isSimple() || ST->isIndexed())
         continue;
-      const TypeSize StoreSize = ST->getMemoryVT().getStoreSize();
+      const TypeSize StoreSize = ST->getMemoryVT().getStoreSize(DLByteWidth);
       // The bounds of a scalable store are not known until runtime, so this
       // store cannot be elided.
       if (StoreSize.isScalable())
@@ -22532,8 +22545,9 @@ SDValue DAGCombiner::visitLIFETIME_END(SDNode *N) {
       const BaseIndexOffset StoreBase = BaseIndexOffset::match(ST, DAG);
       // If we store purely within object bounds just before its lifetime ends,
       // we can remove the store.
-      if (LifetimeEndBase.contains(DAG, LifetimeEnd->getSize() * 8, StoreBase,
-                                   StoreSize.getFixedValue() * 8)) {
+      if (LifetimeEndBase.contains(DAG, LifetimeEnd->getSize() * DLByteWidth,
+                                   StoreBase,
+                                   StoreSize.getFixedValue() * DLByteWidth)) {
         LLVM_DEBUG(dbgs() << "\nRemoving store:"; StoreBase.dump();
                    dbgs() << "\nwithin LIFETIME_END of : ";
                    LifetimeEndBase.dump(); dbgs() << "\n");
@@ -25423,8 +25437,9 @@ static SDValue narrowExtractedVectorLoad(EVT VT, SDValue Src, unsigned Index,
   assert(Index % NumElts == 0 && "The extract subvector index is not a "
                                  "multiple of the result's element count");
 
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   // It's fine to use TypeSize here as we know the offset will not be negative.
-  TypeSize Offset = VT.getStoreSize() * (Index / NumElts);
+  TypeSize Offset = VT.getStoreSize(ByteWidth) * (Index / NumElts);
   std::optional<unsigned> ByteOffset;
   if (Offset.isFixed())
     ByteOffset = Offset.getFixedValue();
@@ -25442,10 +25457,11 @@ static SDValue narrowExtractedVectorLoad(EVT VT, SDValue Src, unsigned Index,
   if (Offset.isScalable()) {
     MachinePointerInfo MPI =
         MachinePointerInfo(Ld->getPointerInfo().getAddrSpace());
-    MMO = MF.getMachineMemOperand(Ld->getMemOperand(), MPI, VT.getStoreSize());
+    MMO = MF.getMachineMemOperand(Ld->getMemOperand(), MPI,
+                                  VT.getStoreSize(ByteWidth));
   } else
     MMO = MF.getMachineMemOperand(Ld->getMemOperand(), Offset.getFixedValue(),
-                                  VT.getStoreSize());
+                                  VT.getStoreSize(ByteWidth));
 
   SDValue NewLd = DAG.getLoad(VT, DL, Ld->getChain(), NewAddr, MMO);
   DAG.makeEquivalentMemoryOrdering(Ld, NewLd);
@@ -29169,7 +29185,8 @@ bool DAGCombiner::mayAlias(SDNode *Op0, SDNode *Op1) const {
     MachineMemOperand *MMO;
   };
 
-  auto getCharacteristics = [](SDNode *N) -> MemUseCharacteristics {
+  auto ByteWidth = DLByteWidth;
+  auto getCharacteristics = [ByteWidth](SDNode *N) -> MemUseCharacteristics {
     if (const auto *LSN = dyn_cast<LSBaseSDNode>(N)) {
       int64_t Offset = 0;
       if (auto *C = dyn_cast<ConstantSDNode>(LSN->getOffset()))
@@ -29177,7 +29194,7 @@ bool DAGCombiner::mayAlias(SDNode *Op0, SDNode *Op1) const {
                  : (LSN->getAddressingMode() == ISD::PRE_DEC)
                      ? -1 * C->getSExtValue()
                      : 0;
-      TypeSize Size = LSN->getMemoryVT().getStoreSize();
+      TypeSize Size = LSN->getMemoryVT().getStoreSize(ByteWidth);
       return {LSN->isVolatile(),           LSN->isAtomic(),
               LSN->getBasePtr(),           Offset /*base offset*/,
               LocationSize::precise(Size), LSN->getMemOperand()};

@@ -387,15 +387,16 @@ namespace llvm {
     /// If the value type is a scalable vector type, the scalable property will
     /// be set and the runtime size will be a positive integer multiple of the
     /// base size.
-    TypeSize getStoreSize() const {
+    TypeSize getStoreSize(unsigned ByteWidth = 8) const {
       TypeSize BaseSize = getSizeInBits();
-      return {(BaseSize.getKnownMinValue() + 7) / 8, BaseSize.isScalable()};
+      return {divideCeil(BaseSize.getKnownMinValue(), ByteWidth),
+              BaseSize.isScalable()};
     }
 
     // Return the number of bytes overwritten by a store of this value type or
     // this value type's element type in the case of a vector.
-    uint64_t getScalarStoreSize() const {
-      return getScalarType().getStoreSize().getFixedValue();
+    uint64_t getScalarStoreSize(unsigned ByteWidth = 8) const {
+      return getScalarType().getStoreSize(ByteWidth).getFixedValue();
     }
 
     /// Return the number of bits overwritten by a store of the specified value
@@ -404,8 +405,8 @@ namespace llvm {
     /// If the value type is a scalable vector type, the scalable property will
     /// be set and the runtime size will be a positive integer multiple of the
     /// base size.
-    TypeSize getStoreSizeInBits() const {
-      return getStoreSize() * 8;
+    TypeSize getStoreSizeInBits(unsigned ByteWidth = 8) const {
+      return getStoreSize(ByteWidth) * ByteWidth;
     }
 
     /// Rounds the bit-width of the given integer EVT up to the nearest power of

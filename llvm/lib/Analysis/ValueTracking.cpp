@@ -6353,9 +6353,6 @@ bool llvm::getConstantDataArrayInfo(const Value *V,
                                     ConstantDataArraySlice &Slice,
                                     unsigned ElementSize, uint64_t Offset) {
   assert(V && "V should not be null.");
-  assert((ElementSize % 8) == 0 &&
-         "ElementSize expected to be a multiple of the size of a byte.");
-  unsigned ElementSizeInBytes = ElementSize / 8;
 
   // Drill down into the pointer expression V, ignoring any intervening
   // casts, and determine the identity of the object it references along
@@ -6367,6 +6364,9 @@ bool llvm::getConstantDataArrayInfo(const Value *V,
     return false;
 
   const DataLayout &DL = GV->getDataLayout();
+  assert((ElementSize % DL.getByteWidth()) == 0 &&
+         "ElementSize expected to be a multiple of the size of a byte.");
+  unsigned ElementSizeInBytes = ElementSize / DL.getByteWidth();
   APInt Off(DL.getIndexTypeSizeInBits(V->getType()), 0);
 
   if (GV != V->stripAndAccumulateConstantOffsets(DL, Off,

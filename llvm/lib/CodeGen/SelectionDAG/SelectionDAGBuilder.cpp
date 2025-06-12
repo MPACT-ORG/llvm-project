@@ -4881,8 +4881,10 @@ void SelectionDAGBuilder::visitMaskedScatter(const CallInst &I) {
   SDValue Index;
   ISD::MemIndexType IndexType;
   SDValue Scale;
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   bool UniformBase = getUniformBase(Ptr, Base, Index, IndexType, Scale, this,
-                                    I.getParent(), VT.getScalarStoreSize());
+                                    I.getParent(),
+                                    VT.getScalarStoreSize(ByteWidth));
 
   unsigned AS = Ptr->getType()->getScalarType()->getPointerAddressSpace();
   MachineMemOperand *MMO = DAG.getMachineFunction().getMachineMemOperand(
@@ -4999,8 +5001,10 @@ void SelectionDAGBuilder::visitMaskedGather(const CallInst &I) {
   SDValue Index;
   ISD::MemIndexType IndexType;
   SDValue Scale;
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   bool UniformBase = getUniformBase(Ptr, Base, Index, IndexType, Scale, this,
-                                    I.getParent(), VT.getScalarStoreSize());
+                                    I.getParent(),
+                                    VT.getScalarStoreSize(ByteWidth));
   unsigned AS = Ptr->getType()->getScalarType()->getPointerAddressSpace();
   MachineMemOperand *MMO = DAG.getMachineFunction().getMachineMemOperand(
       MachinePointerInfo(AS), MachineMemOperand::MOLoad,
@@ -5044,10 +5048,11 @@ void SelectionDAGBuilder::visitAtomicCmpXchg(const AtomicCmpXchgInst &I) {
   auto Flags = TLI.getAtomicMemOperandFlags(I, DAG.getDataLayout());
 
   MachineFunction &MF = DAG.getMachineFunction();
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   MachineMemOperand *MMO = MF.getMachineMemOperand(
-      MachinePointerInfo(I.getPointerOperand()), Flags, MemVT.getStoreSize(),
-      DAG.getEVTAlign(MemVT), AAMDNodes(), nullptr, SSID, SuccessOrdering,
-      FailureOrdering);
+      MachinePointerInfo(I.getPointerOperand()), Flags, 
+      MemVT.getStoreSize(ByteWidth), DAG.getEVTAlign(MemVT), AAMDNodes(),
+      nullptr, SSID, SuccessOrdering, FailureOrdering);
 
   SDValue L = DAG.getAtomicCmpSwap(ISD::ATOMIC_CMP_SWAP_WITH_SUCCESS,
                                    dl, MemVT, VTs, InChain,
@@ -5110,9 +5115,11 @@ void SelectionDAGBuilder::visitAtomicRMW(const AtomicRMWInst &I) {
   auto Flags = TLI.getAtomicMemOperandFlags(I, DAG.getDataLayout());
 
   MachineFunction &MF = DAG.getMachineFunction();
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   MachineMemOperand *MMO = MF.getMachineMemOperand(
-      MachinePointerInfo(I.getPointerOperand()), Flags, MemVT.getStoreSize(),
-      DAG.getEVTAlign(MemVT), AAMDNodes(), nullptr, SSID, Ordering);
+      MachinePointerInfo(I.getPointerOperand()), Flags,
+      MemVT.getStoreSize(ByteWidth), DAG.getEVTAlign(MemVT), AAMDNodes(),
+      nullptr, SSID, Ordering);
 
   SDValue L =
     DAG.getAtomic(NT, dl, MemVT, InChain,
@@ -5158,9 +5165,11 @@ void SelectionDAGBuilder::visitAtomicLoad(const LoadInst &I) {
   auto Flags = TLI.getLoadMemOperandFlags(I, DAG.getDataLayout(), AC, LibInfo);
 
   const MDNode *Ranges = getRangeMetadata(I);
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   MachineMemOperand *MMO = DAG.getMachineFunction().getMachineMemOperand(
-      MachinePointerInfo(I.getPointerOperand()), Flags, MemVT.getStoreSize(),
-      I.getAlign(), AAMDNodes(), Ranges, SSID, Order);
+      MachinePointerInfo(I.getPointerOperand()), Flags,
+      MemVT.getStoreSize(ByteWidth), I.getAlign(), AAMDNodes(), Ranges, SSID,
+      Order);
 
   InChain = TLI.prepareVolatileOrAtomicLoad(InChain, dl, DAG);
 
@@ -5196,9 +5205,11 @@ void SelectionDAGBuilder::visitAtomicStore(const StoreInst &I) {
   auto Flags = TLI.getStoreMemOperandFlags(I, DAG.getDataLayout());
 
   MachineFunction &MF = DAG.getMachineFunction();
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   MachineMemOperand *MMO = MF.getMachineMemOperand(
-      MachinePointerInfo(I.getPointerOperand()), Flags, MemVT.getStoreSize(),
-      I.getAlign(), AAMDNodes(), nullptr, SSID, Ordering);
+      MachinePointerInfo(I.getPointerOperand()), Flags,
+      MemVT.getStoreSize(ByteWidth), I.getAlign(), AAMDNodes(), nullptr, SSID,
+      Ordering);
 
   SDValue Val = getValue(I.getValueOperand());
   if (Val.getValueType() != MemVT)
@@ -5309,8 +5320,9 @@ void SelectionDAGBuilder::visitTargetIntrinsic(const CallInst &I,
       MPI = MachinePointerInfo(*Info.fallbackAddressSpace);
     EVT MemVT = Info.memVT;
     LocationSize Size = LocationSize::precise(Info.size);
+    auto ByteWidth = DAG.getDataLayout().getByteWidth();
     if (Size.hasValue() && !Size.getValue())
-      Size = LocationSize::precise(MemVT.getStoreSize());
+      Size = LocationSize::precise(MemVT.getStoreSize(ByteWidth));
     Align Alignment = Info.align.value_or(DAG.getEVTAlign(MemVT));
     MachineMemOperand *MMO = DAG.getMachineFunction().getMachineMemOperand(
         MPI, Info.flags, Size, Alignment, I.getAAMetadata(), /*Ranges=*/nullptr,
@@ -6340,8 +6352,10 @@ void SelectionDAGBuilder::visitVectorHistogram(const CallInst &I,
   SDValue Index;
   ISD::MemIndexType IndexType;
   SDValue Scale;
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   bool UniformBase = getUniformBase(Ptr, Base, Index, IndexType, Scale, this,
-                                    I.getParent(), VT.getScalarStoreSize());
+                                    I.getParent(),
+                                    VT.getScalarStoreSize(ByteWidth));
 
   unsigned AS = Ptr->getType()->getScalarType()->getPointerAddressSpace();
 
@@ -8446,9 +8460,10 @@ void SelectionDAGBuilder::visitVPGather(
       LocationSize::beforeOrAfterPointer(), *Alignment, AAInfo, Ranges);
   SDValue Base, Index, Scale;
   ISD::MemIndexType IndexType;
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   bool UniformBase = getUniformBase(PtrOperand, Base, Index, IndexType, Scale,
                                     this, VPIntrin.getParent(),
-                                    VT.getScalarStoreSize());
+                                    VT.getScalarStoreSize(ByteWidth));
   if (!UniformBase) {
     Base = DAG.getConstant(0, DL, TLI.getPointerTy(DAG.getDataLayout()));
     Index = getValue(PtrOperand);
@@ -8509,9 +8524,10 @@ void SelectionDAGBuilder::visitVPScatter(
       LocationSize::beforeOrAfterPointer(), *Alignment, AAInfo);
   SDValue Base, Index, Scale;
   ISD::MemIndexType IndexType;
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   bool UniformBase = getUniformBase(PtrOperand, Base, Index, IndexType, Scale,
                                     this, VPIntrin.getParent(),
-                                    VT.getScalarStoreSize());
+                                    VT.getScalarStoreSize(ByteWidth));
   if (!UniformBase) {
     Base = DAG.getConstant(0, DL, TLI.getPointerTy(DAG.getDataLayout()));
     Index = getValue(PtrOperand);
@@ -11205,7 +11221,8 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
         ISD::OutputArg MyFlags(
             Flags, Parts[j].getValueType().getSimpleVT(), VT,
             i < CLI.NumFixedArgs, i,
-            j * Parts[j].getValueType().getStoreSize().getKnownMinValue());
+            j * Parts[j].getValueType().getStoreSize(DL.getByteWidth())
+                                       .getKnownMinValue());
         if (NumParts > 1 && j == 0)
           MyFlags.Flags.setSplit();
         else if (j != 0) {
@@ -11721,7 +11738,8 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
         // return values.
         ISD::InputArg MyFlags(
             Flags, RegisterVT, VT, isArgValueUsed, ArgNo,
-            PartBase + i * RegisterVT.getStoreSize().getKnownMinValue());
+            PartBase + i * RegisterVT.getStoreSize(DL.getByteWidth())
+                                     .getKnownMinValue());
         if (NumRegs > 1 && i == 0)
           MyFlags.Flags.setSplit();
         // if it isn't first piece, alignment must be 1
@@ -11734,7 +11752,7 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
       }
       if (NeedsRegBlock && Value == NumValues - 1)
         Ins[Ins.size() - 1].Flags.setInConsecutiveRegsLast();
-      PartBase += VT.getStoreSize().getKnownMinValue();
+      PartBase += VT.getStoreSize(DL.getByteWidth()).getKnownMinValue();
     }
   }
 

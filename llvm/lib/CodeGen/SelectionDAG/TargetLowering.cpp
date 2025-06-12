@@ -4738,7 +4738,7 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
       if (Lod->isSimple() && Lod->isUnindexed() &&
           (Lod->getMemoryVT().isByteSized() ||
            isPaddedAtMostSignificantBitsWhenStored(Lod->getMemoryVT()))) {
-        unsigned memWidth = Lod->getMemoryVT().getStoreSizeInBits();
+        unsigned memWidth = Lod->getMemoryVT().getStoreSizeInBits(ByteWidth);
         unsigned origWidth = N0.getValueSizeInBits();
         unsigned maskWidth = origWidth;
         // We can narrow (e.g.) 16-bit extending loads on 32-bit target to
@@ -10006,6 +10006,7 @@ TargetLowering::scalarizeVectorLoad(LoadSDNode *LD,
   EVT SrcEltVT = SrcVT.getScalarType();
   EVT DstEltVT = DstVT.getScalarType();
 
+  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
   // A vector must always be stored in memory as-is, i.e. without any padding
   // between the elements, since various code depend on it, e.g. in the
   // handling of a bitcast of a vector type to int, which may be done with a
@@ -10013,7 +10014,7 @@ TargetLowering::scalarizeVectorLoad(LoadSDNode *LD,
   // elements that are byte-sized must therefore be stored as an integer
   // built out of the extracted vector elements.
   if (!SrcEltVT.isByteSized()) {
-    unsigned NumLoadBits = SrcVT.getStoreSizeInBits();
+    unsigned NumLoadBits = SrcVT.getStoreSizeInBits(ByteWidth);
     EVT LoadVT = EVT::getIntegerVT(*DAG.getContext(), NumLoadBits);
 
     unsigned NumSrcBits = SrcVT.getSizeInBits();
@@ -10053,7 +10054,6 @@ TargetLowering::scalarizeVectorLoad(LoadSDNode *LD,
     return std::make_pair(Value, Load.getValue(1));
   }
 
-  auto ByteWidth = getTargetMachine().getDataLayout().getByteWidth();
   unsigned Stride = divideCeil(SrcEltVT.getSizeInBits(), ByteWidth);
   assert(SrcEltVT.isByteSized());
 
@@ -10190,7 +10190,7 @@ TargetLowering::expandUnalignedLoad(LoadSDNode *LD, SelectionDAG &DAG) const {
     // Copy the value to a (aligned) stack slot using (unaligned) integer
     // loads and stores, then do a (aligned) load from the stack slot.
     MVT RegVT = getRegisterType(*DAG.getContext(), intVT);
-    unsigned LoadedBytes = LoadedVT.getStoreSize();
+    unsigned LoadedBytes = LoadedVT.getStoreSize(ByteWidth);
     unsigned RegBytes = divideCeil(RegVT.getSizeInBits(), ByteWidth);
     unsigned NumRegs = (LoadedBytes + RegBytes - 1) / RegBytes;
 
@@ -10340,7 +10340,7 @@ SDValue TargetLowering::expandUnalignedStore(StoreSDNode *ST,
         *DAG.getContext(),
         EVT::getIntegerVT(*DAG.getContext(), StoreMemVT.getSizeInBits()));
     EVT PtrVT = Ptr.getValueType();
-    unsigned StoredBytes = StoreMemVT.getStoreSize();
+    unsigned StoredBytes = StoreMemVT.getStoreSize(ByteWidth);
     unsigned RegBytes = divideCeil(RegVT.getSizeInBits(), ByteWidth);
     unsigned NumRegs = (StoredBytes + RegBytes - 1) / RegBytes;
 
@@ -10446,6 +10446,7 @@ TargetLowering::IncrementMemoryAddress(SDValue Addr, SDValue Mask,
   EVT MaskVT = Mask.getValueType();
   assert(DataVT.getVectorElementCount() == MaskVT.getVectorElementCount() &&
          "Incompatible types of Data and Mask");
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   if (IsCompressedMemory) {
     if (DataVT.isScalableVector())
       report_fatal_error(
@@ -10470,9 +10471,10 @@ TargetLowering::IncrementMemoryAddress(SDValue Addr, SDValue Mask,
   } else if (DataVT.isScalableVector()) {
     Increment = DAG.getVScale(DL, AddrVT,
                               APInt(AddrVT.getFixedSizeInBits(),
-                                    DataVT.getStoreSize().getKnownMinValue()));
+                                    DataVT.getStoreSize(ByteWidth)
+                                          .getKnownMinValue()));
   } else
-    Increment = DAG.getConstant(DataVT.getStoreSize(), DL, AddrVT);
+    Increment = DAG.getConstant(DataVT.getStoreSize(ByteWidth), DL, AddrVT);
 
   return DAG.getNode(ISD::ADD, DL, AddrVT, Addr, Increment);
 }
@@ -11754,9 +11756,11 @@ SDValue TargetLowering::expandVectorSplice(SDNode *Node,
 
   Align Alignment = DAG.getReducedAlign(VT, /*UseABI=*/false);
 
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   EVT MemVT = EVT::getVectorVT(*DAG.getContext(), VT.getVectorElementType(),
                                VT.getVectorElementCount() * 2);
-  SDValue StackPtr = DAG.CreateStackTemporary(MemVT.getStoreSize(), Alignment);
+  SDValue StackPtr = DAG.CreateStackTemporary(MemVT.getStoreSize(ByteWidth),
+                                              Alignment);
   EVT PtrVT = StackPtr.getValueType();
   auto &MF = DAG.getMachineFunction();
   auto FrameIndex = cast<FrameIndexSDNode>(StackPtr.getNode())->getIndex();
@@ -11767,7 +11771,8 @@ SDValue TargetLowering::expandVectorSplice(SDNode *Node,
   // Store the hi part of CONCAT_VECTORS(V1, V2)
   SDValue OffsetToV2 = DAG.getVScale(
       DL, PtrVT,
-      APInt(PtrVT.getFixedSizeInBits(), VT.getStoreSize().getKnownMinValue()));
+      APInt(PtrVT.getFixedSizeInBits(), VT.getStoreSize(ByteWidth)
+                                          .getKnownMinValue()));
   SDValue StackPtr2 = DAG.getNode(ISD::ADD, DL, PtrVT, StackPtr, OffsetToV2);
   SDValue StoreV2 = DAG.getStore(StoreV1, DL, V2, StackPtr2, PtrInfo);
 
@@ -11783,7 +11788,7 @@ SDValue TargetLowering::expandVectorSplice(SDNode *Node,
   uint64_t TrailingElts = -Imm;
 
   // NOTE: TrailingElts must be clamped so as not to read outside of V1:V2.
-  TypeSize EltByteSize = VT.getVectorElementType().getStoreSize();
+  TypeSize EltByteSize = VT.getVectorElementType().getStoreSize(ByteWidth);
   SDValue TrailingBytes =
       DAG.getConstant(TrailingElts * EltByteSize, DL, PtrVT);
 
@@ -11791,7 +11796,7 @@ SDValue TargetLowering::expandVectorSplice(SDNode *Node,
     SDValue VLBytes =
         DAG.getVScale(DL, PtrVT,
                       APInt(PtrVT.getFixedSizeInBits(),
-                            VT.getStoreSize().getKnownMinValue()));
+                            VT.getStoreSize(ByteWidth).getKnownMinValue()));
     TrailingBytes = DAG.getNode(ISD::UMIN, DL, PtrVT, TrailingBytes, VLBytes);
   }
 
@@ -11819,8 +11824,10 @@ SDValue TargetLowering::expandVECTOR_COMPRESS(SDNode *Node,
   if (VecVT.isScalableVector())
     report_fatal_error("Cannot expand masked_compress for scalable vectors.");
 
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   SDValue StackPtr = DAG.CreateStackTemporary(
-      VecVT.getStoreSize(), DAG.getReducedAlign(VecVT, /*UseABI=*/false));
+      VecVT.getStoreSize(ByteWidth),
+      DAG.getReducedAlign(VecVT, /*UseABI=*/false));
   int FI = cast<FrameIndexSDNode>(StackPtr.getNode())->getIndex();
   MachinePointerInfo PtrInfo =
       MachinePointerInfo::getFixedStack(DAG.getMachineFunction(), FI);
