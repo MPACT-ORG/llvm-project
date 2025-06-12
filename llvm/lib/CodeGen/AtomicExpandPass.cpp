@@ -814,8 +814,9 @@ static PartwordMaskValues createMaskInstrs(IRBuilderBase &Builder,
     PMV.IntValueType =
         Type::getIntNTy(Ctx, ValueType->getPrimitiveSizeInBits());
 
-  PMV.WordType = MinWordSize > ValueSize ? Type::getIntNTy(Ctx, MinWordSize * 8)
-                                         : ValueType;
+  auto ByteWidth = M->getDataLayout().getByteWidth();
+  PMV.WordType = MinWordSize > ValueSize ?
+      Type::getIntNTy(Ctx, MinWordSize * ByteWidth) : ValueType;
   if (PMV.ValueType == PMV.WordType) {
     PMV.AlignedAddr = Addr;
     PMV.AlignedAddrAlignment = AddrAlign;
@@ -857,7 +858,8 @@ static PartwordMaskValues createMaskInstrs(IRBuilderBase &Builder,
 
   PMV.ShiftAmt = Builder.CreateTrunc(PMV.ShiftAmt, PMV.WordType, "ShiftAmt");
   PMV.Mask = Builder.CreateShl(
-      ConstantInt::get(PMV.WordType, (1 << (ValueSize * 8)) - 1), PMV.ShiftAmt,
+      ConstantInt::get(PMV.WordType, (1 << (ValueSize * ByteWidth)) - 1),
+                       PMV.ShiftAmt,
       "Mask");
 
   PMV.Inv_Mask = Builder.CreateNot(PMV.Mask, "Inv_Mask");
@@ -1898,7 +1900,7 @@ bool AtomicExpandImpl::expandAtomicOpToLibcall(
   IRBuilder<> AllocaBuilder(&I->getFunction()->getEntryBlock().front());
 
   bool UseSizedLibcall = canUseSizedAtomicCall(Size, Alignment, DL);
-  Type *SizedIntTy = Type::getIntNTy(Ctx, Size * 8);
+  Type *SizedIntTy = Type::getIntNTy(Ctx, Size * DL.getByteWidth());
 
   const Align AllocaAlignment = DL.getPrefTypeAlign(SizedIntTy);
 

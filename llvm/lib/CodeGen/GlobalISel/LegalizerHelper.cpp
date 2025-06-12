@@ -4770,7 +4770,7 @@ Register LegalizerHelper::getVectorElementPointer(Register VecPtr, LLT VecTy,
   // Calculate the element offset and add it to the pointer.
   // FIXME: should be ABI size.
   unsigned EltSize = divideCeil(EltTy.getSizeInBits(), ByteWidth);
-  assert(EltSize * 8 == EltTy.getSizeInBits() &&
+  assert(EltSize * ByteWidth == EltTy.getSizeInBits() &&
          "Converting bits to bytes lost precision");
 
   Index = clampVectorIndex(MIRBuilder, Index, VecTy);

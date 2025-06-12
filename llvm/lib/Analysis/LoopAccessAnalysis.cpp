@@ -1702,6 +1702,7 @@ bool MemoryDepChecker::Dependence::isForward() const {
 
 bool MemoryDepChecker::couldPreventStoreLoadForward(uint64_t Distance,
                                                     uint64_t TypeByteSize,
+                                                    uint64_t TypeBitSize,
                                                     unsigned CommonStride) {
   // If loads occur at a distance that is not a multiple of a feasible vector
   // factor store-load forwarding does not take place.
@@ -1746,7 +1747,7 @@ bool MemoryDepChecker::couldPreventStoreLoadForward(uint64_t Distance,
           VectorizerParams::MaxVectorWidth * TypeByteSize) {
     uint64_t MaxVF =
         bit_floor(MaxVFWithoutSLForwardIssuesPowerOf2 / CommonStride);
-    uint64_t MaxVFInBits = MaxVF * TypeByteSize * 8;
+    uint64_t MaxVFInBits = MaxVF * TypeBitSize;
     MaxStoreLoadForwardSafeDistanceInBits =
         std::min(MaxStoreLoadForwardSafeDistanceInBits, MaxVFInBits);
   }
@@ -2015,6 +2016,7 @@ MemoryDepChecker::isDependent(const MemAccessInfo &A, unsigned AIdx,
 
   ScalarEvolution &SE = *PSE.getSE();
   auto &DL = InnermostLoop->getHeader()->getDataLayout();
+  auto TypeBitSize = TypeByteSize * DL.getByteWidth();
 
   // If the distance between the acecsses is larger than their maximum absolute
   // stride multiplied by the symbolic maximum backedge taken count (which is an
@@ -2076,7 +2078,8 @@ MemoryDepChecker::isDependent(const MemAccessInfo &A, unsigned AIdx,
         return Dependence::Unknown;
       }
       if (!HasSameSize || couldPreventStoreLoadForward(
-                              ConstDist->abs().getZExtValue(), TypeByteSize)) {
+                              ConstDist->abs().getZExtValue(), TypeByteSize,
+                              TypeBitSize)) {
         LLVM_DEBUG(
             dbgs() << "LAA: Forward but may prevent st->ld forwarding\n");
         return Dependence::ForwardButPreventsForwarding;
@@ -2195,7 +2198,8 @@ MemoryDepChecker::isDependent(const MemAccessInfo &A, unsigned AIdx,
 
   bool IsTrueDataDependence = (!AIsWrite && BIsWrite);
   if (IsTrueDataDependence && EnableForwardingConflictDetection && ConstDist &&
-      couldPreventStoreLoadForward(MinDistance, TypeByteSize, *CommonStride))
+      couldPreventStoreLoadForward(MinDistance, TypeByteSize, TypeBitSize,
+                                   *CommonStride))
     return Dependence::BackwardVectorizableButPreventsForwarding;
 
   uint64_t MaxVF = MinDepDistBytes / MaxStride;

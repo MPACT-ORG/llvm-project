@@ -930,12 +930,12 @@ void MemorySanitizer::createUserspaceApi(Module &M,
     std::string FunctionName = "__msan_maybe_warning_" + itostr(AccessSize);
     MaybeWarningFn[AccessSizeIndex] = M.getOrInsertFunction(
         FunctionName, TLI.getAttrList(C, {0, 1}, /*Signed=*/false),
-        IRB.getVoidTy(), IRB.getIntNTy(AccessSize * 8), IRB.getInt32Ty());
+        IRB.getVoidTy(), IRB.getIntNTy(AccessSize * ByteWidth), IRB.getInt32Ty());
 
     FunctionName = "__msan_maybe_store_origin_" + itostr(AccessSize);
     MaybeStoreOriginFn[AccessSizeIndex] = M.getOrInsertFunction(
         FunctionName, TLI.getAttrList(C, {0, 2}, /*Signed=*/false),
-        IRB.getVoidTy(), IRB.getIntNTy(AccessSize * 8), PtrTy,
+        IRB.getVoidTy(), IRB.getIntNTy(AccessSize * ByteWidth), PtrTy,
         IRB.getInt32Ty());
   }
 
@@ -1266,7 +1266,8 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       return Origin;
     assert(IntptrSize == kOriginSize * 2);
     Origin = IRB.CreateIntCast(Origin, MS.IntptrTy, /* isSigned */ false);
-    return IRB.CreateOr(Origin, IRB.CreateShl(Origin, kOriginSize * 8));
+    return IRB.CreateOr(Origin, IRB.CreateShl(Origin, 
+                                              kOriginSize * DL.getByteWidth()));
   }
 
   /// Fill memory range with the given origin value.

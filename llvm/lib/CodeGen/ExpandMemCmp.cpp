@@ -428,15 +428,17 @@ Value *MemCmpExpansion::getCompareLoadPairs(unsigned BlockIndex,
   // If we have multiple loads per block, we need to generate a composite
   // comparison using xor+or. The type for the combinations is the largest load
   // type.
+  auto ByteWidth = CI->getDataLayout().getByteWidth();
   IntegerType *const MaxLoadType =
       NumLoads == 1 ? nullptr
-                    : IntegerType::get(CI->getContext(), MaxLoadSize * 8);
+                    : IntegerType::get(CI->getContext(),
+                                       MaxLoadSize * ByteWidth);
 
   for (unsigned i = 0; i < NumLoads; ++i, ++LoadIndex) {
     const LoadEntry &CurLoadEntry = LoadSequence[LoadIndex];
     const LoadPair Loads = getLoadPair(
-        IntegerType::get(CI->getContext(), CurLoadEntry.LoadSize * 8), nullptr,
-        MaxLoadType, CurLoadEntry.Offset);
+        IntegerType::get(CI->getContext(), CurLoadEntry.LoadSize * ByteWidth),
+        nullptr, MaxLoadType, CurLoadEntry.Offset);
 
     if (NumLoads != 1) {
       // If we have multiple loads per block, we need to generate a composite
@@ -520,16 +522,18 @@ void MemCmpExpansion::emitLoadCompareBlock(unsigned BlockIndex) {
     return;
   }
 
+  auto ByteWidth = CI->getDataLayout().getByteWidth();
   Type *LoadSizeType =
-      IntegerType::get(CI->getContext(), CurLoadEntry.LoadSize * 8);
+      IntegerType::get(CI->getContext(), CurLoadEntry.LoadSize * ByteWidth);
   Type *BSwapSizeType =
       DL.isLittleEndian()
           ? IntegerType::get(CI->getContext(),
-                             PowerOf2Ceil(CurLoadEntry.LoadSize * 8))
+                             PowerOf2Ceil(CurLoadEntry.LoadSize * ByteWidth))
           : nullptr;
   Type *MaxLoadType = IntegerType::get(
       CI->getContext(),
-      std::max(MaxLoadSize, (unsigned)PowerOf2Ceil(CurLoadEntry.LoadSize)) * 8);
+      std::max(MaxLoadSize,
+      (unsigned)PowerOf2Ceil(CurLoadEntry.LoadSize)) * ByteWidth);
   assert(CurLoadEntry.LoadSize <= MaxLoadSize && "Unexpected load type");
 
   Builder.SetInsertPoint(LoadCmpBlocks[BlockIndex]);
@@ -601,7 +605,9 @@ void MemCmpExpansion::emitMemCmpResultBlock() {
 }
 
 void MemCmpExpansion::setupResultBlockPHINodes() {
-  Type *MaxLoadType = IntegerType::get(CI->getContext(), MaxLoadSize * 8);
+  auto ByteWidth = CI->getDataLayout().getByteWidth();
+  Type *MaxLoadType = IntegerType::get(CI->getContext(),
+                                       MaxLoadSize * ByteWidth);
   Builder.SetInsertPoint(ResBlock.BB);
   // Note: this assumes one load per block.
   ResBlock.PhiSrc1 =
@@ -644,13 +650,16 @@ Value *MemCmpExpansion::getMemCmpEqZeroOneBlock() {
 /// matter, then it generates more efficient code with only one comparison.
 Value *MemCmpExpansion::getMemCmpOneBlock() {
   bool NeedsBSwap = DL.isLittleEndian() && Size != 1;
-  Type *LoadSizeType = IntegerType::get(CI->getContext(), Size * 8);
+  auto ByteWidth = CI->getDataLayout().getByteWidth();
+  Type *LoadSizeType = IntegerType::get(CI->getContext(), Size * ByteWidth);
   Type *BSwapSizeType =
-      NeedsBSwap ? IntegerType::get(CI->getContext(), PowerOf2Ceil(Size * 8))
+      NeedsBSwap ? IntegerType::get(CI->getContext(), 
+                                    PowerOf2Ceil(Size * ByteWidth))
                  : nullptr;
   Type *MaxLoadType =
       IntegerType::get(CI->getContext(),
-                       std::max(MaxLoadSize, (unsigned)PowerOf2Ceil(Size)) * 8);
+                       std::max(MaxLoadSize, 
+                       (unsigned)PowerOf2Ceil(Size)) * ByteWidth);
 
   // The i8 and i16 cases don't need compares. We zext the loaded values and
   // subtract them to get the suitable negative, zero, or positive i32 result.

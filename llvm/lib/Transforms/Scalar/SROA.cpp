@@ -2143,7 +2143,8 @@ static bool isVectorPromotionViableForSlice(Partition &P, const Slice &S,
                       : FixedVectorType::get(Ty->getElementType(), NumElements);
 
   Type *SplitIntTy =
-      Type::getIntNTy(Ty->getContext(), NumElements * ElementSize * 8);
+      Type::getIntNTy(Ty->getContext(),
+                      NumElements * ElementSize * DL.getByteWidth());
 
   Use *U = S.getUse();
 
@@ -2939,8 +2940,10 @@ private:
     V = convertValue(DL, IRB, V, IntTy);
     assert(NewBeginOffset >= NewAllocaBeginOffset && "Out of bounds offset");
     uint64_t Offset = NewBeginOffset - NewAllocaBeginOffset;
+    auto ByteWidth = LI.getDataLayout().getByteWidth();
     if (Offset > 0 || NewEndOffset < NewAllocaEndOffset) {
-      IntegerType *ExtractTy = Type::getIntNTy(LI.getContext(), SliceSize * 8);
+      IntegerType *ExtractTy = Type::getIntNTy(LI.getContext(), 
+                                               SliceSize * ByteWidth);
       V = extractInteger(DL, IRB, V, ExtractTy, Offset, "extract");
     }
     // It is possible that the extracted type is not the load type. This
@@ -2948,9 +2951,10 @@ private:
     // a consequence the slice is narrower but still a candidate for integer
     // lowering. To handle this case, we just zero extend the extracted
     // integer.
-    assert(cast<IntegerType>(LI.getType())->getBitWidth() >= SliceSize * 8 &&
+    assert(cast<IntegerType>(LI.getType())->getBitWidth() >= 
+               SliceSize * ByteWidth &&
            "Can only handle an extract for an overly wide load");
-    if (cast<IntegerType>(LI.getType())->getBitWidth() > SliceSize * 8)
+    if (cast<IntegerType>(LI.getType())->getBitWidth() > SliceSize * ByteWidth)
       V = IRB.CreateZExt(V, LI.getType());
     return V;
   }
@@ -2964,7 +2968,9 @@ private:
 
     unsigned AS = LI.getPointerAddressSpace();
 
-    Type *TargetTy = IsSplit ? Type::getIntNTy(LI.getContext(), SliceSize * 8)
+    auto ByteWidth = LI.getDataLayout().getByteWidth();
+    Type *TargetTy = IsSplit ? Type::getIntNTy(LI.getContext(),
+                                               SliceSize * ByteWidth)
                              : LI.getType();
     bool IsPtrAdjusted = false;
     Value *V;
@@ -3100,9 +3106,11 @@ private:
                                                   V->getType(), DL));
     Pass.DeadInsts.push_back(&SI);
 
+    auto ByteWidth = SI.getDataLayout().getByteWidth();
     // NOTE: Careful to use OrigV rather than V.
-    migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * 8, SliceSize * 8, &SI,
-                     Store, Store->getPointerOperand(), OrigV, DL);
+    migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * ByteWidth,
+                     SliceSize * ByteWidth, &SI, Store,
+                     Store->getPointerOperand(), OrigV, DL);
     LLVM_DEBUG(dbgs() << "          to: " << *Store << "\n");
     return true;
   }
@@ -3127,7 +3135,9 @@ private:
       Store->setAAMetadata(AATags.adjustForAccess(NewBeginOffset - BeginOffset,
                                                   V->getType(), DL));
 
-    migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * 8, SliceSize * 8, &SI,
+    auto ByteWidth = DL.getByteWidth();
+    migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * ByteWidth,
+                     SliceSize * ByteWidth, &SI,
                      Store, Store->getPointerOperand(),
                      Store->getValueOperand(), DL);
 
@@ -3157,7 +3167,9 @@ private:
              "Only integer type loads and stores are split");
       assert(DL.typeSizeEqualsStoreSize(V->getType()) &&
              "Non-byte-multiple bit width");
-      IntegerType *NarrowTy = Type::getIntNTy(SI.getContext(), SliceSize * 8);
+      auto ByteWidth = DL.getByteWidth();
+      IntegerType *NarrowTy = Type::getIntNTy(SI.getContext(),
+                                              SliceSize * ByteWidth);
       V = extractInteger(DL, IRB, V, NarrowTy, NewBeginOffset - BeginOffset,
                          "extract");
     }
@@ -3193,7 +3205,9 @@ private:
     if (NewSI->isAtomic())
       NewSI->setAlignment(SI.getAlign());
 
-    migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * 8, SliceSize * 8, &SI,
+    auto ByteWidth = DL.getByteWidth();
+    migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * ByteWidth,
+                     SliceSize * ByteWidth, &SI,
                      NewSI, NewSI->getPointerOperand(),
                      NewSI->getValueOperand(), DL);
 
@@ -3222,7 +3236,8 @@ private:
     if (Size == 1)
       return V;
 
-    Type *SplatIntTy = Type::getIntNTy(VTy->getContext(), Size * 8);
+    Type *SplatIntTy = Type::getIntNTy(VTy->getContext(),
+                                       Size * DL.getByteWidth());
     V = IRB.CreateMul(
         IRB.CreateZExt(V, SplatIntTy, "zext"),
         IRB.CreateUDiv(Constant::getAllOnesValue(SplatIntTy),
@@ -3297,8 +3312,10 @@ private:
         New->setAAMetadata(
             AATags.adjustForAccess(NewBeginOffset - BeginOffset, Sz));
 
-      migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * 8, SliceSize * 8, &II,
-                       New, New->getRawDest(), nullptr, DL);
+      auto ByteWidth = DL.getByteWidth();
+      migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * ByteWidth,
+                       SliceSize * ByteWidth, &II, New, New->getRawDest(),
+                       nullptr, DL);
 
       LLVM_DEBUG(dbgs() << "          to: " << *New << "\n");
       return false;
@@ -3374,8 +3391,10 @@ private:
       New->setAAMetadata(AATags.adjustForAccess(NewBeginOffset - BeginOffset,
                                                 V->getType(), DL));
 
-    migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * 8, SliceSize * 8, &II,
-                     New, New->getPointerOperand(), V, DL);
+    auto ByteWidth = DL.getByteWidth();
+    migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * ByteWidth,
+                     SliceSize * ByteWidth, &II, New, New->getPointerOperand(),
+                     V, DL);
 
     LLVM_DEBUG(dbgs() << "          to: " << *New << "\n");
     return !II.isVolatile();
@@ -3476,6 +3495,8 @@ private:
     OtherAlign =
         commonAlignment(OtherAlign, OtherOffset.zextOrTrunc(64).getZExtValue());
 
+    auto ByteWidth = DL.getByteWidth();
+
     if (EmitMemCpy) {
       // Compute the other pointer, folding as much as possible to produce
       // a single, simple GEP in most cases.
@@ -3507,13 +3528,13 @@ private:
 
       APInt Offset(DL.getIndexTypeSizeInBits(DestPtr->getType()), 0);
       if (IsDest) {
-        migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * 8, SliceSize * 8,
-                         &II, New, DestPtr, nullptr, DL);
+        migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * ByteWidth,
+                         SliceSize * ByteWidth, &II, New, DestPtr, nullptr, DL);
       } else if (AllocaInst *Base = dyn_cast<AllocaInst>(
                      DestPtr->stripAndAccumulateConstantOffsets(
                          DL, Offset, /*AllowNonInbounds*/ true))) {
-        migrateDebugInfo(Base, IsSplit, Offset.getZExtValue() * 8,
-                         SliceSize * 8, &II, New, DestPtr, nullptr, DL);
+        migrateDebugInfo(Base, IsSplit, Offset.getZExtValue() * ByteWidth,
+                         SliceSize * ByteWidth, &II, New, DestPtr, nullptr, DL);
       }
       LLVM_DEBUG(dbgs() << "          to: " << *New << "\n");
       return false;
@@ -3526,7 +3547,7 @@ private:
     unsigned EndIndex = VecTy ? getIndex(NewEndOffset) : 0;
     unsigned NumElements = EndIndex - BeginIndex;
     IntegerType *SubIntTy =
-        IntTy ? Type::getIntNTy(IntTy->getContext(), Size * 8) : nullptr;
+        IntTy ? Type::getIntNTy(IntTy->getContext(), Size * ByteWidth) : nullptr;
 
     // Reset the other pointer type to match the register type we're going to
     // use, but using the address space of the original other pointer.
@@ -3606,13 +3627,13 @@ private:
     APInt Offset(DL.getIndexTypeSizeInBits(DstPtr->getType()), 0);
     if (IsDest) {
 
-      migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * 8, SliceSize * 8, &II,
-                       Store, DstPtr, Src, DL);
+      migrateDebugInfo(&OldAI, IsSplit, NewBeginOffset * ByteWidth,
+                       SliceSize * ByteWidth, &II, Store, DstPtr, Src, DL);
     } else if (AllocaInst *Base = dyn_cast<AllocaInst>(
                    DstPtr->stripAndAccumulateConstantOffsets(
                        DL, Offset, /*AllowNonInbounds*/ true))) {
-      migrateDebugInfo(Base, IsSplit, Offset.getZExtValue() * 8, SliceSize * 8,
-                       &II, Store, DstPtr, Src, DL);
+      migrateDebugInfo(Base, IsSplit, Offset.getZExtValue() * ByteWidth,
+                       SliceSize * ByteWidth, &II, Store, DstPtr, Src, DL);
     }
 
     LLVM_DEBUG(dbgs() << "          to: " << *Store << "\n");
@@ -4024,7 +4045,8 @@ private:
       if (auto *OldAI = dyn_cast<AllocaInst>(Base)) {
         uint64_t SizeInBits =
             DL.getTypeSizeInBits(Store->getValueOperand()->getType());
-        migrateDebugInfo(OldAI, /*IsSplit*/ true, Offset.getZExtValue() * 8,
+        migrateDebugInfo(OldAI, /*IsSplit*/ true, 
+                         Offset.getZExtValue() * DL.getByteWidth(),
                          SizeInBits, AggStore, Store,
                          Store->getPointerOperand(), Store->getValueOperand(),
                          DL);
@@ -4657,7 +4679,8 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
     uint64_t PartOffset = 0, PartSize = Offsets.Splits.front();
     int Idx = 0, Size = Offsets.Splits.size();
     for (;;) {
-      auto *PartTy = Type::getIntNTy(LI->getContext(), PartSize * 8);
+      auto *PartTy = Type::getIntNTy(LI->getContext(), 
+                                     PartSize * DL.getByteWidth());
       auto AS = LI->getPointerAddressSpace();
       auto *PartPtrTy = LI->getPointerOperandType();
       LoadInst *PLoad = IRB.CreateAlignedLoad(
@@ -4798,7 +4821,8 @@ bool SROA::presplitLoadsAndStores(AllocaInst &AI, AllocaSlices &AS) {
     uint64_t PartOffset = 0, PartSize = Offsets.Splits.front();
     int Idx = 0, Size = Offsets.Splits.size();
     for (;;) {
-      auto *PartTy = Type::getIntNTy(Ty->getContext(), PartSize * 8);
+      auto *PartTy = Type::getIntNTy(Ty->getContext(),
+                                     PartSize * DL.getByteWidth());
       auto *LoadPartPtrTy = LI->getPointerOperandType();
       auto *StorePartPtrTy = SI->getPointerOperandType();
 
@@ -4953,8 +4977,8 @@ AllocaInst *SROA::rewritePartition(AllocaInst &AI, AllocaSlices &AS,
     }
   if ((!SliceTy || (SliceTy->isArrayTy() &&
                     SliceTy->getArrayElementType()->isIntegerTy())) &&
-      DL.isLegalInteger(P.size() * 8)) {
-    SliceTy = Type::getIntNTy(*C, P.size() * 8);
+      DL.isLegalInteger(P.size() * DL.getByteWidth())) {
+    SliceTy = Type::getIntNTy(*C, P.size() * DL.getByteWidth());
   }
 
   // If the common use types are not viable for promotion then attempt to find
@@ -5477,8 +5501,8 @@ bool SROA::splitAlloca(AllocaInst &AI, AllocaSlices &AS) {
       // intersect between it and the alloca slice.
       if (!DIExpression::calculateFragmentIntersect(
               DL, &AI, Fragment.Offset, Fragment.Size, DbgPtr,
-              CurrentExprOffsetInBytes * 8, ExtractOffsetInBits, VarFrag,
-              NewDbgFragment, OffsetFromLocationInBits))
+              CurrentExprOffsetInBytes * DL.getByteWidth(), ExtractOffsetInBits,
+              VarFrag, NewDbgFragment, OffsetFromLocationInBits))
         continue; // Do not migrate this fragment to this slice.
 
       // Zero sized fragment indicates there's no intersect between the variable

@@ -216,7 +216,7 @@ void ThreadSanitizer::initialize(Module &M, const TargetLibraryInfo &TLI) {
   IntegerType *OrdTy = IRB.getInt32Ty();
   for (size_t i = 0; i < kNumberOfAccessSizes; ++i) {
     const unsigned ByteSize = 1U << i;
-    const unsigned BitSize = ByteSize * 8;
+    const unsigned BitSize = ByteSize * DL.getByteWidth();
     std::string ByteSizeStr = utostr(ByteSize);
     std::string BitSizeStr = utostr(BitSize);
     SmallString<32> ReadName("__tsan_read" + ByteSizeStr);
@@ -736,7 +736,7 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
     if (Idx < 0)
       return false;
     const unsigned ByteSize = 1U << Idx;
-    const unsigned BitSize = ByteSize * 8;
+    const unsigned BitSize = ByteSize * DL.getByteWidth();
     Type *Ty = Type::getIntNTy(IRB.getContext(), BitSize);
     Value *Args[] = {Addr,
                      IRB.CreateBitOrPointerCast(SI->getValueOperand(), Ty),
@@ -753,7 +753,7 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
     if (!F)
       return false;
     const unsigned ByteSize = 1U << Idx;
-    const unsigned BitSize = ByteSize * 8;
+    const unsigned BitSize = ByteSize * DL.getByteWidth();
     Type *Ty = Type::getIntNTy(IRB.getContext(), BitSize);
     Value *Val = RMWI->getValOperand();
     Value *Args[] = {Addr, IRB.CreateBitOrPointerCast(Val, Ty),
@@ -768,7 +768,7 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
     if (Idx < 0)
       return false;
     const unsigned ByteSize = 1U << Idx;
-    const unsigned BitSize = ByteSize * 8;
+    const unsigned BitSize = ByteSize * DL.getByteWidth();
     Type *Ty = Type::getIntNTy(IRB.getContext(), BitSize);
     Value *CmpOperand =
       IRB.CreateBitOrPointerCast(CASI->getCompareOperand(), Ty);

@@ -2369,7 +2369,8 @@ QualType Sema::BuildVectorType(QualType CurType, Expr *SizeExpr,
         << SizeExpr->getSourceRange() << "vector";
     return QualType();
   }
-  uint64_t VectorSizeBits = VecSize->getZExtValue() * 8;
+  auto ByteWidth = Context.getTargetInfo().getByteWidth();
+  uint64_t VectorSizeBits = VecSize->getZExtValue() * ByteWidth;
   unsigned TypeSize = static_cast<unsigned>(Context.getTypeSize(CurType));
 
   if (VectorSizeBits == 0) {

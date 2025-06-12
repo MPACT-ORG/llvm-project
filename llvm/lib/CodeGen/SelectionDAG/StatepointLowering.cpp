@@ -111,8 +111,8 @@ StatepointLoweringState::allocateStackSlot(EVT ValueType,
 
   auto ByteWidth = Builder.DAG.getDataLayout().getByteWidth();
   unsigned SpillSize = ValueType.getStoreSize(ByteWidth);
-  assert((SpillSize * 8) ==
-             (-8u & (7 + ValueType.getSizeInBits())) && // Round up modulo 8.
+  assert((SpillSize == 
+              divideCeil((unsigned)ValueType.getSizeInBits(), ByteWidth)) &&
          "Size not in bytes?");
 
   // First look for a previously created stack slot which is not in
@@ -393,9 +393,9 @@ spillIncomingStatepointValue(SDValue Incoming, SDValue Chain,
     // can consider allowing spills of smaller values to larger slots
     // (i.e. change the '==' in the assert below to a '>=').
     MachineFrameInfo &MFI = Builder.DAG.getMachineFunction().getFrameInfo();
-    assert((MFI.getObjectSize(Index) * 8) ==
-               (-8 & (7 + // Round up modulo 8.
-                      (int64_t)Incoming.getValueSizeInBits())) &&
+    auto ByteWidth = Builder.DAG.getDataLayout().getByteWidth();
+    assert((MFI.getObjectSize(Index) ==
+           (int64_t)divideCeil(Incoming.getValueSizeInBits(), ByteWidth)) &&
            "Bad spill:  stack slot does not match!");
 
     // Note: Using the alignment of the spill slot (rather than the abi or

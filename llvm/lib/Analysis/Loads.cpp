@@ -614,7 +614,8 @@ static Value *getAvailableLoadStore(Instruction *Inst, const Value *Ptr,
 
     // Make sure the read bytes are contained in the memset.
     uint64_t LoadSize = LoadTypeSize.getFixedValue();
-    if ((Len->getValue() * 8).ult(LoadSize))
+    auto ByteWidth = Inst->getDataLayout().getByteWidth();
+    if ((Len->getValue() * ByteWidth).ult(LoadSize))
       return nullptr;
 
     APInt Splat = LoadSize >= 8 ? APInt::getSplat(LoadSize, Val->getValue())

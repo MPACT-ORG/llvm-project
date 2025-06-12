@@ -1442,7 +1442,8 @@ void CodeGenFunction::CreateCoercedStore(llvm::Value *Src, Address Dst,
     }
   } else if (SrcTy->isIntegerTy()) {
     // If the source is a simple integer, coerce it directly.
-    llvm::Type *DstIntTy = Builder.getIntNTy(DstSize.getFixedValue() * 8);
+    llvm::Type *DstIntTy = 
+        Builder.getIntNTy(DstSize.getFixedValue() * Target.ByteWidth);
     Src = CoerceIntOrPtrToIntOrPtr(Src, DstIntTy, *this);
     auto *I =
         Builder.CreateStore(Src, Dst.withElementType(DstIntTy), DstIsVolatile);

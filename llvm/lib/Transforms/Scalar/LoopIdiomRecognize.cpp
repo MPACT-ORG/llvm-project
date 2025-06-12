@@ -1578,12 +1578,13 @@ public:
     // Verify that StepSize is consistent with platform char width.
     OpWidth = OperandType->getIntegerBitWidth();
     unsigned WcharSize = TLI->getWCharSize(*LoopLoad->getModule());
-    if (OpWidth != StepSize * 8)
+    auto ByteWidth = LoopBody->getDataLayout().getByteWidth();
+    if (OpWidth != StepSize * ByteWidth)
       return false;
     if (OpWidth != 8 && OpWidth != 16 && OpWidth != 32)
       return false;
     if (OpWidth >= 16)
-      if (OpWidth != WcharSize * 8)
+      if (OpWidth != WcharSize * ByteWidth)
         return false;
 
     // Scan every instruction in the loop to ensure there are no side effects.

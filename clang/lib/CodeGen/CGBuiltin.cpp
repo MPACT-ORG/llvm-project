@@ -562,10 +562,12 @@ static Value *EmitAtomicDecrementValue(
 static Value *EmitISOVolatileLoad(CodeGenFunction &CGF, const CallExpr *E) {
   Value *Ptr = CGF.EmitScalarExpr(E->getArg(0));
   QualType ElTy = E->getArg(0)->getType()->getPointeeType();
-  CharUnits LoadSize = CGF.getContext().getTypeSizeInChars(ElTy);
+  CharUnits LoadSizeInChars = CGF.getContext().getTypeSizeInChars(ElTy);
+  auto LoadSize = CGF.getContext().getTypeSize(ElTy);
   llvm::Type *ITy =
-      llvm::IntegerType::get(CGF.getLLVMContext(), LoadSize.getQuantity() * 8);
-  llvm::LoadInst *Load = CGF.Builder.CreateAlignedLoad(ITy, Ptr, LoadSize);
+      llvm::IntegerType::get(CGF.getLLVMContext(), LoadSize);
+  llvm::LoadInst *Load =
+      CGF.Builder.CreateAlignedLoad(ITy, Ptr, LoadSizeInChars);
   Load->setVolatile(true);
   return Load;
 }
@@ -2085,7 +2087,9 @@ static Value *EmitOverflowCheckedAbs(CodeGenFunction &CGF, const CallExpr *E,
 
 /// Get the argument type for arguments to os_log_helper.
 static CanQualType getOSLogArgType(ASTContext &C, int Size) {
-  QualType UnsignedTy = C.getIntTypeForBitwidth(Size * 8, /*Signed=*/false);
+  auto ByteWidth = C.getTargetInfo().getByteWidth();
+  QualType UnsignedTy = C.getIntTypeForBitwidth(Size * ByteWidth,
+                                                /*Signed=*/false);
   return C.getCanonicalType(UnsignedTy);
 }
 
