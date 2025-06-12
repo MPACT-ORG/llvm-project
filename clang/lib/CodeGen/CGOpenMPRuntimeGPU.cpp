@@ -1070,7 +1070,8 @@ void CGOpenMPRuntimeGPU::emitGenericVarsProlog(CodeGenFunction &CGF,
     // FIXME: We should use the variables actual alignment as an argument.
     VoidPtr->addRetAttr(llvm::Attribute::get(
         CGM.getLLVMContext(), llvm::Attribute::Alignment,
-        CGM.getContext().getTargetInfo().getNewAlign() / 8));
+        CGM.getContext().getTargetInfo().getNewAlign() /
+            CGM.getContext().getTargetInfo().ByteWidth));
 
     // Cast the void pointer and get the address of the globalized variable.
     llvm::Value *CastedVoidPtr = Bld.CreatePointerBitCastOrAddrSpaceCast(

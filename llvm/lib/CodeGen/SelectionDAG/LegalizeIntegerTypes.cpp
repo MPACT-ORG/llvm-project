@@ -4307,9 +4307,10 @@ void DAGTypeLegalizer::ExpandIntRes_LOAD(LoadSDNode *N,
     // Big-endian - high bits are at low addresses.  Favor aligned loads at
     // the cost of some bit-fiddling.
     EVT MemVT = N->getMemoryVT();
-    unsigned EBytes = MemVT.getStoreSize();
-    unsigned IncrementSize = NVT.getSizeInBits()/8;
-    unsigned ExcessBits = (EBytes - IncrementSize)*8;
+    auto ByteWidth = DAG.getDataLayout().getByteWidth();
+    unsigned EBytes = MemVT.getStoreSize(ByteWidth);
+    unsigned IncrementSize = NVT.getSizeInBits()/ByteWidth;
+    unsigned ExcessBits = (EBytes - IncrementSize)*ByteWidth;
 
     // Load both the high bits and maybe some of the low bits.
     Hi = DAG.getExtLoad(ExtType, dl, NVT, Ch, Ptr, N->getPointerInfo(),
@@ -4785,7 +4786,8 @@ void DAGTypeLegalizer::ExpandIntRes_ShiftThroughStack(SDNode *N, SDValue &Lo,
     LoadVT = TLI.getTypeToTransformTo(*DAG.getContext(), LoadVT);
   } while (!TLI.isTypeLegal(LoadVT));
 
-  const unsigned ShiftUnitInBits = LoadVT.getStoreSizeInBits();
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
+  const unsigned ShiftUnitInBits = LoadVT.getStoreSizeInBits(ByteWidth);
   assert(ShiftUnitInBits <= VT.getScalarSizeInBits());
   assert(isPowerOf2_32(ShiftUnitInBits) &&
          "Shifting unit is not a a power of two!");
@@ -4813,7 +4815,7 @@ void DAGTypeLegalizer::ExpandIntRes_ShiftThroughStack(SDNode *N, SDValue &Lo,
   // FIXME: reuse stack slots?
   Align StackAlign = DAG.getReducedAlign(StackSlotVT, /*UseABI=*/false);
   SDValue StackPtr =
-      DAG.CreateStackTemporary(StackSlotVT.getStoreSize(), StackAlign);
+      DAG.CreateStackTemporary(StackSlotVT.getStoreSize(ByteWidth), StackAlign);
   EVT PtrTy = StackPtr.getValueType();
   SDValue Ch = DAG.getEntryNode();
 
@@ -4880,7 +4882,7 @@ void DAGTypeLegalizer::ExpandIntRes_ShiftThroughStack(SDNode *N, SDValue &Lo,
   SDValue Res =
       DAG.getLoad(VT, dl, Ch, AdjStackPtr,
                   MachinePointerInfo::getUnknownStack(DAG.getMachineFunction()),
-                  commonAlignment(StackAlign, LoadVT.getStoreSize()));
+                  commonAlignment(StackAlign, LoadVT.getStoreSize(ByteWidth)));
 
   // If we may still have a remaining bits to shift by, do so now.
   if (!IsOneStepShift) {
@@ -5848,7 +5850,8 @@ SDValue DAGTypeLegalizer::ExpandIntOp_STORE(StoreSDNode *N, unsigned OpNo) {
   GetExpandedInteger(N->getValue(), Lo, Hi);
 
   EVT ExtVT = N->getMemoryVT();
-  unsigned EBytes = ExtVT.getStoreSize();
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
+  unsigned EBytes = ExtVT.getStoreSize(ByteWidth);
   unsigned IncrementSize = NVT.getSizeInBits()/8;
   unsigned ExcessBits = (EBytes - IncrementSize)*8;
   EVT HiVT = EVT::getIntegerVT(*DAG.getContext(),

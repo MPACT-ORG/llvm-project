@@ -537,8 +537,9 @@ void SelectionDAGLegalize::LegalizeStoreOps(SDNode *Node) {
   SDValue Value = ST->getValue();
   EVT StVT = ST->getMemoryVT();
   TypeSize StWidth = StVT.getSizeInBits();
-  TypeSize StSize = StVT.getStoreSizeInBits();
   auto &DL = DAG.getDataLayout();
+  auto ByteWidth = DL.getByteWidth();
+  TypeSize StSize = StVT.getStoreSizeInBits(ByteWidth);
 
   if (StWidth != StSize) {
     // Promote to a byte-sized store with upper bits zero if not
@@ -726,8 +727,9 @@ void SelectionDAGLegalize::LegalizeLoadOps(SDNode *Node) {
   TypeSize SrcWidth = SrcVT.getSizeInBits();
   MachineMemOperand::Flags MMOFlags = LD->getMemOperand()->getFlags();
   AAMDNodes AAInfo = LD->getAAInfo();
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
 
-  if (SrcWidth != SrcVT.getStoreSizeInBits() &&
+  if (SrcWidth != SrcVT.getStoreSizeInBits(ByteWidth) &&
       // Some targets pretend to have an i1 loading operation, and actually
       // load an i8.  This trick is correct for ZEXTLOAD because the top 7
       // bits are guaranteed to be zero; it helps the optimizers understand
@@ -740,7 +742,7 @@ void SelectionDAGLegalize::LegalizeLoadOps(SDNode *Node) {
          TargetLowering::Promote)) {
     // Promote to a byte-sized load if not loading an integral number of
     // bytes.  For example, promote EXTLOAD:i20 -> EXTLOAD:i24.
-    unsigned NewWidth = SrcVT.getStoreSizeInBits();
+    unsigned NewWidth = SrcVT.getStoreSizeInBits(ByteWidth);
     EVT NVT = EVT::getIntegerVT(*DAG.getContext(), NewWidth);
     SDValue Ch;
 
@@ -1849,9 +1851,11 @@ SDValue SelectionDAGLegalize::EmitStackConvert(SDValue SrcOp, EVT SlotVT,
     return SDValue();
 
   // Create the stack frame object.
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   Align SrcAlign = DAG.getDataLayout().getPrefTypeAlign(
       SrcOp.getValueType().getTypeForEVT(*DAG.getContext()));
-  SDValue FIPtr = DAG.CreateStackTemporary(SlotVT.getStoreSize(), SrcAlign);
+  SDValue FIPtr = DAG.CreateStackTemporary(SlotVT.getStoreSize(ByteWidth),
+                                           SrcAlign);
 
   FrameIndexSDNode *StackPtrFI = cast<FrameIndexSDNode>(FIPtr);
   int SPFI = StackPtrFI->getIndex();

@@ -708,7 +708,7 @@ MachineInstr *TargetInstrInfo::foldMemoryOperand(MachineInstr &MI,
   int64_t MemSize = 0;
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
-
+  auto ByteWidth = MF.getDataLayout().getByteWidth();
   if (Flags & MachineMemOperand::MOStore) {
     MemSize = MFI.getObjectSize(FI);
   } else {
@@ -717,8 +717,8 @@ MachineInstr *TargetInstrInfo::foldMemoryOperand(MachineInstr &MI,
 
       if (auto SubReg = MI.getOperand(OpIdx).getSubReg()) {
         unsigned SubRegSize = TRI->getSubRegIdxSize(SubReg);
-        if (SubRegSize > 0 && !(SubRegSize % 8))
-          OpSize = SubRegSize / 8;
+        if (SubRegSize > 0 && !(SubRegSize % ByteWidth))
+          OpSize = SubRegSize / ByteWidth;
       }
 
       MemSize = std::max(MemSize, OpSize);

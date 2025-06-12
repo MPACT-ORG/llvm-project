@@ -1590,7 +1590,8 @@ public:
     // sizes.
     MVT VecTyLT = getTypeLegalizationCost(VecTy).second;
     unsigned VecTySize = thisT()->getDataLayout().getTypeStoreSize(VecTy);
-    unsigned VecTyLTSize = VecTyLT.getStoreSize();
+    auto ByteWidth = thisT()->getDataLayout().getByteWidth();
+    unsigned VecTyLTSize = VecTyLT.getStoreSize(ByteWidth);
 
     // Scale the cost of the memory operation by the fraction of legalized
     // instructions that will actually be used. We shouldn't account for the

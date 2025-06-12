@@ -186,7 +186,7 @@ static unsigned calculateLegacyCbufferFieldAlign(const ASTContext &Context,
          "Scalar bit widths larger than 64 not supported");
 
   // Scalar types are aligned to their byte width
-  return Context.getTypeSize(T) / 8;
+  return Context.getTypeSize(T) / Context.getTargetInfo().ByteWidth;
 }
 
 // Calculate the size of a legacy cbuffer type in bytes based on

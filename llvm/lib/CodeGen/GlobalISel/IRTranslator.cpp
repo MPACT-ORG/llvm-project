@@ -2833,12 +2833,13 @@ bool IRTranslator::translateCall(const User &U, MachineIRBuilder &MIRBuilder) {
   // Add a MachineMemOperand if it is a target mem intrinsic.
   TargetLowering::IntrinsicInfo Info;
   // TODO: Add a GlobalISel version of getTgtMemIntrinsic.
+  auto ByteWidth = F->getDataLayout().getByteWidth();
   if (TLI->getTgtMemIntrinsic(Info, CI, *MF, ID)) {
     Align Alignment = Info.align.value_or(
         DL->getABITypeAlign(Info.memVT.getTypeForEVT(F->getContext())));
     LLT MemTy = Info.memVT.isSimple()
                     ? getLLTForMVT(Info.memVT.getSimpleVT())
-                    : LLT::scalar(Info.memVT.getStoreSizeInBits());
+                    : LLT::scalar(Info.memVT.getStoreSizeInBits(ByteWidth));
 
     // TODO: We currently just fallback to address space 0 if getTgtMemIntrinsic
     //       didn't yield anything useful.
