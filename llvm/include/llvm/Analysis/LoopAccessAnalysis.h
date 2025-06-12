@@ -381,6 +381,7 @@ private:
   /// \return false if we shouldn't vectorize at all or avoid larger
   /// vectorization factors by limiting MinDepDistBytes.
   bool couldPreventStoreLoadForward(uint64_t Distance, uint64_t TypeByteSize,
+                                    uint64_t TypeBitSize,
                                     unsigned CommonStride = 0);
 
   /// Updates the current safety status with \p S. We can go from Safe to

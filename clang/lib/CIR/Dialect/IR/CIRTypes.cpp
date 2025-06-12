@@ -269,7 +269,7 @@ RecordType::getTypeSizeInBits(const mlir::DataLayout &dataLayout,
     return dataLayout.getTypeSize(getLargestMember(dataLayout));
 
   unsigned recordSize = computeStructSize(dataLayout);
-  return llvm::TypeSize::getFixed(recordSize * 8);
+  return llvm::TypeSize::getFixed(recordSize * dataLayout.getByteSize());
 }
 
 uint64_t

@@ -170,8 +170,7 @@ llvm::Type *CodeGenTypes::convertTypeForLoadStore(QualType T,
     LLVMTy = ConvertType(T);
 
   if (T->isBitIntType())
-    return llvm::Type::getIntNTy(
-        getLLVMContext(), Context.getTypeSizeInChars(T).getQuantity() * 8);
+    return llvm::Type::getIntNTy(getLLVMContext(), Context.getTypeSize(T));
 
   if (LLVMTy->isIntegerTy(1))
     return llvm::IntegerType::get(getLLVMContext(),
