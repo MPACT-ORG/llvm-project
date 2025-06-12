@@ -24,11 +24,11 @@ void BitcastBuffer::pushData(const std::byte *In, Bits BitOffset, Bits BitWidth,
     if (!BitValue)
       continue;
 
-    Bits DstBit(0, FinalBitSize.ByteWidth);
+    Bits DstBit;
     if (TargetEndianness == Endian::Little)
-      DstBit = BitOffset + Bits(It, FinalBitSize.ByteWidth);
+      DstBit = BitOffset + Bits(It);
     else
-      DstBit = size() - BitOffset - BitWidth + Bits(It, FinalBitSize.ByteWidth);
+      DstBit = size() - BitOffset - BitWidth + Bits(It);
 
     size_t DstByte = DstBit.roundToBytes();
     Data[DstByte] |= std::byte{1} << DstBit.getOffsetInByte();
@@ -43,7 +43,7 @@ BitcastBuffer::copyBits(Bits BitOffset, Bits BitWidth, Bits FullBitWidth,
   auto Out = std::make_unique<std::byte[]>(FullBitWidth.roundToBytes());
 
   for (unsigned It = 0; It != BitWidth.getQuantity(); ++It) {
-    Bits BitIndex(0, FinalBitSize.ByteWidth);
+    Bits BitIndex(0);
     if (TargetEndianness == Endian::Little)
       BitIndex = BitOffset + Bits(It);
     else
@@ -111,7 +111,7 @@ bool BitcastBuffer::rangeInitialized(Bits Offset, Bits Length) const {
     return true;
 
   BitRange Range(Offset, Offset + Length - Bits(1));
-  Bits Sum(0, FinalBitSize.ByteWidth);
+  Bits Sum(0);
   bool FoundStart = false;
   for (BitRange BR : InitializedBits) {
     if (FoundStart) {
@@ -146,7 +146,7 @@ bool BitcastBuffer::rangeInitialized(Bits Offset, Bits Length) const {
   void BitcastBuffer::dump(bool AsHex = true) const {
     llvm::errs() << "LSB\n  ";
     unsigned LineLength = 0;
-    for (unsigned I = 0; I != (FinalBitSize / 8); ++I) {
+    for (unsigned I = 0; I != (FinalBitSize / FinalBitSize.ByteWidth); ++I) {
       std::byte B = Data[I];
       if (AsHex) {
         std::stringstream stream;
