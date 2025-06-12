@@ -109,7 +109,8 @@ StatepointLoweringState::allocateStackSlot(EVT ValueType,
   NumSlotsAllocatedForStatepoints++;
   MachineFrameInfo &MFI = Builder.DAG.getMachineFunction().getFrameInfo();
 
-  unsigned SpillSize = ValueType.getStoreSize();
+  auto ByteWidth = Builder.DAG.getDataLayout().getByteWidth();
+  unsigned SpillSize = ValueType.getStoreSize(ByteWidth);
   assert((SpillSize * 8) ==
              (-8u & (7 + ValueType.getSizeInBits())) && // Round up modulo 8.
          "Size not in bytes?");

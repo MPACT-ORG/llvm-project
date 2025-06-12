@@ -1702,8 +1702,9 @@ void DAGTypeLegalizer::SplitVecRes_INSERT_SUBVECTOR(SDNode *N, SDValue &Lo,
   // In cases where the vector is illegal it will be broken down into parts
   // and stored in parts - we should use the alignment for the smallest part.
   Align SmallestAlign = DAG.getReducedAlign(VecVT, /*UseABI=*/false);
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   SDValue StackPtr =
-      DAG.CreateStackTemporary(VecVT.getStoreSize(), SmallestAlign);
+      DAG.CreateStackTemporary(VecVT.getStoreSize(ByteWidth), SmallestAlign);
   auto &MF = DAG.getMachineFunction();
   auto FrameIndex = cast<FrameIndexSDNode>(StackPtr.getNode())->getIndex();
   auto PtrInfo = MachinePointerInfo::getFixedStack(MF, FrameIndex);
@@ -2013,8 +2014,9 @@ void DAGTypeLegalizer::SplitVecRes_INSERT_VECTOR_ELT(SDNode *N, SDValue &Lo,
   // In cases where the vector is illegal it will be broken down into parts
   // and stored in parts - we should use the alignment for the smallest part.
   Align SmallestAlign = DAG.getReducedAlign(VecVT, /*UseABI=*/false);
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   SDValue StackPtr =
-      DAG.CreateStackTemporary(VecVT.getStoreSize(), SmallestAlign);
+      DAG.CreateStackTemporary(VecVT.getStoreSize(ByteWidth), SmallestAlign);
   auto &MF = DAG.getMachineFunction();
   auto FrameIndex = cast<FrameIndexSDNode>(StackPtr.getNode())->getIndex();
   auto PtrInfo = MachinePointerInfo::getFixedStack(MF, FrameIndex);
@@ -2201,11 +2203,12 @@ void DAGTypeLegalizer::SplitVecRes_VP_LOAD(VPLoadSDNode *LD, SDValue &Lo,
                                      LD->isExpandingLoad());
 
     MachinePointerInfo MPI;
+    auto ByteWidth = DAG.getDataLayout().getByteWidth();
     if (LoMemVT.isScalableVector())
       MPI = MachinePointerInfo(LD->getPointerInfo().getAddrSpace());
     else
       MPI = LD->getPointerInfo().getWithOffset(
-          LoMemVT.getStoreSize().getFixedValue());
+          LoMemVT.getStoreSize(ByteWidth).getFixedValue());
 
     MMO = DAG.getMachineFunction().getMachineMemOperand(
         MPI, MachineMemOperand::MOLoad, LocationSize::beforeOrAfterPointer(),
@@ -2366,11 +2369,12 @@ void DAGTypeLegalizer::SplitVecRes_MLOAD(MaskedLoadSDNode *MLD,
                                      MLD->isExpandingLoad());
 
     MachinePointerInfo MPI;
+    auto ByteWidth = DAG.getDataLayout().getByteWidth();
     if (LoMemVT.isScalableVector())
       MPI = MachinePointerInfo(MLD->getPointerInfo().getAddrSpace());
     else
       MPI = MLD->getPointerInfo().getWithOffset(
-          LoMemVT.getStoreSize().getFixedValue());
+          LoMemVT.getStoreSize(ByteWidth).getFixedValue());
 
     MMO = DAG.getMachineFunction().getMachineMemOperand(
         MPI, MachineMemOperand::MOLoad, LocationSize::beforeOrAfterPointer(),
@@ -2527,8 +2531,10 @@ void DAGTypeLegalizer::SplitVecRes_VECTOR_COMPRESS(SDNode *N, SDValue &Lo,
   Lo = DAG.getNode(ISD::VECTOR_COMPRESS, DL, LoVT, Lo, LoMask, UndefPassthru);
   Hi = DAG.getNode(ISD::VECTOR_COMPRESS, DL, HiVT, Hi, HiMask, UndefPassthru);
 
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   SDValue StackPtr = DAG.CreateStackTemporary(
-      VecVT.getStoreSize(), DAG.getReducedAlign(VecVT, /*UseABI=*/false));
+      VecVT.getStoreSize(ByteWidth), 
+      DAG.getReducedAlign(VecVT, /*UseABI=*/false));
   MachineFunction &MF = DAG.getMachineFunction();
   MachinePointerInfo PtrInfo = MachinePointerInfo::getFixedStack(
       MF, cast<FrameIndexSDNode>(StackPtr.getNode())->getIndex());
@@ -3180,7 +3186,9 @@ void DAGTypeLegalizer::SplitVecRes_VP_REVERSE(SDNode *N, SDValue &Lo,
 
   EVT MemVT = EVT::getVectorVT(*DAG.getContext(), VT.getVectorElementType(),
                                VT.getVectorElementCount());
-  SDValue StackPtr = DAG.CreateStackTemporary(MemVT.getStoreSize(), Alignment);
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
+  SDValue StackPtr = DAG.CreateStackTemporary(MemVT.getStoreSize(ByteWidth),
+                                              Alignment);
   EVT PtrVT = StackPtr.getValueType();
   auto &MF = DAG.getMachineFunction();
   auto FrameIndex = cast<FrameIndexSDNode>(StackPtr.getNode())->getIndex();
@@ -3757,8 +3765,9 @@ SDValue DAGTypeLegalizer::SplitVecOp_EXTRACT_SUBVECTOR(SDNode *N) {
   SDValue Vec = N->getOperand(0);
   EVT VecVT = Vec.getValueType();
   Align SmallestAlign = DAG.getReducedAlign(VecVT, /*UseABI=*/false);
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   SDValue StackPtr =
-      DAG.CreateStackTemporary(VecVT.getStoreSize(), SmallestAlign);
+      DAG.CreateStackTemporary(VecVT.getStoreSize(ByteWidth), SmallestAlign);
   auto &MF = DAG.getMachineFunction();
   auto FrameIndex = cast<FrameIndexSDNode>(StackPtr.getNode())->getIndex();
   auto PtrInfo = MachinePointerInfo::getFixedStack(MF, FrameIndex);
@@ -3815,8 +3824,9 @@ SDValue DAGTypeLegalizer::SplitVecOp_EXTRACT_VECTOR_ELT(SDNode *N) {
   // In cases where the vector is illegal it will be broken down into parts
   // and stored in parts - we should use the alignment for the smallest part.
   Align SmallestAlign = DAG.getReducedAlign(VecVT, /*UseABI=*/false);
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   SDValue StackPtr =
-      DAG.CreateStackTemporary(VecVT.getStoreSize(), SmallestAlign);
+      DAG.CreateStackTemporary(VecVT.getStoreSize(ByteWidth), SmallestAlign);
   auto &MF = DAG.getMachineFunction();
   auto FrameIndex = cast<FrameIndexSDNode>(StackPtr.getNode())->getIndex();
   auto PtrInfo = MachinePointerInfo::getFixedStack(MF, FrameIndex);
@@ -3916,6 +3926,7 @@ SDValue DAGTypeLegalizer::SplitVecOp_VP_STORE(VPStoreSDNode *N, unsigned OpNo) {
                                    N->isCompressingStore());
 
   MachinePointerInfo MPI;
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
   if (LoMemVT.isScalableVector()) {
     Alignment = 
         commonAlignment(Alignment,
@@ -3924,7 +3935,7 @@ SDValue DAGTypeLegalizer::SplitVecOp_VP_STORE(VPStoreSDNode *N, unsigned OpNo) {
     MPI = MachinePointerInfo(N->getPointerInfo().getAddrSpace());
   } else
     MPI = N->getPointerInfo().getWithOffset(
-        LoMemVT.getStoreSize().getFixedValue());
+        LoMemVT.getStoreSize(ByteWidth).getFixedValue());
 
   MMO = DAG.getMachineFunction().getMachineMemOperand(
       MPI, MachineMemOperand::MOStore, LocationSize::beforeOrAfterPointer(),
@@ -4071,6 +4082,7 @@ SDValue DAGTypeLegalizer::SplitVecOp_MSTORE(MaskedStoreSDNode *N,
                                      N->isCompressingStore());
 
     MachinePointerInfo MPI;
+    auto ByteWidth = DAG.getDataLayout().getByteWidth();
     if (LoMemVT.isScalableVector()) {
       Alignment = commonAlignment(
           Alignment, divideCeil(LoMemVT.getSizeInBits().getKnownMinValue(),
@@ -4078,7 +4090,7 @@ SDValue DAGTypeLegalizer::SplitVecOp_MSTORE(MaskedStoreSDNode *N,
       MPI = MachinePointerInfo(N->getPointerInfo().getAddrSpace());
     } else
       MPI = N->getPointerInfo().getWithOffset(
-          LoMemVT.getStoreSize().getFixedValue());
+          LoMemVT.getStoreSize(ByteWidth).getFixedValue());
 
     MMO = DAG.getMachineFunction().getMachineMemOperand(
         MPI, MachineMemOperand::MOStore, LocationSize::beforeOrAfterPointer(),

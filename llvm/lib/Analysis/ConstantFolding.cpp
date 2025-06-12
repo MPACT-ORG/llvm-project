@@ -600,7 +600,7 @@ Constant *FoldReinterpretLoadFromConst(Constant *C, Type *LoadTy,
     return nullptr;
   }
 
-  unsigned BytesLoaded = (IntType->getBitWidth() + 7) / 8;
+  unsigned BytesLoaded = divideCeil(IntType->getBitWidth(), DL.getByteWidth());
   if (BytesLoaded > 32 || BytesLoaded == 0)
     return nullptr;
 

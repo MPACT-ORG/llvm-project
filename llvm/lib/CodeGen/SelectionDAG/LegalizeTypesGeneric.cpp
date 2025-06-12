@@ -162,7 +162,9 @@ void DAGTypeLegalizer::ExpandRes_BITCAST(SDNode *N, SDValue &Lo, SDValue &Hi) {
   Align InAlign = DAG.getReducedAlign(InVT, /*UseABI=*/false);
   Align NOutAlign = DAG.getReducedAlign(NOutVT, /*UseABI=*/false);
   Align Align = std::max(InAlign, NOutAlign);
-  SDValue StackPtr = DAG.CreateStackTemporary(InVT.getStoreSize(), Align);
+  auto ByteWidth = DAG.getDataLayout().getByteWidth();
+  SDValue StackPtr = DAG.CreateStackTemporary(InVT.getStoreSize(ByteWidth),
+                                              Align);
   int SPFI = cast<FrameIndexSDNode>(StackPtr.getNode())->getIndex();
   MachinePointerInfo PtrInfo =
       MachinePointerInfo::getFixedStack(DAG.getMachineFunction(), SPFI);

@@ -450,7 +450,7 @@ bool AtomicExpandImpl::bracketInstWithFences(Instruction *I,
 IntegerType *
 AtomicExpandImpl::getCorrespondingIntegerType(Type *T, const DataLayout &DL) {
   EVT VT = TLI->getMemValueType(DL, T);
-  unsigned BitWidth = VT.getStoreSizeInBits();
+  unsigned BitWidth = VT.getStoreSizeInBits(DL.getByteWidth());
   assert(BitWidth == VT.getSizeInBits() && "must be a power of two");
   return IntegerType::get(T->getContext(), BitWidth);
 }

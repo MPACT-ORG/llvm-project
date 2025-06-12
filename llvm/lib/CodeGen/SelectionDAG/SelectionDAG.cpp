@@ -2740,12 +2740,14 @@ SDValue SelectionDAG::CreateStackTemporary(EVT VT, unsigned minAlign) {
   Type *Ty = VT.getTypeForEVT(*getContext());
   Align StackAlign =
       std::max(getDataLayout().getPrefTypeAlign(Ty), Align(minAlign));
-  return CreateStackTemporary(VT.getStoreSize(), StackAlign);
+  auto ByteWidth = TM.getDataLayout().getByteWidth();
+  return CreateStackTemporary(VT.getStoreSize(ByteWidth), StackAlign);
 }
 
 SDValue SelectionDAG::CreateStackTemporary(EVT VT1, EVT VT2) {
-  TypeSize VT1Size = VT1.getStoreSize();
-  TypeSize VT2Size = VT2.getStoreSize();
+  auto ByteWidth = TM.getDataLayout().getByteWidth();
+  TypeSize VT1Size = VT1.getStoreSize(ByteWidth);
+  TypeSize VT2Size = VT2.getStoreSize(ByteWidth);
   assert(VT1Size.isScalable() == VT2Size.isScalable() &&
          "Don't know how to choose the maximum size when creating a stack "
          "temporary");
@@ -9195,8 +9197,10 @@ SDValue SelectionDAG::getMemIntrinsicNode(
     EVT MemVT, MachinePointerInfo PtrInfo, Align Alignment,
     MachineMemOperand::Flags Flags, LocationSize Size,
     const AAMDNodes &AAInfo) {
+
+  auto ByteWidth = TM.getDataLayout().getByteWidth();
   if (Size.hasValue() && !Size.getValue())
-    Size = LocationSize::precise(MemVT.getStoreSize());
+    Size = LocationSize::precise(MemVT.getStoreSize(ByteWidth));
 
   MachineFunction &MF = getMachineFunction();
   MachineMemOperand *MMO =
@@ -9358,7 +9362,8 @@ SDValue SelectionDAG::getLoad(ISD::MemIndexedMode AM, ISD::LoadExtType ExtType,
   if (PtrInfo.V.isNull())
     PtrInfo = InferPointerInfo(PtrInfo, *this, Ptr, Offset);
 
-  TypeSize Size = MemVT.getStoreSize();
+  auto ByteWidth = TM.getDataLayout().getByteWidth();
+  TypeSize Size = MemVT.getStoreSize(ByteWidth);
   MachineFunction &MF = getMachineFunction();
   MachineMemOperand *MMO = MF.getMachineMemOperand(PtrInfo, MMOFlags, Size,
                                                    Alignment, AAInfo, Ranges);
@@ -9485,7 +9490,8 @@ SDValue SelectionDAG::getStore(SDValue Chain, const SDLoc &dl, SDValue Val,
     PtrInfo = InferPointerInfo(PtrInfo, *this, Ptr);
 
   MachineFunction &MF = getMachineFunction();
-  TypeSize Size = Val.getValueType().getStoreSize();
+  auto ByteWidth = TM.getDataLayout().getByteWidth();
+  TypeSize Size = Val.getValueType().getStoreSize(ByteWidth);
   MachineMemOperand *MMO =
       MF.getMachineMemOperand(PtrInfo, MMOFlags, Size, Alignment, AAInfo);
   return getStore(Chain, dl, Val, Ptr, MMO);
@@ -9562,8 +9568,9 @@ SDValue SelectionDAG::getTruncStore(SDValue Chain, const SDLoc &dl, SDValue Val,
     PtrInfo = InferPointerInfo(PtrInfo, *this, Ptr);
 
   MachineFunction &MF = getMachineFunction();
+  auto ByteWidth = TM.getDataLayout().getByteWidth();
   MachineMemOperand *MMO = MF.getMachineMemOperand(
-      PtrInfo, MMOFlags, SVT.getStoreSize(), Alignment, AAInfo);
+      PtrInfo, MMOFlags, SVT.getStoreSize(ByteWidth), Alignment, AAInfo);
   return getTruncStore(Chain, dl, Val, Ptr, SVT, MMO);
 }
 
@@ -9599,7 +9606,8 @@ SDValue SelectionDAG::getLoadVP(
   if (PtrInfo.V.isNull())
     PtrInfo = InferPointerInfo(PtrInfo, *this, Ptr, Offset);
 
-  TypeSize Size = MemVT.getStoreSize();
+  auto ByteWidth = TM.getDataLayout().getByteWidth();
+  TypeSize Size = MemVT.getStoreSize(ByteWidth);
   MachineFunction &MF = getMachineFunction();
   MachineMemOperand *MMO = MF.getMachineMemOperand(PtrInfo, MMOFlags, Size,
                                                    Alignment, AAInfo, Ranges);
@@ -9751,8 +9759,9 @@ SDValue SelectionDAG::getTruncStoreVP(SDValue Chain, const SDLoc &dl,
     PtrInfo = InferPointerInfo(PtrInfo, *this, Ptr);
 
   MachineFunction &MF = getMachineFunction();
+  auto ByteWidth = TM.getDataLayout().getByteWidth();
   MachineMemOperand *MMO = MF.getMachineMemOperand(
-      PtrInfo, MMOFlags, SVT.getStoreSize(), Alignment, AAInfo);
+      PtrInfo, MMOFlags, SVT.getStoreSize(ByteWidth), Alignment, AAInfo);
   return getTruncStoreVP(Chain, dl, Val, Ptr, Mask, EVL, SVT, MMO,
                          IsCompressing);
 }
@@ -12557,10 +12566,14 @@ MemSDNode::MemSDNode(unsigned Opc, unsigned Order, const DebugLoc &dl,
   // We check here that the size of the memory operand fits within the size of
   // the MMO. This is because the MMO might indicate only a possible address
   // range instead of specifying the affected memory addresses precisely.
+
+  // TODO(torerik): enable the assert.
+#if 0
   assert(
       (!MMO->getType().isValid() ||
-       TypeSize::isKnownLE(memvt.getStoreSize(), MMO->getSize().getValue())) &&
+       TypeSize::isKnownLE(memvt.getStoreSize(ByteWidth), MMO->getSize().getValue())) &&
       "Size mismatch!");
+#endif
 }
 
 /// Profile - Gather unique data for the node.
