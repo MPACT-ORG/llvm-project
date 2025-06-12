@@ -272,7 +272,7 @@ int analyzeLoadFromClobberingMemInst(Type *LoadTy, Value *LoadPtr,
   ConstantInt *SizeCst = dyn_cast<ConstantInt>(MI->getLength());
   if (!SizeCst)
     return -1;
-  uint64_t MemSizeInBits = SizeCst->getZExtValue() * 8;
+  uint64_t MemSizeInBits = SizeCst->getZExtValue() * DL.getByteWidth();
 
   // If this is memset, we just need to see if the offset is valid in the size
   // of the memset..
@@ -353,21 +353,24 @@ static Value *getStoreValueForLoadHelper(Value *SrcVal, unsigned Offset,
         Builder.CreatePtrToInt(SrcVal, DL.getIntPtrType(SrcVal->getType()));
   if (!SrcVal->getType()->isIntegerTy())
     SrcVal =
-        Builder.CreateBitCast(SrcVal, IntegerType::get(Ctx, StoreSize * 8));
+        Builder.CreateBitCast(SrcVal, 
+                              IntegerType::get(Ctx, 
+                                               StoreSize * DL.getByteWidth()));
 
   // Shift the bits to the least significant depending on endianness.
   unsigned ShiftAmt;
   if (DL.isLittleEndian())
-    ShiftAmt = Offset * 8;
+    ShiftAmt = Offset * DL.getByteWidth();
   else
-    ShiftAmt = (StoreSize - LoadSize - Offset) * 8;
+    ShiftAmt = (StoreSize - LoadSize - Offset) * DL.getByteWidth();
   if (ShiftAmt)
     SrcVal = Builder.CreateLShr(SrcVal,
                                 ConstantInt::get(SrcVal->getType(), ShiftAmt));
 
   if (LoadSize != StoreSize)
-    SrcVal = Builder.CreateTruncOrBitCast(SrcVal,
-                                          IntegerType::get(Ctx, LoadSize * 8));
+    SrcVal = Builder.CreateTruncOrBitCast(
+                  SrcVal,
+                  IntegerType::get(Ctx, LoadSize * DL.getByteWidth()));
   return SrcVal;
 }
 
@@ -419,7 +422,9 @@ Value *getMemInstValueForLoad(MemIntrinsic *SrcInst, unsigned Offset,
     Value *Val = MSI->getValue();
     if (LoadSize != 1)
       Val =
-          Builder.CreateZExtOrBitCast(Val, IntegerType::get(Ctx, LoadSize * 8));
+          Builder.CreateZExtOrBitCast(
+              Val, 
+              IntegerType::get(Ctx, LoadSize * DL.getByteWidth()));
     Value *OneElt = Val;
 
     // Splat the value out to the right number of bits.
@@ -427,7 +432,8 @@ Value *getMemInstValueForLoad(MemIntrinsic *SrcInst, unsigned Offset,
       // If we can double the number of bytes set, do it.
       if (NumBytesSet * 2 <= LoadSize) {
         Value *ShVal = Builder.CreateShl(
-            Val, ConstantInt::get(Val->getType(), NumBytesSet * 8));
+            Val, ConstantInt::get(Val->getType(),
+                                  NumBytesSet * DL.getByteWidth()));
         Val = Builder.CreateOr(Val, ShVal);
         NumBytesSet <<= 1;
         continue;
@@ -435,7 +441,9 @@ Value *getMemInstValueForLoad(MemIntrinsic *SrcInst, unsigned Offset,
 
       // Otherwise insert one byte at a time.
       Value *ShVal =
-          Builder.CreateShl(Val, ConstantInt::get(Val->getType(), 1 * 8));
+          Builder.CreateShl(Val, 
+                            ConstantInt::get(Val->getType(),
+                                             DL.getByteWidth()));
       Val = Builder.CreateOr(OneElt, ShVal);
       ++NumBytesSet;
     }
@@ -465,7 +473,8 @@ Constant *getConstantMemInstValueForLoad(MemIntrinsic *SrcInst, unsigned Offset,
     if (!Val)
       return nullptr;
 
-    Val = ConstantInt::get(Ctx, APInt::getSplat(LoadSize * 8, Val->getValue()));
+    Val = ConstantInt::get(Ctx, APInt::getSplat(LoadSize * DL.getByteWidth(),
+                                                Val->getValue()));
     return ConstantFoldLoadFromConst(Val, LoadTy, DL);
   }
 

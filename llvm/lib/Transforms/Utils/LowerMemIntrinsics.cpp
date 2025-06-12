@@ -264,9 +264,10 @@ void llvm::createMemCpyLoopUnknownSize(
   bool RequiresResidual =
       !LoopOpIsInt8 && !(AtomicElementSize && LoopOpSize == AtomicElementSize);
   if (RequiresResidual) {
-    Type *ResLoopOpType = AtomicElementSize
-                              ? Type::getIntNTy(Ctx, *AtomicElementSize * 8)
-                              : Int8Type;
+    Type *ResLoopOpType = 
+        AtomicElementSize
+              ? Type::getIntNTy(Ctx, *AtomicElementSize * DL.getByteWidth())
+              : Int8Type;
     unsigned ResLoopOpSize = DL.getTypeStoreSize(ResLoopOpType);
     assert((ResLoopOpSize == AtomicElementSize ? *AtomicElementSize : 1) &&
            "Store size is expected to match type size");

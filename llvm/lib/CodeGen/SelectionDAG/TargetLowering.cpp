@@ -4759,7 +4759,8 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
               unsigned ptrOffset =
                   Layout.isLittleEndian() ? offset : memWidth - width - offset;
               unsigned IsFast = 0;
-              assert((ptrOffset % 8) == 0 && "Non-Bytealigned pointer offset");
+              assert((ptrOffset % ByteWidth) == 0 &&
+                     "Non-Bytealigned pointer offset");
               Align NewAlign = 
                   commonAlignment(Lod->getAlign(),
                                   divideCeil(ptrOffset, ByteWidth));
@@ -9119,7 +9120,7 @@ SDValue TargetLowering::expandCTPOP(SDNode *Node, SelectionDAG &DAG) const {
   assert(VT.isInteger() && "CTPOP not implemented for this type.");
 
   // TODO: Add support for irregular type lengths.
-  if (!(Len <= 128 && Len % 8 == 0))
+  if (!(Len <= 128 && Len % DAG.getDataLayout().getByteWidth() == 0))
     return SDValue();
 
   // Only expand vector types if we have the appropriate vector bit operations.
@@ -9198,7 +9199,7 @@ SDValue TargetLowering::expandVPCTPOP(SDNode *Node, SelectionDAG &DAG) const {
   assert(VT.isInteger() && "VP_CTPOP not implemented for this type.");
 
   // TODO: Add support for irregular type lengths.
-  if (!(Len <= 128 && Len % 8 == 0))
+  if (!(Len <= 128 && Len % DAG.getDataLayout().getByteWidth() == 0))
     return SDValue();
 
   // This is same algorithm of expandCTPOP from
