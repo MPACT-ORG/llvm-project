@@ -4802,7 +4802,7 @@ void DAGTypeLegalizer::ExpandIntRes_ShiftThroughStack(SDNode *N, SDValue &Lo,
     ShAmt = DAG.getFreeze(ShAmt);
 
   unsigned VTBitWidth = VT.getScalarSizeInBits();
-  assert(VTBitWidth % 8 == 0 && "Shifting a not byte multiple value?");
+  assert(VTBitWidth % ByteWidth == 0 && "Shifting a not byte multiple value?");
   unsigned VTByteWidth = divideCeil(VTBitWidth, 
                                     DAG.getDataLayout().getByteWidth());
   assert(isPowerOf2_32(VTByteWidth) &&

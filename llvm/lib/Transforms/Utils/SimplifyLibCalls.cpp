@@ -1056,7 +1056,7 @@ Value *LibCallSimplifier::optimizeStrNLen(CallInst *CI, IRBuilderBase &B) {
 
 Value *LibCallSimplifier::optimizeWcslen(CallInst *CI, IRBuilderBase &B) {
   Module &M = *CI->getModule();
-  unsigned WCharSize = TLI->getWCharSize(M) * 8;
+  unsigned WCharSize = TLI->getWCharSize(M) * M.getDataLayout().getByteWidth();
   // We cannot perform this optimization without wchar_size metadata.
   if (WCharSize == 0)
     return nullptr;
@@ -1545,8 +1545,10 @@ static Value *optimizeMemCmpConstantSize(CallInst *CI, Value *LHS, Value *RHS,
   // memcmp(S1,S2,N/8)==0 -> (*(intN_t*)S1 != *(intN_t*)S2)==0
   // TODO: The case where both inputs are constants does not need to be limited
   // to legal integers or equality comparison. See block below this.
-  if (DL.isLegalInteger(Len * 8) && isOnlyUsedInZeroEqualityComparison(CI)) {
-    IntegerType *IntType = IntegerType::get(CI->getContext(), Len * 8);
+  auto ByteWidth = DL.getByteWidth();
+  if (DL.isLegalInteger(Len * ByteWidth) &&
+      isOnlyUsedInZeroEqualityComparison(CI)) {
+    IntegerType *IntType = IntegerType::get(CI->getContext(), Len * ByteWidth);
     Align PrefAlignment = DL.getPrefTypeAlign(IntType);
 
     // First, see if we can fold either argument to a constant.

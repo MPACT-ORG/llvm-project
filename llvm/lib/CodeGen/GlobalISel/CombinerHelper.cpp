@@ -4067,7 +4067,8 @@ bool CombinerHelper::matchLoadOrCombine(
   // We need to combine at least two loads into this type. Since the smallest
   // possible load is into a byte, we need at least a 16-bit wide type.
   const unsigned WideMemSizeInBits = Ty.getSizeInBits();
-  if (WideMemSizeInBits < 16 || WideMemSizeInBits % 8 != 0)
+  auto ByteWidth = MF.getDataLayout().getByteWidth();
+  if (WideMemSizeInBits < (2 * ByteWidth) || WideMemSizeInBits % ByteWidth != 0)
     return false;
 
   // Match a collection of non-OR instructions in the pattern.
@@ -4079,7 +4080,7 @@ bool CombinerHelper::matchLoadOrCombine(
   // the small loads should be based off of the number of potential loads we
   // found.
   const unsigned NarrowMemSizeInBits = WideMemSizeInBits / RegsToVisit->size();
-  if (NarrowMemSizeInBits % 8 != 0)
+  if (NarrowMemSizeInBits % ByteWidth != 0)
     return false;
 
   // Check if each register feeding into each OR is a load from the same

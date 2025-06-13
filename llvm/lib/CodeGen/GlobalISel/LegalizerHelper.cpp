@@ -9028,7 +9028,7 @@ LegalizerHelper::lowerBitreverse(MachineInstr &MI) {
 
   auto ByteWidth = MIRBuilder.getDataLayout().getByteWidth();
   if (Size >= ByteWidth) {
-    if (SrcTy.isVector() && (VSize % 8 == 0) &&
+    if (SrcTy.isVector() && (VSize % ByteWidth == 0) &&
         (LI.isLegal({TargetOpcode::G_BITREVERSE,
             {LLT::fixed_vector(divideCeil(VSize, ByteWidth), ByteWidth),
              LLT::fixed_vector(divideCeil(VSize, ByteWidth), ByteWidth)}}))) {

@@ -6104,11 +6104,12 @@ Value *llvm::isBytewiseValue(Value *V, const DataLayout &DL) {
               : nullptr;
   }
 
-  // We can handle constant integers that are multiple of 8 bits.
+  // We can handle constant integers that are multiple of bytes.
   if (ConstantInt *CI = dyn_cast<ConstantInt>(C)) {
-    if (CI->getBitWidth() % 8 == 0) {
-      assert(CI->getBitWidth() > 8 && "8 bits should be handled above!");
-      if (!CI->getValue().isSplat(8))
+    if (CI->getBitWidth() % DL.getByteWidth() == 0) {
+      assert(CI->getBitWidth() > DL.getByteWidth() &&
+             "1 byte should be handled above!");
+      if (!CI->getValue().isSplat(DL.getByteWidth()))
         return nullptr;
       return ConstantInt::get(Ctx, CI->getValue().trunc(8));
     }
