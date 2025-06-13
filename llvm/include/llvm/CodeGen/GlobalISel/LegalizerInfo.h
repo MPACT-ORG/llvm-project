@@ -121,8 +121,8 @@ struct LegalityQuery {
     MemDesc(LLT MemoryTy, uint64_t AlignInBits, AtomicOrdering Ordering)
         : MemoryTy(MemoryTy), AlignInBits(AlignInBits), Ordering(Ordering) {}
     // TODO(torerik): figure out how to handle this multiply
-    MemDesc(const MachineMemOperand &MMO)
-        : MemDesc(MMO.getMemoryType(), MMO.getAlign().value() * 8,
+    MemDesc(const MachineMemOperand &MMO, unsigned ByteWidth)
+        : MemDesc(MMO.getMemoryType(), MMO.getAlign().value() * ByteWidth,
                   MMO.getSuccessOrdering()) {}
   };
 

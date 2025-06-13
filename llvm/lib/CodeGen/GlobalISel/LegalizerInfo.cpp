@@ -18,6 +18,7 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/CodeGenTypes/LowLevelType.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/Support/Debug.h"
@@ -375,8 +376,9 @@ LegalizerInfo::getAction(const MachineInstr &MI,
   }
 
   SmallVector<LegalityQuery::MemDesc, 2> MemDescrs;
+  auto ByteWidth = MI.getMF()->getDataLayout().getByteWidth();
   for (const auto &MMO : MI.memoperands())
-    MemDescrs.push_back({*MMO});
+    MemDescrs.push_back({*MMO, ByteWidth});
 
   return getAction({MI.getOpcode(), Types, MemDescrs});
 }
