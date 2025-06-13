@@ -813,7 +813,8 @@ bool CombinerHelper::matchCombineExtendingLoads(
         continue;
       // Check for legality.
       if (!isPreLegalize()) {
-        LegalityQuery::MemDesc MMDesc(MMO);
+        LegalityQuery::MemDesc
+            MMDesc(MMO, MI.getMF()->getDataLayout().getByteWidth());
         unsigned CandidateLoadOpc = getExtLoadOpcForExtend(UseMI.getOpcode());
         LLT UseTy = MRI.getType(UseMI.getOperand(0).getReg());
         LLT SrcTy = MRI.getType(LoadMI->getPointerReg());
@@ -999,7 +1000,8 @@ bool CombinerHelper::matchCombineLoadWithAndMask(MachineInstr &MI,
     return false;
 
   const MachineMemOperand &MMO = LoadMI->getMMO();
-  LegalityQuery::MemDesc MemDesc(MMO);
+  LegalityQuery::MemDesc
+      MemDesc(MMO, MI.getMF()->getDataLayout().getByteWidth());
 
   // Don't modify the memory access size if this is atomic/volatile, but we can
   // still adjust the opcode to indicate the high bit behavior.
@@ -1118,7 +1120,8 @@ bool CombinerHelper::matchSextInRegOfLoad(
     return false;
 
   const MachineMemOperand &MMO = LoadDef->getMMO();
-  LegalityQuery::MemDesc MMDesc(MMO);
+  LegalityQuery::MemDesc
+      MMDesc(MMO, MI.getMF()->getDataLayout().getByteWidth());
 
   // Don't modify the memory access size if this is atomic/volatile, but we can
   // still adjust the opcode to indicate the high bit behavior.
@@ -1451,7 +1454,7 @@ bool CombinerHelper::matchCombineExtractedVectorLoad(
   MachineFunction &MF = *MI.getMF();
   auto *NewMMO = MF.getMachineMemOperand(&MMO, PtrInfo, VecEltTy);
 
-  LegalityQuery::MemDesc MMDesc(*NewMMO);
+  LegalityQuery::MemDesc MMDesc(*NewMMO, MF.getDataLayout().getByteWidth());
 
   if (!isLegalOrBeforeLegalizer(
           {TargetOpcode::G_LOAD, {VecEltTy, PtrTy}, {MMDesc}}))
@@ -4133,7 +4136,8 @@ bool CombinerHelper::matchLoadOrCombine(
   // may not use index 0.
   Register Ptr = LowestIdxLoad->getPointerReg();
   const MachineMemOperand &MMO = LowestIdxLoad->getMMO();
-  LegalityQuery::MemDesc MMDesc(MMO);
+  LegalityQuery::MemDesc
+      MMDesc(MMO, MI.getMF()->getDataLayout().getByteWidth());
   MMDesc.MemoryTy = Ty;
   if (!isLegalOrBeforeLegalizer(
           {TargetOpcode::G_LOAD, {Ty, MRI.getType(Ptr)}, {MMDesc}}))
