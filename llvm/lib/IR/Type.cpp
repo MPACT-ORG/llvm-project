@@ -289,8 +289,9 @@ bool Type::isSizedDerivedType(SmallPtrSetImpl<Type*> *Visited) const {
   if (auto *VTy = dyn_cast<VectorType>(this))
     return VTy->getElementType()->isSized(Visited);
 
-  if (auto *TTy = dyn_cast<TargetExtType>(this))
+  if (auto *TTy = dyn_cast<TargetExtType>(this)) {
     return TTy->getLayoutType()->isSized(Visited);
+  }
 
   return cast<StructType>(this)->isSized(Visited);
 }
@@ -1002,7 +1003,8 @@ struct TargetTypeInfo {
 };
 } // anonymous namespace
 
-static TargetTypeInfo getTargetTypeInfo(const TargetExtType *Ty) {
+static TargetTypeInfo getTargetTypeInfo(const TargetExtType *Ty,
+                                        unsigned ByteWidth) {
   LLVMContext &C = Ty->getContext();
   StringRef Name = Ty->getName();
   if (Name == "spirv.Image")
@@ -1016,9 +1018,9 @@ static TargetTypeInfo getTargetTypeInfo(const TargetExtType *Ty) {
     auto Alignment = Ty->getIntParameter(2);
     llvm::Type *LayoutType = nullptr;
     if (Size > 0 && Alignment > 0) {
-      // TODO(torerik): fix multiply by 8
       LayoutType =
-          ArrayType::get(Type::getIntNTy(C, Alignment), Size * 8 / Alignment);
+          ArrayType::get(Type::getIntNTy(C, Alignment),
+                         Size * ByteWidth / Alignment);
     } else {
       // LLVM expects variables that can be allocated to have an alignment and
       // size. Default to using a 32-bit int as the layout type if none are
@@ -1078,10 +1080,18 @@ static TargetTypeInfo getTargetTypeInfo(const TargetExtType *Ty) {
 }
 
 Type *TargetExtType::getLayoutType() const {
-  return getTargetTypeInfo(this).LayoutType;
+  LLVMContextImpl *pImpl = getContext().pImpl;
+  assert(!pImpl->OwnedModules.empty() && "No module");
+  unsigned ByteWidth = (*(pImpl->OwnedModules.begin()))->getDataLayout()
+                                                        .getByteWidth();
+  return getTargetTypeInfo(this, ByteWidth).LayoutType;
 }
 
 bool TargetExtType::hasProperty(Property Prop) const {
-  uint64_t Properties = getTargetTypeInfo(this).Properties;
+  LLVMContextImpl *pImpl = getContext().pImpl;
+  assert(!pImpl->OwnedModules.empty() && "No module");
+  unsigned ByteWidth = (*(pImpl->OwnedModules.begin()))->getDataLayout()
+                                                        .getByteWidth();
+  uint64_t Properties = getTargetTypeInfo(this, ByteWidth).Properties;
   return (Properties & Prop) == Prop;
 }
