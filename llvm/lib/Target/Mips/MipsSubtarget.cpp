@@ -18,7 +18,6 @@
 #include "MipsRegisterInfo.h"
 #include "MipsSelectionDAGInfo.h"
 #include "MipsTargetMachine.h"
-#include "llvm/Config/config.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -35,14 +34,9 @@ using namespace llvm;
 #include "MipsGenSubtargetInfo.inc"
 
 // Include definitions associated with the MDL description.
-#if ENABLE_MDL_USE
 #include "MipsGenMdlInfo.h"
 // Include virtual predicate function definitions from the MDL description.
 #include "MipsGenMdlTarget.inc"
-#define MipsCpuTable &Mips::CpuTable
-#else
-#define MipsCpuTable nullptr
-#endif
 
 // FIXME: Maybe this should be on by default when Mips16 is specified
 //
@@ -82,7 +76,8 @@ void MipsSubtarget::anchor() {}
 MipsSubtarget::MipsSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
                              bool little, const MipsTargetMachine &TM,
                              MaybeAlign StackAlignOverride)
-    : MipsGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS, MipsCpuTable),
+    : MipsGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS, Mips::CpuTableAddr,
+                           Mips::InstrPreds),
       MipsArchVersion(MipsDefault), IsLittle(little), IsSoftFloat(false),
       IsSingleFloat(false), IsFPXX(false), NoABICalls(false), Abs2008(false),
       IsFP64bit(false), UseOddSPReg(true), IsNaN2008bit(false),
@@ -232,11 +227,6 @@ MipsSubtarget::MipsSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
   auto *RBI = new MipsRegisterBankInfo(*getRegisterInfo());
   RegBankInfo.reset(RBI);
   InstSelector.reset(createMipsInstructionSelector(TM, *this, *RBI));
-
-  // Register the Target-library-specific predicate table in the cpu table.
-#if ENABLE_MDL_USE
-  Mips::CpuTable.SetInstrPredicates(&Mips::InstrPredicates);
-#endif
 }
 
 MipsSubtarget::~MipsSubtarget() = default;

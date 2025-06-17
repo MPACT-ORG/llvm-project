@@ -13,7 +13,6 @@
 #include "SparcSubtarget.h"
 #include "SparcSelectionDAGInfo.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Config/config.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -26,14 +25,9 @@ using namespace llvm;
 #include "SparcGenSubtargetInfo.inc"
 
 // Include definitions associated with the MDL description.
-#if ENABLE_MDL_USE
 #include "SparcGenMdlInfo.h"
 // Include virtual predicate function definitions from the MDL description.
 #include "SparcGenMdlTarget.inc"
-#define SparcCpuTable &SP::CpuTable
-#else
-#define SparcCpuTable nullptr
-#endif
 
 void SparcSubtarget::anchor() { }
 
@@ -60,7 +54,8 @@ SparcSubtarget &SparcSubtarget::initializeSubtargetDependencies(
 SparcSubtarget::SparcSubtarget(const StringRef &CPU, const StringRef &TuneCPU,
                                const StringRef &FS, const TargetMachine &TM,
                                bool is64Bit)
-    : SparcGenSubtargetInfo(TM.getTargetTriple(), CPU, TuneCPU, FS),
+    : SparcGenSubtargetInfo(TM.getTargetTriple(), CPU, TuneCPU, FS,
+                            SP::CpuTableAddr, SP::InstrPreds),
       ReserveRegister(TM.getMCRegisterInfo()->getNumRegs()),
       TargetTriple(TM.getTargetTriple()), Is64Bit(is64Bit),
       InstrInfo(initializeSubtargetDependencies(CPU, TuneCPU, FS)),

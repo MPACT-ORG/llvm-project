@@ -82,8 +82,7 @@ namespace llvm {
     int HorizontalVerticalBalance;
 
   public:
-    ResourcePriorityQueue(SelectionDAGISel *IS,
-                          ScheduleHazardRecognizer *HazardRec);
+    ResourcePriorityQueue(SelectionDAGISel *IS);
 
     bool isBottomUp() const override { return false; }
 

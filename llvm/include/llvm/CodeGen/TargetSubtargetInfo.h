@@ -72,7 +72,8 @@ protected: // Can only create subclasses...
                       const MCWriteLatencyEntry *WL,
                       const MCReadAdvanceEntry *RA, const InstrStage *IS,
                       const unsigned *OC, const unsigned *FP,
-                      const mdl::CpuTableDef *MDL = nullptr);
+                      mdl::CpuTableDef *MDL = nullptr,
+                      mdl::InstrPredTable *Preds = nullptr);
 
 public:
   // AntiDepBreakMode - Type of anti-dependence breaking that should

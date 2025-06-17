@@ -1123,6 +1123,7 @@ Reference *MdlParser::parseLatencyRef(IdList *Predicates) {
   long Repeat = 1;
   long Delay = 1;
 
+  // Parse the phase expression.
   auto *Phase = parseExpr();
   if (Phase == nullptr) return nullptr;
 
@@ -2111,6 +2112,11 @@ InstructionDef *MdlParser::parseInstructionDef() {
 //-----------------------------------------------------------------------------
 // Process an operand declaration rule (used in instructions and operands) :
 //     operand_decl : (type=ident (name=ident)? ('(I)' | '(O)')?) | '...'
+// Operand definitions can have unnamed operands.  We create a name based on
+// the operand index (like "$2").
+// Instruction definitions may have implied operands that only have a name, but
+// these names MUST be a defined register.  Since we can't check that yet, we
+// set the name to the type if a name isn't provided.  We check this later.
 //-----------------------------------------------------------------------------
 OperandDecl *MdlParser::parseOperandDecl(int OpndId) {
   MdlItem Item(Token());
@@ -2123,7 +2129,7 @@ OperandDecl *MdlParser::parseOperandDecl(int OpndId) {
       ParseError(&Item, "Ellipsis not allowed in operand definitions");
       Name = Type = new Identifier(Item, "...");
     } else Name = new Identifier(Item, "");
-    return new OperandDecl(Item, Type, Name, true, false, false);
+    return new OperandDecl(Item, Type, Name, true, false, false, false);
   }
 
   // Parse the operand type, followed by the sometimes optional operand name.
@@ -2135,14 +2141,16 @@ OperandDecl *MdlParser::parseOperandDecl(int OpndId) {
   bool IsOutput = false;
   if (!parseInputOutput(IsInput, IsOutput)) return nullptr;
 
-  // If an operand name is not provided, we sythesize a name based
-  // on the component index.
+  // Handle case where we didn't see an operand name.
+  // For operand operands, synthesize a name based on the operand id.
   if (Name == nullptr && OpndId != kOpndNameRequired)
     Name = new Identifier(Item, std::to_string(OpndId));
+  // For instruction operands, use the type as the name, if not provided.
+  bool HasName = Name != nullptr;
   if (Name == nullptr)
-    Name = new Identifier(Item, "");
+    Name = Type;
 
-  return new OperandDecl(Item, Type, Name, false, IsInput, IsOutput);
+  return new OperandDecl(Item, Type, Name, false, IsInput, IsOutput, HasName);
 }
 
 //-----------------------------------------------------------------------------

@@ -46,11 +46,11 @@ public:
       : STI(STI), Cpu(STI->getCpuInfo()), ResSet(Cpu->allocReservations()),
         DebugType(ParentDebugType), HasItineraries(HasItineraries) {
     Packet.reserve(Cpu->getMaxIssue());
-    // We need to initialize MaxLookAhead in a way thats expected by 
+    // We need to initialize MaxLookAhead in a way thats expected by
     // LLVM schedulers, which only use scoreboarding when Itineraries are
     // specified for a target.
     if (HasItineraries)
-      MaxLookAhead = Cpu->getMaxResourcePhase() - Cpu->getEarlyUsePhase();
+      MaxLookAhead = Cpu->getMaxResourcePhase() + 1;
 
     // If MaxLookAhead is not set above, then we are not enabled.
     DEBUG_WITH_TYPE("MdlHazard", if (!isEnabled())
@@ -68,7 +68,7 @@ public:
   }
   unsigned IssueSize() const override { return Packet.size(); }
   SlotSet *getPacket() override { return &Packet; }
-  Reservations *getResSet() { return ResSet; } 
+  Reservations *getResSet() { return ResSet; }
 
   HazardType getHazardType(SUnit *SU, int Stalls = 0) override {
     if (!HasItineraries) return NoHazard;

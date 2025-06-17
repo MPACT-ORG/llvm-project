@@ -1613,6 +1613,7 @@ public:
   std::vector<std::string> ScanInstructOpnds(char *input);
   std::vector<std::string> ScanImplicitDefsUses(char *input);
   void ScanProcessorModel(std::ifstream &in);
+  void ScanProcessorAlias(std::ifstream &in);
   void ScanProcResource(std::ifstream &in, const std::string &name,
                         const char *paren);
   void ScanComboFuncData(std::ifstream &in);
@@ -1782,6 +1783,17 @@ public:
   }
   bool IsBypass(const std::string &name) const { return bypasses_.count(name); }
 
+  bool HasProcessorAliases(const std::string &name) {
+    return !processor_aliases_.empty();
+  }
+  std::set<std::string> &GetProcessorAliases(const std::string &name) {
+    return processor_aliases_[name];
+  }
+  void AddProcessorAlias(const std::string &cpu, const std::string &alias) {
+    processor_aliases_[cpu].insert(alias);
+  }
+
+
   SchedReadWrite *GetSchedReadWrite(const std::string &name,
                                     const std::string &model) const;
   std::string GetSchedRef(const std::string &name,
@@ -1897,6 +1909,7 @@ private:
   //     - InstrItinData definitions.
   //     - Itinerary Bypass definitions.
   //     - InstrStage definitions.
+  //   - Processor aliases
   //-------------------------------------------------------------------------
   std::map<std::string, ProcessorModel *> cpus_;
   std::map<std::string, SchedMachineModel *> sched_models_;
@@ -1915,6 +1928,7 @@ private:
   std::map<std::string, MCStatement *> statements_;
   std::map<std::string, MCOpcodeSwitchCase *> switch_cases_;
 
+  std::map<std::string, std::set<std::string>> processor_aliases_;
   std::map<std::string, SchedAlias *> sched_alias_;
   std::map<std::string, std::map<std::string, std::string>>
       sched_alias_matches_;

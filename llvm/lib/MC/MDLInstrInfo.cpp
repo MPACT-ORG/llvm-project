@@ -39,18 +39,6 @@
 namespace llvm {
 namespace mdl {
 
-/// A SlotDesc represents a single issue slot, containing the entire context
-/// of how an instruction is bundled.
-SlotDesc::SlotDesc(const MCInst *MC, const MCSubtargetInfo *STI,
-                   const MCInstrInfo *MCII)
-    : Inst(MC, STI, MCII),
-      Subunits((*STI->getCpuInfo()->getSubunits())[Inst.getOpcode()]),
-      SubunitId(0) {}
-SlotDesc::SlotDesc(MachineInstr *MI, const TargetSubtargetInfo *STI)
-    : Inst(MI, STI),
-      Subunits((*STI->getCpuInfo()->getSubunits())[Inst.getOpcode()]),
-      SubunitId(0) {}
-
 /// The Instr object provides a common interface to the MDL compiler for
 /// accessing information in EITHER MachineInstrs and MCInsts.
 Instr::Instr(const MachineInstr *MI, const TargetSubtargetInfo *STI)
@@ -63,7 +51,9 @@ Instr::Instr(const MCInst *MC, const MCSubtargetInfo *STI,
     : MC(MC), STI(STI), MCII(MCII), Cpu(STI->getCpuInfo()) {}
 
 // Get the LLVM name for this instruction.
-std::string Instr::getName() { return TII->getName(getOpcode()).str(); }
+std::string Instr::getName() {
+  return isMC() ? MCII->getName(getOpcode()).str() :
+                  TII->getName(getOpcode()).str(); }
 // Get the opcode for an instruction.
 int Instr::getOpcode() { return isMC() ? MC->getOpcode() : MI->getOpcode(); }
 
@@ -73,31 +63,78 @@ bool Instr::evaluatePredicate(int PredId) {
 }
 
 // Return the set of subunits for an instruction and CPU combination.
-SubunitVec *Instr::getSubunit() { return Cpu->getSubunit(getOpcode()); }
+const SubunitVec<> *Instr::getSubunit() { return Cpu->getSubunit(getOpcode()); }
 
 /// Return the raw bits associated with an operand.
 int64_t Instr::getOperand(int OperandIndex) {
   if (isMC()) {
     const MCOperand &MO = MC->getOperand(OperandIndex);
-    if (MO.isImm())
-      return MO.getImm();
-    if (MO.isSFPImm())
-      return MO.getSFPImm();
-    if (MO.isDFPImm())
-      return MO.getDFPImm();
-    if (MO.isReg())
-      return MO.getReg();
+    if (MO.isImm())    return MO.getImm();
+    if (MO.isSFPImm()) return MO.getSFPImm();
+    if (MO.isDFPImm()) return MO.getDFPImm();
+    if (MO.isReg())    return MO.getReg();
+    if (MO.isExpr()) {
+        // TODO: FIX THIS -- why is the value of type "Target"?!?
+        // (this code works b/c that's just what we saw was being
+        //  produced, but it doesn't seem like it's the right way to
+        //  encode immediates)
+        if (MO.getExpr()->getKind() == llvm::MCExpr::Target)
+        {
+            int64_t Constant;
+            if (!MO.getExpr()->evaluateAsAbsolute(Constant))
+                return 0; // maybe assert, to let us know if something changes?
+            else
+                return Constant;
+        }
+        else
+            return 0;
+    }
   } else {
     const MachineOperand &MO = MI->getOperand(OperandIndex);
-    if (MO.isImm())
-      return MO.getImm();
-    if (MO.isFPImm())
-      return llvm::bit_cast<uint32_t>(
-          MO.getFPImm()->getValueAPF().convertToFloat());
-    if (MO.isReg())
-      return MO.getReg();
+    if (MO.isImm())    return MO.getImm();
+    // if (MO.isCImm(I))  return MO.getCImm();  // TODO
+    if (MO.isFPImm())  return llvm::bit_cast<uint32_t>
+                                (MO.getFPImm()->getValueAPF().convertToFloat());
+    if (MO.isReg())    return MO.getReg();
   }
   return 0;
+}
+
+bool Instr::getOpndGlobal(int OperandIndex, GlobalValue &Global, int &Offset) {
+  if (!isOpndGlobal(OperandIndex)) return false;
+  if (isMC()) {
+    // TODO
+  } else {
+    // const MachineOperand &MO = MI->getOperand(OperandIndex);
+    // Global = MO.getGlobal();
+    // Offset = MO.getIndex();
+  }
+  return true;
+}
+
+bool Instr::getOpndSymbol(int OperandIndex, char *&Symbol, int &Offset) {
+  if (!isOpndGlobal(OperandIndex)) return false;
+  if (isMC()) {
+    // TODO
+  } else {
+    // const MachineOperand &MO = MI->getOperand(OperandIndex);
+    // Symbol = MO.getSymbol();
+    // Offset = MO.getIndex();
+  }
+  return true;
+}
+
+bool Instr::getOpndBlockAddress(
+          int OperandIndex, BlockAddress &Block, int Offset) {
+  if (isMC()) {
+    // TODO
+  } else {
+    // const MachineOperand &MO = MI->getOperand(OperandIndex);
+    // Block = MO.getBlockAddress();
+    // Offset = MO.getIndex();
+  }
+  if (!isOpndGlobal(OperandIndex)) return false;
+  return true;
 }
 
 // Return true if a specific operand is a literal (immediate of some form).
@@ -107,7 +144,7 @@ bool Instr::isOpndLiteral(int OperandIndex) {
     return MO.isImm() || MO.isSFPImm() || MO.isDFPImm();
   } else {
     const MachineOperand &MO = MI->getOperand(OperandIndex);
-    return MO.isImm() || MO.isFPImm();
+    return MO.isImm() || MO.isCImm() ||  MO.isFPImm();
   }
 }
 
@@ -116,8 +153,31 @@ bool Instr::isOpndAddress(int OperandIndex) {
   if (isMC())
     return MC->getOperand(OperandIndex).isExpr();
   else
-    return MI->getOperand(OperandIndex).isGlobal() ||
-           MI->getOperand(OperandIndex).isMBB();
+    return isOpndGlobal(OperandIndex) ||
+           isOpndSymbol(OperandIndex) ||
+           isOpndBlockAddress(OperandIndex);
+           // isOpndMBB(OperandIndex);
+}
+
+bool Instr::isOpndGlobal(int OperandIndex) {
+  if (isMC())     // TODO
+    return MC->getOperand(OperandIndex).isExpr();
+  else
+    return MI->getOperand(OperandIndex).isGlobal();
+}
+
+bool Instr::isOpndSymbol(int OperandIndex) {
+  if (isMC())     // TODO
+    return MC->getOperand(OperandIndex).isExpr();
+  else
+    return MI->getOperand(OperandIndex).isSymbol();
+}
+
+bool Instr::isOpndBlockAddress(int OperandIndex) {
+  if (isMC())     // TODO
+    return MC->getOperand(OperandIndex).isExpr();
+  else
+    return MI->getOperand(OperandIndex).isBlockAddress();
 }
 
 // Return true if a specific operand is a code label.
@@ -156,7 +216,7 @@ bool Instr::isOpndVirtualRegister(int OperandIndex) {
 bool Instr::hasExtraOperands() {
   if (isMC())
     return false;
-  return MI->getNumOperands() != MI->getDesc().getNumOperands() + 
+  return MI->getNumOperands() != MI->getDesc().getNumOperands() +
                                  MI->getDesc().NumImplicitUses +
                                  MI->getDesc().NumImplicitDefs;
 }
@@ -168,8 +228,8 @@ bool Instr::hasExtraOperands() {
 /// information, or not.
 /// NOTE: This isn't as onerous as it sounds: operand insertions are rare,
 /// and typically instructions only have a few explicit references.
-inline OperandRef const *findOrderedReference(Instr *Inst, ReferenceType Type,
-                                              int OpndId, OperandRefVec *Refs) {
+inline OperandRef const *findOrderedReference(
+     Instr *Inst, ReferenceType Type, int OpndId, const OperandRefVec<> *Refs) {
   // Find the set of defs OR uses for this instruction, and sort them by
   // operand index and pipeline phase. We want the latest defs and the
   // earliest uses, so that when we're searching the sorted list below,
@@ -236,8 +296,8 @@ static const OperandRef *bestRef(const OperandRef *Best, const OperandRef *Item,
 }
 
 /// Search an operand reference list for a reference to a particular operand.
-inline OperandRef const *findReference(Instr *Inst, ReferenceType Type,
-                                       int OpndId, OperandRefVec *Refs) {
+inline OperandRef const *findReference(
+    Instr *Inst, ReferenceType Type, int OpndId, const OperandRefVec<> *Refs) {
   if (Inst->hasExtraOperands())
     return findOrderedReference(Inst, Type, OpndId, Refs);
 
@@ -253,8 +313,9 @@ inline OperandRef const *findReference(Instr *Inst, ReferenceType Type,
 // in the forwarding table.
 // TODO: When there more than one functional unit, we need a heuristic
 // to determine if forwarding occurs.
-int calculateForwardingAdjustment(CpuInfo &Cpu, Instr *Def, Subunit &DefUnit,
-                                  Instr *Use, Subunit &UseUnit) {
+int calculateForwardingAdjustment(CpuInfo &Cpu, Instr *Def,
+                                  const Subunit &DefUnit, Instr *Use,
+                                  const Subunit &UseUnit) {
   // No point doing this if there isn't a forwarding table.
   auto *FwdTable = Cpu.getForwardTable();
   if (FwdTable == nullptr)
@@ -345,13 +406,13 @@ int calculateOperandLatency(Instr *Def, unsigned DefOpId, Instr *Use,
 
   int DefSuId = Def->getSubunitId();
   int UseSuId = Use ? Use->getSubunitId() : 0;
-  SubunitVec *DefSubunit = nullptr;
-  SubunitVec *UseSubunit = nullptr;
+  const SubunitVec<> *DefSubunit = nullptr;
+  const SubunitVec<> *UseSubunit = nullptr;
 
-  if (Cpu.IsInstruction(Def->getOpcode(), DefOpId))
+  if (Cpu.isInstruction(Def->getOpcode(), DefOpId))
     if ((DefSubunit = Def->getSubunit()))
-      if (auto *DefRefs = (*DefSubunit)[DefSuId].getOperandReferences())
-        if (auto *DefRef =
+      if (const auto *DefRefs = (*DefSubunit)[DefSuId].getOperandReferences())
+        if (const auto *DefRef =
                 findReference(Def, ReferenceTypes::RefDef, DefOpId, DefRefs))
           DefPhase = DefRef->getPhase(Def);
 
@@ -360,10 +421,10 @@ int calculateOperandLatency(Instr *Def, unsigned DefOpId, Instr *Use,
     return defaultDefLatency(Def, Cpu);
 
   // Find the phase for a Use instruction, if provided.
-  if (Use && Cpu.IsInstruction(Use->getOpcode(), UseOpId))
+  if (Use && Cpu.isInstruction(Use->getOpcode(), UseOpId))
     if ((UseSubunit = Use->getSubunit()))
-      if (auto *UseRefs = (*UseSubunit)[UseSuId].getOperandReferences())
-        if (auto *UseRef =
+      if (const auto *UseRefs = (*UseSubunit)[UseSuId].getOperandReferences())
+        if (const auto *UseRef =
                 findReference(Use, ReferenceTypes::RefUse, UseOpId, UseRefs))
           UsePhase = UseRef->getPhase(Use);
 
@@ -413,7 +474,7 @@ int calculateResourceLatency(const MachineInstr *MI,
 }
 
 /// Search a list of operand references for the maximum DEF latency.
-inline int findMaxLatency(Instr *Inst, OperandRefVec *Refs) {
+inline int findMaxLatency(Instr *Inst, const OperandRefVec<> *Refs) {
   int Max = 0;
   if (Refs == nullptr)
     return Max;
@@ -427,7 +488,7 @@ inline int findMaxLatency(Instr *Inst, OperandRefVec *Refs) {
 /// Find the maximum latency of an instruction based on operand references.
 int calculateInstructionLatency(Instr *Inst) {
   CpuInfo &Cpu = *Inst->getCpuInfo();
-  if (!Cpu.IsInstruction(Inst->getOpcode(), 0))
+  if (!Cpu.isInstruction(Inst->getOpcode(), 0))
     return defaultDefLatency(Inst, Cpu);
 
   // Handle instructions that don't have subunit information, or whose subunits
@@ -496,11 +557,36 @@ int calculateHazardLatency(const MCInst *Reserve, const MCInst *Hold,
 }
 
 /// Wrapper for MachineInstr objects.
-int calculateHazardLatency(MachineInstr *Reserve, MachineInstr *Hold,
-                           TargetSubtargetInfo *STI) {
+int calculateHazardLatency(const MachineInstr *Reserve,
+                           const MachineInstr *Hold,
+                           const TargetSubtargetInfo *STI) {
   Instr ReserveInst(Reserve, STI);
   Instr HoldInst(Reserve, STI);
   return calculateHazardLatency(&ReserveInst, &HoldInst);
+}
+
+/// A SlotDesc represents a single issue slot, containing the entire context
+/// of how an instruction is bundled.
+SlotDesc::SlotDesc(const MCInst *MC, const MCSubtargetInfo *STI,
+                   const MCInstrInfo *MCII)
+    : Inst(MC, STI, MCII),
+      Subunits(STI->getCpuInfo()->getSubunit(Inst.getOpcode())),
+      SubunitId(0) {}
+SlotDesc::SlotDesc(const MachineInstr *MI, const TargetSubtargetInfo *STI)
+    : Inst(MI, STI),
+      Subunits(STI->getCpuInfo()->getSubunit(Inst.getOpcode())),
+      SubunitId(0) {}
+
+// We want a simple function that calls the appropriately templated function
+// for dumping out the contents of a single SlotDesc Object.
+void dumpSlot(SlotDesc &Slot) {
+  std::cout << Slot.getInst()->getCpuInfo()->dumpSlot("", Slot);
+}
+
+void dumpBundle(SlotSet &Bundle) {
+  if (Bundle.empty()) return;
+  for (auto &Slot : Bundle)
+    dumpSlot(Slot);
 }
 
 } // namespace mdl

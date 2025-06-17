@@ -21,14 +21,9 @@ using namespace llvm;
 #include "SystemZGenSubtargetInfo.inc"
 
 // Include definitions associated with the MDL description.
-#if ENABLE_MDL_USE
 #include "SystemZGenMdlInfo.h"
 // Include virtual predicate function definitions from the MDL description.
 #include "SystemZGenMdlTarget.inc"
-#define SystemZCpuTable &SystemZ::CpuTable
-#else
-#define SystemZCpuTable nullptr
-#endif
 
 static cl::opt<bool> UseSubRegLiveness(
     "systemz-subreg-liveness",
@@ -79,16 +74,11 @@ SystemZSubtarget::SystemZSubtarget(const Triple &TT, const std::string &CPU,
                                    const std::string &TuneCPU,
                                    const std::string &FS,
                                    const TargetMachine &TM)
-    : SystemZGenSubtargetInfo(TT, CPU, TuneCPU, FS, SystemZCpuTable),
+    : SystemZGenSubtargetInfo(TT, CPU, TuneCPU, FS, SystemZ::CpuTableAddr,
+                              SystemZ::InstrPreds),
       TargetTriple(TT), SpecialRegisters(initializeSpecialRegisters()),
       InstrInfo(initializeSubtargetDependencies(CPU, TuneCPU, FS)),
-      TLInfo(TM, *this), FrameLowering(SystemZFrameLowering::create(*this)) {
-
-  // Register the Target-library-specific predicate table in the cpu table.
-#if ENABLE_MDL_USE
-  SystemZ::CpuTable.SetInstrPredicates(&SystemZ::InstrPredicates);
-#endif
-}
+      TLInfo(TM, *this), FrameLowering(SystemZFrameLowering::create(*this)) {}
 
 bool SystemZSubtarget::enableSubRegLiveness() const {
   return UseSubRegLiveness;

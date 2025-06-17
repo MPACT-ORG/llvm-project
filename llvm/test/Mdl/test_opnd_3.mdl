@@ -6,7 +6,7 @@
 // So we want to use the I/O designator to determine which reference rules
 // they should match.
 //----------------------------------------------------------------------------
-// RUN: llvm-mdl --dump_instr %s --output_dir /tmp/ 2>&1 | FileCheck %s
+// RUN: llvm-mdl --dump-instr %s --output-dir /tmp/ 2>&1 | FileCheck %s
 
 family test;
 
@@ -99,14 +99,14 @@ instruction y(r12(O), REGS d, r12(I)) { subunit(xyz); }
 // CHECK:       Pool Resources:
 // CHECK:       Architectural Register Constraints:
 
-// CHECK: Instruction: y(r12 , REGS d, r12 )
-// CHECK: 		flat(r12 , REGS d, r12 )
+// CHECK: Instruction: y(r12 r12, REGS d, r12 r12)
+// CHECK: 		flat(r12 r12, REGS d, r12 r12)
 // CHECK: 		{ subunit(xyz); }
 // CHECK:     Subunit: test.my_alu
 // CHECK:       Operand references:
-// CHECK-DAG:       ===>  def.p(E1, r12:$d[0])
+// CHECK-DAG:       ===>  def.p(E1, REGS:$d[1])
 // CHECK-DAG:       ===>  def.p(E1, r12:$r12[0])
-// CHECK-DAG:       ===>  use.p(E2, REGS:$r12[1])
+// CHECK-DAG:       ===>  use.p(E2, r12:$r12[2])
 // CHECK:       Resources:
 // CHECK:             use.p(E1,my_alu{1})
 // CHECK:       Pool Resources:

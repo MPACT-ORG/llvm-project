@@ -172,14 +172,8 @@ MachineTraceMetrics::getResources(const MachineBasicBlock *MBB) {
                PI = SchedModel.getWriteProcResBegin(SC),
                PE = SchedModel.getWriteProcResEnd(SC);
            PI != PE; ++PI) {
-        auto PIdx = PI->ProcResourceIdx;
         assert(PI->ProcResourceIdx < PRKinds && "Bad processor resource kind");
         PRCycles[PI->ProcResourceIdx] += PI->ReleaseAtCycle;
-   //   dbgs() << "    --- "
-   //          << SchedModel.getResourceName(PIdx)
-   //          << "  " << PI->ReleaseAtCycle *
-   //                     SchedModel.getResourceFactor(PIdx) << "c\n";
-                
       }
     }
   }

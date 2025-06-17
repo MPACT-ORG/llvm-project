@@ -57,31 +57,31 @@ using namespace llvm;
 cl::opt<std::string> input_file(cl::Positional, cl::desc("<input-file>"));
 
 cl::opt<std::string>
-    family_name("family_name", cl::init(""), cl::value_desc("family"),
+    family_name("family-name", cl::init(""), cl::value_desc("family"),
                 cl::desc("Processor family name (default=<input file>)."));
 cl::opt<std::string> output_name(
-    "output_name", cl::init(""), cl::value_desc("output"),
+    "output-name", cl::init(""), cl::value_desc("output"),
     cl::desc("Output file name prefix (default=<input file name>)"));
 
-cl::opt<bool> ignore_subunits("ignore_subunits", cl::init(false),
+cl::opt<bool> ignore_subunits("ignore-subunits", cl::init(false),
                               cl::desc("Ignore subunits."));
 cl::opt<bool>
-    gen_arch_spec("gen_arch_spec", cl::init(false),
+    gen_arch_spec("gen-arch-spec", cl::init(false),
                   cl::desc("Auto generate the mdl specification. (-g)"));
 cl::alias gen_arch_specA("g", cl::desc("Alias for --gen_arch_spec"),
                          cl::aliasopt(gen_arch_spec));
 
 cl::opt<bool> generate_base_subunits(
-    "gen_base_subunits", cl::init(false),
+    "gen-base-subunits", cl::init(false),
     cl::desc("Generate instruction bases for each subunit"));
 cl::opt<bool> generate_forwarding_info(
-    "gen_forwarding", cl::init(false),
+    "gen-forwarding", cl::init(false),
     cl::desc("Generate forwarding information each CPU"));
 cl::opt<bool>
-    generate_operand_indexes("gen_indexes", cl::init(false),
+    generate_operand_indexes("gen-indexes", cl::init(false),
                              cl::desc("Generate operand indexes (vs names)"));
 
-cl::opt<std::string> output_dir("output_dir", cl::init(""),
+cl::opt<std::string> output_dir("output-dir", cl::init(""),
                                 cl::value_desc("dir"),
                                 cl::desc("Output path for generated files."));
 cl::opt<bool> no_warnings("nowarnings", cl::init(false),
@@ -90,20 +90,23 @@ cl::alias quiet_mode("q", cl::desc("Alias for --nowarnings"),
                      cl::aliasopt(no_warnings));
 
 cl::OptionCategory TdDebug("Debugging Options");
-cl::opt<bool> generate_csv("dump_csv", cl::init(false), cl::cat(TdDebug),
+cl::opt<bool> generate_csv("dump-csv", cl::init(false), cl::cat(TdDebug),
                            cl::desc("Dump instructions to a CSV file."));
-cl::opt<bool> dump_debug("dump_debug", cl::init(false), cl::cat(TdDebug),
+cl::opt<bool> dump_debug("dump-debug", cl::init(false), cl::cat(TdDebug),
                          cl::desc("Dump lots of debug info."));
-cl::opt<bool> dump_instr_forwarding("dump_instr_forwarding", cl::init(false),
+cl::opt<bool> dump_instr_forwarding("dump-instr-forwarding", cl::init(false),
                                     cl::cat(TdDebug),
                                     cl::desc("Dump forwarding info."));
-cl::opt<bool> dump_forwarding("dump_forwarding", cl::init(false),
+cl::opt<bool> dump_forwarding("dump-forwarding", cl::init(false),
                               cl::cat(TdDebug),
                               cl::desc("Dump forwarding info."));
-cl::opt<bool> dump_rw("dump_rw", cl::init(false), cl::cat(TdDebug),
+cl::opt<bool> dump_rw("dump-rw", cl::init(false), cl::cat(TdDebug),
                       cl::desc("Dump ReadWrite Records"));
-cl::alias dump_debugA("d", cl::desc("Alias for --dump_debug"),
+cl::alias dump_debugA("d", cl::desc("Alias for --dump-debug"),
                       cl::aliasopt(dump_debug));
+
+cl::opt<bool> trace("trace", cl::init(false), cl::cat(TdDebug),
+                    cl::desc("Trace scanning"));
 
 // Check command line arguments and manage help option messages.
 static void process_cmd_line(int argc, char **argv) {
@@ -150,6 +153,7 @@ int main(int argc, char **argv) {
 
   // Read the file and collect instruction info
   md_info.ScanFile(input_file.c_str());
+  if (trace) std::cerr << "Done scanning\n";
 
   // Augment an instructions's implicit input & output operands with that of its
   // base instruction.
@@ -607,6 +611,34 @@ void MachineDescription::ScanOperand(std::ifstream &in,
 
   // Create an operand description object.
   operands_[name] = new Operand(name, ops, type);
+}
+
+//-------------------------------------------------------------------------
+// Read the entries associated with a Processor Alias.
+// fields we're interested in:
+//    - the "Name"
+//    - the "Alias"
+//-------------------------------------------------------------------------
+void MachineDescription::ScanProcessorAlias(std::ifstream &in) {
+  std::string name;
+  std::string alias;
+  std::string input;
+  char *lstart;
+
+  // These strings correspond to subfields we are interested in.
+  constexpr auto name_str = "string Name = ";
+  constexpr auto alias_str = "string Alias = ";
+
+  // Read subfield definitions and process the ones we're interested in.
+  while (in && (lstart = GetLine(in, input))) {
+    if (!strncmp(lstart, name_str, strlen(name_str)))
+      name = ScanName(lstart + strlen(name_str));
+    if (!strncmp(lstart, alias_str, strlen(alias_str)))
+      alias = ScanName(lstart + strlen(alias_str));
+  }
+
+  // Add the new alias to the alias table.
+  AddProcessorAlias(alias, name);
 }
 
 //-------------------------------------------------------------------------
@@ -1630,6 +1662,8 @@ void MachineDescription::ScanDef(std::ifstream &in, char *input) {
   }
   input[name_end] = 0; // Terminate the name.
 
+  if (trace) std::cerr << "Trace: " << input << "\n";
+
   // Find the open paren - if it's not there, we're confused.
   char *paren = nullptr;
   if (!(paren = strchr(&input[name_end + 1], '{'))) {
@@ -1676,6 +1710,9 @@ void MachineDescription::ScanDef(std::ifstream &in, char *input) {
   //----------------------------------------------------------------------
   else if (!gen_arch_spec)
     SkipRecord(in);
+
+  else if (strstr(paren, " ProcessorAlias"))
+    ScanProcessorAlias(in);
 
   else if (strstr(paren, " Processor Proc") ||
            (strstr(paren, " Processor") &&

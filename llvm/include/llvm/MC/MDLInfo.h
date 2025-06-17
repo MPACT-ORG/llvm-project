@@ -85,9 +85,6 @@ struct ReferenceTypes {
 };
 using ReferenceType = ReferenceTypes::Item;
 
-// The index of an operand into an instruction.
-using OperandId = int8_t; // These start at 0, so < 0 means invalid.
-
 // Reference flags field.  Values are powers of 2 so we can combine them.
 struct ReferenceFlags {
   using Item = int8_t;
@@ -106,19 +103,48 @@ struct ReferenceFlags {
   static constexpr int kSingleIssue = 32; // Instr must issue alone.
   static constexpr int kRetireOOO = 64;   // Instr may retire out of order.
 
-  static bool is_protected(Item flag) { return flag & kProtected; }
-  static bool is_unprotected(Item flag) { return flag & kUnprotected; }
-  static bool is_duplicate(Item flag) { return flag & kDuplicate; }
-  static bool is_unbuffered(Item flag) { return flag & kUnbuffered; }
-  static bool is_in_order(Item flag) { return flag & kInOrder; }
-  static bool is_out_of_order(Item flag) { return flag & kOutOfOrder; }
-  static bool is_buffered(Item flag) { return flag & (kInOrder | kOutOfOrder); }
-  static bool is_begin_group(Item flag) { return flag & kBeginGroup; }
-  static bool is_end_group(Item flag) { return flag & kEndGroup; }
-  static bool is_single_issue(Item flag) { return flag & kSingleIssue; }
-  static bool is_retire_ooo(Item flag) { return flag & kRetireOOO; }
+  static bool isProtected(Item flag) { return flag & kProtected; }
+  static bool isUnprotected(Item flag) { return flag & kUnprotected; }
+  static bool isDuplicate(Item flag) { return flag & kDuplicate; }
+  static bool isUnbuffered(Item flag) { return flag & kUnbuffered; }
+  static bool isInOrder(Item flag) { return flag & kInOrder; }
+  static bool isOutOfOrder(Item flag) { return flag & kOutOfOrder; }
+  static bool isBuffered(Item flag) { return flag & (kInOrder | kOutOfOrder); }
+  static bool isBeginGroup(Item flag) { return flag & kBeginGroup; }
+  static bool isEndGroup(Item flag) { return flag & kEndGroup; }
+  static bool isSingleIssue(Item flag) { return flag & kSingleIssue; }
+  static bool isRetireOOO(Item flag) { return flag & kRetireOOO; }
 };
 using ReferenceFlag = ReferenceFlags::Item;
+
+// Types of resources that can be defined.
+enum ResourceType {
+  kInvalid,          // Invalid resource type
+  kFuncUnit,         // Is a functional unit instance resource.
+  kResource,         // Is a general resource.
+  kIssueSlot,        // Is an issue slot resource.
+};
+
+// Information about a singled defined resource.
+struct ResourceInfo {
+  const char *Name;        // Name of a resource (for debugging purposes).
+  ResourceType Type;       // Type of resource defined.
+
+  std::string getTypeFormat() {
+    return (Type == kFuncUnit) ? "kFuncUnit" :
+           (Type == kResource) ? "kResource" :
+           (Type == kIssueSlot) ? "kIssueSlot" : "";
+  }
+};
+
+// The index of a subunit id in the global table.
+using SubunitId = uint16_t;
+
+// The index of an operand into an instruction.
+using OperandId = int8_t;     // These start at 0, so < 0 means invalid.
+                              //
+// Type used to store micro ops.
+using MicroOpsType = uint8_t;
 
 // The index of a reference resource or resource pool.
 using ResourceIdType = int16_t; // These start at 0, so < 0 means invalid.
@@ -173,36 +199,35 @@ using PipeFunc = unsigned (*)(Instr *ins);
 using PoolFuncType = int (*)(Instr *ins, int operand_index);
 using OpndValueFunc = bool (*)(Instr *ins, int operand_index, int count,
                                int values[]);
+using InstrPredTable = std::vector<PredFunc>;
 
 // A simple wrapper to check the range for calculated resource latencies.
 inline int getResourcePhase(PipeFunc Func, Instr *Ins);
 
 //----------------------------------------------------------------------------
-// We initialize a *LOT* of vectors of objects, which incurs a significant
-// runtime overhead when the compiler autoinitialization occurs. So rather than
-// use vectors, we use an "InitializationVector" instead, which incurs zero
-// overhead**.  This is a limited "vector" substitute with limited iteration
-// capabilities, but is sufficient for all uses of these objects.
+// We initialize a *LOT* of vectors of objects, which can incur a significant
+// runtime overhead when the dynamic autoinitialization occurs. So rather than
+// use vectors, we use an "InitializationVector" instead, which can be
+// statically initialized (with no runtime overhead). This is a limited
+// "vector" substitute with limited iteration capabilities, but is sufficient
+// for all uses of these objects.
 //----------------------------------------------------------------------------
-// **Note: If the client type has a constructor, the compiler by default
-// generates code to call the constructor, and the translation unit must be
-// compiled with optimization to eliminate the code and only produce
-// initialized data.  Alternatively, we can delete all the constructors so
-// that we don't -have- to compile with optimization and still avoid the
-// initialization time overhead.
-//----------------------------------------------------------------------------
-template <typename T> class InitializationVector {
-public:
-  unsigned char Size; // Number of entries in the vector.
-  T *Data;            // Pointer to the data.
+class InitializationVectorBase {
+ public:
+  constexpr InitializationVectorBase(int16_t Size) : Size(Size) {}
+ public: int16_t Size;  // Number of entries in the vector
+};
 
+template <typename T, int N = 1>
+class InitializationVector : public InitializationVectorBase {
 public:
-  class Iterator {
-    T *Iter;
+  T Data[N];   // The elements of the vector
 
-  public:
-    T &operator*() const { return *Iter; }
-    T *operator->() { return Iter; }
+  struct Iterator {
+    const T *Iter;
+
+    const T &operator*() const { return *Iter; }
+    const T *operator->() { return Iter; }
     Iterator &operator++() {
       ++Iter;
       return *this;
@@ -219,12 +244,12 @@ public:
     friend bool operator!=(const Iterator &a, const Iterator &b) {
       return a.Iter != b.Iter;
     }
-    Iterator(T *Data) : Iter(Data) {}
+    Iterator(const T *Data) : Iter(Data) {}
   };
-  Iterator begin() { return Iterator(&Data[0]); }
-  Iterator end() { return Iterator(&Data[Size]); }
+  Iterator begin() const { return Iterator(&Data[0]); }
+  Iterator end()  const { return Iterator(&Data[Size]); }
   unsigned size() const { return Size; }
-  T &operator[](int index) { return Data[index]; }
+  const T &operator[](int Index) const { return Data[Index]; }
 };
 
 //-----------------------------------------------------------------------------
@@ -251,15 +276,15 @@ public:
 //-----------------------------------------------------------------------------
 template <typename T> class ReferenceIter {
 private:
-  InitializationVector<T> *Refs; // The top-level vector of references.
-  Instr *Ins;                    // Instruction to use with predicates.
+  const InitializationVector<T> *Refs; // The top-level vector of references.
+  Instr *Ins;                          // Instruction to use with predicates.
 
   struct Iterator {
     Instr *Ins;
     typename InitializationVector<T>::Iterator Iter, End;
     std::vector<typename InitializationVector<T>::Iterator> Iters, Ends;
 
-    Iterator(Instr *Ins, InitializationVector<T> *Refs)
+    Iterator(Instr *Ins, const InitializationVector<T> *Refs)
         : Ins(Ins), Iter(Refs->begin()), End(Refs->end()) {
       advance();
     }
@@ -267,7 +292,7 @@ private:
     Iterator(Instr *Ins, typename InitializationVector<T>::Iterator End)
         : Ins(Ins), Iter(End), End(End) {}
 
-    T &operator*() const { return *Iter; }
+    const T &operator*() const { return *Iter; }
     T *operator->() { return Iter; }
 
     Iterator &operator++() {
@@ -328,43 +353,49 @@ private:
   };
 
 public:
-  ReferenceIter(InitializationVector<T> *Refs, Instr *Ins)
-      : Refs(Refs), Ins(Ins) {}
+  ReferenceIter(const InitializationVectorBase *Refs, Instr *Ins)
+      : Refs(reinterpret_cast<const InitializationVector<T> *>(Refs)),
+        Ins(Ins) {}
 
   Iterator begin() { return Iterator(this->Ins, Refs); }
   Iterator end() { return Iterator(this->Ins, Refs->end()); }
 };
 
 // Containers of initialized reference objects.
-using OperandRefVec = InitializationVector<OperandRef>;
-using ResourceRefVec = InitializationVector<ResourceRef>;
-using PooledResourceRefVec = InitializationVector<PooledResourceRef>;
-using OperandConstraintVec = InitializationVector<OperandConstraint>;
+template <int N = 1>
+using OperandRefVec = InitializationVector<OperandRef, N>;
+template <int N = 1>
+using ResourceRefVec = InitializationVector<ResourceRef, N>;
+template <int N = 1>
+using PooledResourceRefVec = InitializationVector<PooledResourceRef, N>;
+template <int N = 1>
+using OperandConstraintVec = InitializationVector<OperandConstraint, N>;
 
 // A set of subunits for a particular instruction/CPU combination
-using SubunitVec = InitializationVector<Subunit>;
-
-// A mapping of instructions to subunit lists.
-using SubunitTable = std::vector<SubunitVec *>;
+template <int N = 1>
+using SubunitVec = InitializationVector<Subunit, N>;
 
 //-----------------------------------------------------------------------------
 /// A description of a single conditional reference object.
 /// Used for operand, resource, and pooled resource references.
 //-----------------------------------------------------------------------------
 template <class T> class ConditionalRef {
-  PredFunc Predicate;            // function to evaluate the predicate
-  InitializationVector<T> *Refs; // conditional refs
-  ConditionalRef<T> *ElseClause; // optional else clause
+  PredFunc Predicate;                  // function to evaluate the predicate
+  const InitializationVector<T> *Refs; // conditional refs
+  ConditionalRef<T> *ElseClause;       // optional else clause
 public:
-  ConditionalRef(PredFunc Predicate, InitializationVector<T> *Refs,
-                 ConditionalRef<T> *ElseClause)
-      : Predicate(Predicate), Refs(Refs), ElseClause(ElseClause) {}
+  constexpr ConditionalRef(PredFunc Predicate,
+                           const InitializationVectorBase *Refs,
+                           ConditionalRef<T> *ElseClause)
+      : Predicate(Predicate),
+        Refs(reinterpret_cast<const InitializationVector<T> *>(Refs)),
+        ElseClause(ElseClause) {}
 
   bool hasPredicate() const { return Predicate != nullptr; }
   bool evalPredicate(Instr *ins) const {
     return Predicate == nullptr || Predicate(ins);
   }
-  InitializationVector<T> *getRefs() const { return Refs; }
+  const InitializationVector<T> *getRefs() const { return Refs; }
   ConditionalRef<T> *getElseClause() const { return ElseClause; }
 };
 
@@ -372,22 +403,23 @@ public:
 /// A reference to an instruction's operand.
 //-----------------------------------------------------------------------------
 class OperandRef {
-  ReferenceType Type;  // type of the reference
-  ReferenceFlag Flags; // protected or unprotected
-  PipePhaseType Phase; // pipeline phase of the reference
+  ReferenceType Type;         // type of the reference
+  ReferenceFlag Flags = 0;    // protected or unprotected
+  PipePhaseType Phase = 0;    // pipeline phase of the reference
+  OperandId OperandIndex = 0; // operand index
   union {
     PipeFunc PhaseFunc;                 // optional pointer to phase function
     ConditionalRef<OperandRef> *IfElse; // conditional reference descriptor
   };
-  OperandId OperandIndex; // operand index
 public:
   // Construct a normal unconditional reference.
-  OperandRef(ReferenceType Type, ReferenceFlag Flags, PipePhaseType Phase,
-             PipeFunc PhaseFunc, OperandId OperandIndex)
-      : Type(Type), Flags(Flags), Phase(Phase), PhaseFunc(PhaseFunc),
-        OperandIndex(OperandIndex) {}
+  constexpr OperandRef(ReferenceType Type, ReferenceFlag Flags,
+                       PipePhaseType Phase, PipeFunc PhaseFunc,
+                       OperandId OperandIndex)
+      : Type(Type), Flags(Flags), Phase(Phase), OperandIndex(OperandIndex),
+        PhaseFunc(PhaseFunc) {}
   // Construct a conditional reference.
-  OperandRef(ConditionalRef<OperandRef> *IfElse)
+  constexpr OperandRef(ConditionalRef<OperandRef> *IfElse)
       : Type(ReferenceTypes::RefCond), IfElse(IfElse) {}
 
   ReferenceType getType() const { return Type; }
@@ -409,40 +441,44 @@ public:
 /// A reference to a single resource.
 //-----------------------------------------------------------------------------
 class ResourceRef {
-  ReferenceType Type;        // type of the reference (def, use, etc)
-  ReferenceFlag Flags;       // protected, unprotected, or duplicate ref
-  PipePhaseType Phase;       // pipeline phase of the reference
-  PipeFunc PhaseFunc;        // optional pointer to phase function
-  UseCyclesType UseCycles;   // number of cycles a resource is "used"
-  ResourceIdType ResourceId; // the resource we're referencing
+  ReferenceType Type;              // type of the reference (def, use, etc)
+  ReferenceFlag Flags = 0;         // protected, unprotected, or duplicate ref
   union {
-    OperandId OperandIndex; // operand index for shared resources.
-    unsigned MicroOps;      // number of microops for this resource.
+    OperandId OperandIndex = 0;    // operand index for shared resources.
+    MicroOpsType MicroOps;         // number of microops for this resource.
   };
-  PoolBitsType Width; // how many bits in value (-1 if not shared)
-  ConditionalRef<ResourceRef> *IfElse; // conditional reference descriptor
+  PipePhaseType Phase = 0;         // pipeline phase of the reference
+  UseCyclesType UseCycles = 0;     // number of cycles a resource is "used"
+  ResourceIdType ResourceId = 0;   // the resource we're referencing
+  PoolBitsType Width = -1;         // how many bits in value (-1 if not shared)
+  union {
+    PipeFunc PhaseFunc;                   // optional pointer to phase function
+    ConditionalRef<ResourceRef> *IfElse;  // conditional ref descriptor
+  };
 public:
-  ResourceRef(ReferenceType Type, ReferenceFlag Flags, PipePhaseType Phase,
-              PipeFunc PhaseFunc, UseCyclesType UseCycles,
-              ResourceIdType ResourceId, OperandId OperandIndex,
-              PoolBitsType Width)
-      : Type(Type), Flags(Flags), Phase(Phase), PhaseFunc(PhaseFunc),
-        UseCycles(UseCycles), ResourceId(ResourceId),
-        OperandIndex(OperandIndex), Width(Width) {}
+  constexpr ResourceRef(ReferenceType Type, ReferenceFlag Flags,
+                        PipePhaseType Phase, PipeFunc PhaseFunc,
+                        UseCyclesType UseCycles, ResourceIdType ResourceId,
+                        OperandId OperandIndex, PoolBitsType Width)
+      : Type(Type), Flags(Flags), OperandIndex(OperandIndex),
+        Phase(Phase), UseCycles(UseCycles), ResourceId(ResourceId),
+        Width(Width), PhaseFunc(PhaseFunc) {}
 
   // Construct a conditional reference.
-  ResourceRef(ConditionalRef<ResourceRef> *IfElse)
+  constexpr ResourceRef(ConditionalRef<ResourceRef> *IfElse)
       : Type(ReferenceTypes::RefCond), IfElse(IfElse) {}
 
   // Construct a fus reference
-  ResourceRef(ReferenceType Type, ReferenceFlag Flags, UseCyclesType UseCycles,
-              ResourceIdType ResourceId, int MicroOps)
-      : Type(Type), Flags(Flags), Phase(0), PhaseFunc(nullptr),
-        UseCycles(UseCycles), ResourceId(ResourceId), MicroOps(MicroOps) {}
+  constexpr ResourceRef(ReferenceType Type, ReferenceFlag Flags,
+                        UseCyclesType UseCycles, ResourceIdType ResourceId,
+                        MicroOpsType MicroOps)
+      : Type(Type), Flags(Flags), MicroOps(MicroOps), Phase(0),
+        UseCycles(UseCycles), ResourceId(ResourceId), PhaseFunc(nullptr) {}
   // Construct a micro-ops reference with no functional unit resource.
-  ResourceRef(ReferenceType Type, ReferenceFlag Flags, int MicroOps)
-      : Type(Type), Flags(Flags), Phase(0), PhaseFunc(nullptr), UseCycles(0),
-        ResourceId(-1), MicroOps(MicroOps) {}
+  constexpr ResourceRef(ReferenceType Type, ReferenceFlag Flags,
+                        MicroOpsType MicroOps)
+      : Type(Type), Flags(Flags), MicroOps(MicroOps), Phase(0), UseCycles(0),
+        ResourceId(-1), PhaseFunc(nullptr) {}
 
   ReferenceType getType() const { return Type; }
   ReferenceFlag getFlags() const { return Flags; }
@@ -453,10 +489,10 @@ public:
   bool isUnprotected() const { return Flags & ReferenceFlags::kUnprotected; }
   bool isDuplicate() const { return Flags & ReferenceFlags::kDuplicate; }
 
-  bool isUnbuffered() const { return ReferenceFlags::is_unbuffered(Flags); }
-  bool isInOrder() const { return ReferenceFlags::is_in_order(Flags); }
-  bool isOutOfOrder() const { return ReferenceFlags::is_out_of_order(Flags); }
-  bool isBuffered() const { return ReferenceFlags::is_buffered(Flags); }
+  bool isUnbuffered() const { return ReferenceFlags::isUnbuffered(Flags); }
+  bool isInOrder() const { return ReferenceFlags::isInOrder(Flags); }
+  bool isOutOfOrder() const { return ReferenceFlags::isOutOfOrder(Flags); }
+  bool isBuffered() const { return ReferenceFlags::isBuffered(Flags); }
   bool isBeginGroup() const { return Flags & ReferenceFlags::kBeginGroup; }
   bool isEndGroup() const { return Flags & ReferenceFlags::kEndGroup; }
   bool isSingleIssue() const { return Flags & ReferenceFlags::kSingleIssue; }
@@ -489,9 +525,10 @@ class PoolDescriptor {
   ResourceIdType Last;     // index of last legal id
   PoolBitsType Width;      // how many bits in value (-1 if not shared)
 public:
-  PoolDescriptor(PoolIdType PoolId, PoolIdType PoolSize, PoolSizeType Count,
-                 PoolFuncType PoolFunc, OpndValueFunc ValueFunc,
-                 ResourceIdType First, ResourceIdType Last, PoolBitsType Width)
+  constexpr PoolDescriptor(PoolIdType PoolId, PoolIdType PoolSize,
+                           PoolSizeType Count, PoolFuncType PoolFunc,
+                           OpndValueFunc ValueFunc, ResourceIdType First,
+                           ResourceIdType Last, PoolBitsType Width)
       : PoolId(PoolId), PoolSize(PoolSize), Count(Count), PoolFunc(PoolFunc),
         ValueFunc(ValueFunc), First(First), Last(Last), Width(Width) {}
 
@@ -521,36 +558,36 @@ public:
 /// A reference to a resource pool.
 //-----------------------------------------------------------------------------
 class PooledResourceRef {
-  ReferenceType Type;          // type of the reference
-  ReferenceFlag Flags;         // protected, or unprotected
-  PipePhaseType Phase;         // pipeline phase of the reference
-  PipeFunc PhaseFunc;          // optional pointer to phase function
-  UseCyclesType Cycles;        // number of cycles resource is used
-  ResourceIdType *ResourceIds; // the resources we're referencing
-  OperandId OperandIndex;      // operand index for shared resources
-  int MicroOps = 0;            // number of microops for an Fus entry
+  ReferenceType Type = 0;                // type of the reference
+  ReferenceFlag Flags = 0;               // protected, or unprotected
+  OperandId OperandIndex = 0;            // operand index for shared resources
+  PipePhaseType Phase = 0;               // pipeline phase of the reference
+  UseCyclesType Cycles = 0;              // number of cycles resource is used
+  MicroOpsType MicroOps = 0;             // number of microops for an Fus entry
+  ResourceIdType *ResourceIds = nullptr; // the resources we're referencing
+  PipeFunc PhaseFunc = nullptr;          // optional pointer to phase function
   union {
-    PoolDescriptor *Pool; // pointer to pool descriptor object
+    PoolDescriptor *Pool;          // pointer to pool descriptor object
     ConditionalRef<PooledResourceRef> *IfElse; // conditional ref descriptor
   };
 
 public:
-  PooledResourceRef(ReferenceType Type, ReferenceFlag Flags,
-                    PipePhaseType Phase, PipeFunc PipeFunc,
-                    UseCyclesType Cycles, ResourceIdType *ResourceIds,
-                    OperandId OperandIndex, PoolDescriptor *Pool)
-      : Type(Type), Flags(Flags), Phase(Phase), PhaseFunc(PipeFunc),
-        Cycles(Cycles), ResourceIds(ResourceIds), OperandIndex(OperandIndex),
+  constexpr PooledResourceRef(ReferenceType Type, ReferenceFlag Flags,
+                              PipePhaseType Phase, PipeFunc PipeFunc,
+                              UseCyclesType Cycles, ResourceIdType *ResourceIds,
+                              OperandId OperandIndex, PoolDescriptor *Pool)
+      : Type(Type), Flags(Flags), OperandIndex(OperandIndex), Phase(Phase),
+        Cycles(Cycles), ResourceIds(ResourceIds), PhaseFunc(PipeFunc),
         Pool(Pool) {}
   // Construct a conditional reference.
-  PooledResourceRef(ConditionalRef<PooledResourceRef> *IfElse)
+  constexpr PooledResourceRef(ConditionalRef<PooledResourceRef> *IfElse)
       : Type(ReferenceTypes::RefCond), IfElse(IfElse) {}
   // Constructor for a pooled functional unit reference.
-  PooledResourceRef(ReferenceType Type, ReferenceFlag Flags,
-                    UseCyclesType Cycles, ResourceIdType *ResourceIds,
-                    PoolDescriptor *Pool, int MicroOps)
-      : Type(Type), Flags(Flags), Phase(0), PhaseFunc(nullptr), Cycles(Cycles),
-        ResourceIds(ResourceIds), OperandIndex(0), MicroOps(MicroOps),
+  constexpr PooledResourceRef(ReferenceType Type, ReferenceFlag Flags,
+                              UseCyclesType Cycles, ResourceIdType *ResourceIds,
+                              PoolDescriptor *Pool, MicroOpsType MicroOps)
+      : Type(Type), Flags(Flags), OperandIndex(0), Phase(0), Cycles(Cycles),
+        MicroOps(MicroOps), ResourceIds(ResourceIds), PhaseFunc(nullptr),
         Pool(Pool) {}
 
   ReferenceType getType() const { return Type; }
@@ -562,10 +599,10 @@ public:
   bool IsUnprotected() const { return Flags & ReferenceFlags::kUnprotected; }
   bool IsDuplicate() const { return Flags & ReferenceFlags::kDuplicate; }
 
-  bool isInOrder() const { return ReferenceFlags::is_in_order(Flags); }
-  bool isOutOfOrder() const { return ReferenceFlags::is_out_of_order(Flags); }
-  bool isUnbuffered() const { return ReferenceFlags::is_unbuffered(Flags); }
-  bool isBuffered() const { return ReferenceFlags::is_buffered(Flags); }
+  bool isInOrder() const { return ReferenceFlags::isInOrder(Flags); }
+  bool isOutOfOrder() const { return ReferenceFlags::isOutOfOrder(Flags); }
+  bool isUnbuffered() const { return ReferenceFlags::isUnbuffered(Flags); }
+  bool isBuffered() const { return ReferenceFlags::isBuffered(Flags); }
   bool isBeginGroup() const { return Flags & ReferenceFlags::kBeginGroup; }
   bool isEndGroup() const { return Flags & ReferenceFlags::kEndGroup; }
   bool isSingleIssue() const { return Flags & ReferenceFlags::kSingleIssue; }
@@ -594,14 +631,15 @@ public:
 
 /// A register constraint on a single operand.
 class OperandConstraint {
-  OperandId OperandIndex;
-  RegisterClassIndexType ClassIndex;
-  ConditionalRef<OperandConstraint> *IfElse; // conditional constraint
+  OperandId OperandIndex = 0;
+  RegisterClassIndexType ClassIndex = 0;
+  ConditionalRef<OperandConstraint> *IfElse = nullptr; // conditional constraint
 public:
-  OperandConstraint(OperandId OperandIndex, RegisterClassIndexType ClassIndex)
+  constexpr OperandConstraint(OperandId OperandIndex,
+                              RegisterClassIndexType ClassIndex)
       : OperandIndex(OperandIndex), ClassIndex(ClassIndex), IfElse(nullptr) {}
   // Construct a conditional reference.
-  OperandConstraint(ConditionalRef<OperandConstraint> *IfElse)
+  constexpr OperandConstraint(ConditionalRef<OperandConstraint> *IfElse)
       : IfElse(IfElse) {}
 
   int getOperandIndex() const { return OperandIndex; }
@@ -615,20 +653,21 @@ public:
 /// and resource behavior of the instance of an instruction (or a set of
 /// instructions).
 class Subunit {
-  OperandRefVec *OperandReferences = nullptr;
-  ResourceRefVec *UsedResourceReferences = nullptr;
-  ResourceRefVec *HeldResourceReferences = nullptr;
-  ResourceRefVec *ReservedResourceReferences = nullptr;
-  PooledResourceRefVec *PooledResourceReferences = nullptr;
-  OperandConstraintVec *Constraints = nullptr;
+ public:
+  const InitializationVectorBase *OperandReferences = nullptr;
+  const InitializationVectorBase *UsedResourceReferences = nullptr;
+  const InitializationVectorBase *HeldResourceReferences = nullptr;
+  const InitializationVectorBase *ReservedResourceReferences = nullptr;
+  const InitializationVectorBase *PooledResourceReferences = nullptr;
+  const InitializationVectorBase *Constraints = nullptr;
 
 public:
-  Subunit(OperandRefVec *OperandReferences,
-          ResourceRefVec *UsedResourceReferences,
-          ResourceRefVec *HeldResourceReferences,
-          ResourceRefVec *ReservedResourceReferences,
-          PooledResourceRefVec *PooledResourceReferences,
-          OperandConstraintVec *Constraints)
+  Subunit(const InitializationVectorBase *OperandReferences,
+          const InitializationVectorBase *UsedResourceReferences,
+          const InitializationVectorBase *HeldResourceReferences,
+          const InitializationVectorBase *ReservedResourceReferences,
+          const InitializationVectorBase *PooledResourceReferences,
+          const InitializationVectorBase *Constraints)
       : OperandReferences(OperandReferences),
         UsedResourceReferences(UsedResourceReferences),
         HeldResourceReferences(HeldResourceReferences),
@@ -636,43 +675,39 @@ public:
         PooledResourceReferences(PooledResourceReferences),
         Constraints(Constraints) {}
   // Simpler constructor for the common case of empty parameters.
-  Subunit(OperandRefVec *OperandReferences,
-          ResourceRefVec *UsedResourceReferences)
+  Subunit(const InitializationVectorBase *OperandReferences,
+          const InitializationVectorBase *UsedResourceReferences)
       : OperandReferences(OperandReferences),
         UsedResourceReferences(UsedResourceReferences) {}
 
-  OperandRefVec *getOperandReferences() const { return OperandReferences; }
-  ResourceRefVec *getUsedResourceReferences() const {
-    return UsedResourceReferences;
+  const OperandRefVec<> *getOperandReferences() const {
+    return reinterpret_cast<const OperandRefVec<> *>(OperandReferences);
   }
-  ResourceRefVec *getHeldResourceReferences() const {
-    return HeldResourceReferences;
+  const ResourceRefVec<> *getUsedResourceReferences() const {
+    return reinterpret_cast<const ResourceRefVec<> *>(UsedResourceReferences);
   }
-  ResourceRefVec *getReservedResourceReferences() const {
-    return ReservedResourceReferences;
+  const ResourceRefVec<> *getHeldResourceReferences() const {
+    return reinterpret_cast<const ResourceRefVec<> *>(HeldResourceReferences);
   }
-  PooledResourceRefVec *getPooledResourceReferences() const {
-    return PooledResourceReferences;
+  const ResourceRefVec<> *getReservedResourceReferences() const {
+    return reinterpret_cast<const ResourceRefVec<> *>(ReservedResourceReferences);
   }
-  OperandConstraintVec *getConstraints() const { return Constraints; }
+  const PooledResourceRefVec<> *getPooledResourceReferences() const {
+    return reinterpret_cast<const PooledResourceRefVec<> *>(PooledResourceReferences);
+  }
+  const OperandConstraintVec<> *getConstraints() const {
+    return reinterpret_cast<const OperandConstraintVec<> *>(Constraints); }
 };
 
 // CPU configuration parameters, determined by the MDL compiler, based on the
 // machine description.  This is used to specialize CpuInfo methods for
 // bundle packing and scheduling.
-template <int MRI, int MURI, int MFUI, int PC, int MPA, int MI, int RBS,
-          int EUP, int LP, int HLDP, int MRP>
+template <int MURI, int PC, int MPA, int MI, int MRP>
 struct CpuParams {
-  static const int MaxResourceId = MRI;        // maximum resource id
   static const int MaxUsedResourceId = MURI;   // maximum "used" resource
-  static const int MaxFuncUnitId = MFUI;       // maximum functional unit id
   static const int PoolCount = PC;             // number of pools defined
   static const int MaxPoolAllocation = MPA;    // biggest pool allocation
   static const int MaxIssue = MI;              // maximum parallel issue
-  static const int ReorderBufferSize = RBS;    // instr reorder buffer size
-  static const int EarlyUsePhase = EUP;        // earliest operand use phase
-  static const int LoadPhase = LP;             // default phase for loads
-  static const int HighLatencyDefPhase = HLDP; // high latency def phase
   static const int MaxResourcePhase = MRP;     // latest resource "use" phase
 };
 
@@ -716,7 +751,7 @@ template <typename CpuParams> class ReservationsConfig : public Reservations {
   unsigned Head = 0;
   using Resources = std::bitset<CpuParams::MaxUsedResourceId + 1>;
   Resources Bits[Size];
-  // std::array<Resources, Size> Bits; 
+  // std::array<Resources, Size> Bits;
 
   Resources &Item(unsigned Phase) { return Bits[(Head + Phase) & Mask]; }
 
@@ -927,14 +962,22 @@ public:
   /// Evaluate a Target-library instruction predicate for this instruction.
   bool evaluatePredicate(int PredId);
 
-  /// Return the raw bits associated with an operand.
-  int64_t getOperand(int OperandIndex);
   /// Return various attributes of an instruction's operand.
   bool isOpndLiteral(int OperandIndex);
   bool isOpndAddress(int OperandIndex);
+  bool isOpndGlobal(int OperandIndex);
+  bool isOpndSymbol(int OperandIndex);
+  bool isOpndBlockAddress(int OperandIndex);
   bool isOpndLabel(int OperandIndex);
   bool isOpndRegister(int OperandIndex);
   bool isOpndVirtualRegister(int OperandIndex);
+
+  /// Return the raw bits associated with an operand.
+  int64_t getOperand(int OperandIndex);
+
+  bool getOpndGlobal(int OperandIndex, GlobalValue &Global, int &Offset);
+  bool getOpndSymbol(int OperandIndex, char *&Symbol, int &Offset);
+  bool getOpndBlockAddress(int OperandIndex, BlockAddress &Block, int Offset);
 
   /// Return true if a MachineInstr has more operands than described in its
   /// MCInst description.
@@ -946,7 +989,7 @@ public:
   int getSubunitId() { return 0; }
 
   /// Return the set of subunits for an instruction and CPU combination.
-  SubunitVec *getSubunit();
+  const SubunitVec<> *getSubunit();
 };
 
 ///----------------------------------------------------------------------------
@@ -1001,16 +1044,16 @@ template <typename CpuParams> class ResourceValues {
   bool Valid[CpuParams::MaxUsedResourceId + 1] = {false};
 
 public:
-  bool check(int resource_id, int Values[], int count) {
+  bool check(int resource_id, int OpndValues[], int count) {
     for (int id = 0; id < count; id++, resource_id++)
-      if (!Valid[resource_id] || Values[resource_id] != Values[id])
+      if (!Valid[resource_id] || Values[resource_id] != OpndValues[id])
         return false;
     return true;
   }
-  void set(int ResourceId, int Values[], int Count) {
+  void set(int ResourceId, int OpndValues[], int Count) {
     for (int id = 0; id < Count; id++, ResourceId++) {
       Valid[ResourceId] = true;
-      Values[ResourceId] = Values[id];
+      Values[ResourceId] = OpndValues[id];
     }
   }
 };
@@ -1021,35 +1064,44 @@ public:
 /// the instruction in the current bundle.
 class SlotDesc {
   Instr Inst;                     // instruction description
-  SubunitVec *Subunits;           // pointer to vector of legal subunits
+  const SubunitVec<> *Subunits;   // pointer to vector of legal subunits
   int SubunitId;                  // currently selected subunit id
   AllocatedResourceSet Resources; // resources reserved for instruction
 public:
   SlotDesc(const MCInst *MC, const MCSubtargetInfo *STI,
            const MCInstrInfo *MCII);
-  SlotDesc(MachineInstr *MI, const TargetSubtargetInfo *STI);
+  SlotDesc(const MachineInstr *MI, const TargetSubtargetInfo *STI);
 
   Instr *getInst() { return &Inst; }
   const MachineInstr *getMI() const { return Inst.getMI(); }
-  SubunitVec *getSubunits() const { return Subunits; }
+  const SubunitVec<> *getSubunits() const { return Subunits; }
   int getSubunitId() const { return SubunitId; }
   void setSubunitId(int Id) { SubunitId = Id; }
 
-  Subunit *getSubunit() const { return &(*Subunits)[SubunitId]; }
+  const Subunit *getSubunit() const { return &(*Subunits)[SubunitId]; }
   AllocatedResourceSet &getResources() { return Resources; }
   void setResources(const AllocatedResourceSet &Res) { Resources = Res; }
+
+private:
+  int getResource(ResourceType Type);
+public:
+  // Methods for querying the types of resources allocated for a slot.
+  // These are useful for encoding bundled instructions.
+  int getOperandResource(int OpIndex);
+  int getIssueResource() { return getResource(ResourceType::kIssueSlot); }
+  int getFuncUnitResource() { return getResource(ResourceType::kFuncUnit); }
 };
 
 /// Specify a single pool request for a candidate instruction. This object
 /// is internal to the bundle packer, and is used to fulfill instructions'
 /// pooled allocation requests.
 class PoolRequest {
-  SlotDesc *WhichSlot;    // Slot/instruction making request
-  PooledResourceRef *Ref; // the pooled resource request
-  int Count;              // how many resources requested
-  int Phase;              // what pipeline phase
+  SlotDesc *WhichSlot;          // Slot/instruction making request
+  const PooledResourceRef *Ref; // the pooled resource request
+  int Count;                    // how many resources requested
+  int Phase;                    // what pipeline phase
 public:
-  PoolRequest(SlotDesc *WhichSlot, PooledResourceRef *Ref)
+  PoolRequest(SlotDesc *WhichSlot, const PooledResourceRef *Ref)
       : WhichSlot(WhichSlot), Ref(Ref) {
     Count = Ref->getCount(WhichSlot->getInst(), Ref->getOperandIndex());
     Phase = Ref->getPhase(WhichSlot->getInst());
@@ -1069,7 +1121,7 @@ public:
   }
   Instr *getInst() const { return WhichSlot->getInst(); }
   int getOperandId() const { return Ref->getOperandIndex(); }
-  PooledResourceRef *getRef() const { return Ref; }
+  const PooledResourceRef *getRef() const { return Ref; }
   SlotDesc *getSlot() const { return WhichSlot; }
   bool isShared() const { return getRef()->isShared(); }
 };
@@ -1084,7 +1136,7 @@ template <typename CpuParams> class PoolRequests {
 public:
   PoolRequests() : Pools() {}
   auto &getPool(int Index) { return Pools[Index]; }
-  void AddPoolRequest(SlotDesc *WhichSlot, PooledResourceRef *Item) {
+  void AddPoolRequest(SlotDesc *WhichSlot, const PooledResourceRef *Item) {
     PoolRequest request(WhichSlot, Item);
     if (request.getCount() != 0)
       Pools[request.getSubpoolId()].push_back(request);
@@ -1114,7 +1166,6 @@ inline bool isTransient(const MachineInstr *MI) {
 /// forwarding information and some "worst-case" instruction behaviors.
 ///----------------------------------------------------------------------------
 class CpuInfo {
-  unsigned MaxResourceId = 0;       // maximum resource id
   unsigned MaxUsedResourceId = 0;   // maximum "used" resource
   unsigned MaxFuncUnitId = 0;       // max functional unit resource id
   unsigned PoolCount = 0;           // number of pools defined
@@ -1125,42 +1176,43 @@ class CpuInfo {
   unsigned LoadPhase = 0;           // default phase for load instructions
   unsigned HighLatencyDefPhase = 0; // high latency def instruction phase
   unsigned MaxResourcePhase = 0;    // latest resource "use" phase
-  SubunitTable *(*InitSubunitTable)() = nullptr;
-  int8_t **ForwardTable = nullptr;  // forwarding info table, or null
-  SubunitTable *Subunits = nullptr; // instruction-to-subunit mapping
-  unsigned ResourceFactor = 1;      // Cpu-specific resource factor
-  std::string *ResourceNames = nullptr;  // Names of resources
+  const SubunitId *(*InitSubunitTable)() = nullptr;
+  const InitializationVectorBase **SubunitTable;
+  int8_t **ForwardTable = nullptr;       // forwarding info table, or null
+  const SubunitId *Subunits = nullptr;   // instruction-to-subunit id mapping
+  unsigned ResourceFactor = 1;           // Cpu-specific resource factor
+  const ResourceInfo *Resources = nullptr;  // Names/types of resources
 
   // A CPU can have a set of Target-library predicates, which are only used
   // if the LLVM Target library is included in an application. This vector is
   // generated by the MDL compiler, and is initialized here when the Subtarget
   // object is initialized.
-  std::vector<PredFunc> *InstrPredicates = nullptr;
+  InstrPredTable *InstrPredicates = nullptr;
 
 public:
-  CpuInfo(unsigned MaxResourceId, unsigned MaxUsedResourceId,
+  CpuInfo(unsigned MaxUsedResourceId,
           unsigned MaxFuncUnitId, unsigned PoolCount,
           unsigned MaxPoolAllocation, unsigned MaxIssue,
           unsigned ReorderBufferSize, unsigned EarlyUsePhase,
           unsigned LoadPhase, unsigned HighLatencyDefPhase,
-          unsigned MaxResourcePhase, SubunitTable *(*InitSubunitTable)(),
+          unsigned MaxResourcePhase, const SubunitId *(*InitSubunitTable)(),
+          const InitializationVectorBase **SubunitTable,
           int8_t **ForwardTable, unsigned ResourceFactor,
-          std::string *ResourceNames)
-      : MaxResourceId(MaxResourceId), MaxUsedResourceId(MaxUsedResourceId),
+          const ResourceInfo *Resources)
+      : MaxUsedResourceId(MaxUsedResourceId),
         MaxFuncUnitId(MaxFuncUnitId), PoolCount(PoolCount),
         MaxPoolAllocation(MaxPoolAllocation), MaxIssue(MaxIssue),
         ReorderBufferSize(ReorderBufferSize), EarlyUsePhase(EarlyUsePhase),
         LoadPhase(LoadPhase), HighLatencyDefPhase(HighLatencyDefPhase),
         MaxResourcePhase(MaxResourcePhase), InitSubunitTable(InitSubunitTable),
-        ForwardTable(ForwardTable), ResourceFactor(ResourceFactor),
-        ResourceNames(ResourceNames) {}
+        SubunitTable(SubunitTable), ForwardTable(ForwardTable),
+        ResourceFactor(ResourceFactor), Resources(Resources) {}
   CpuInfo() {}
   virtual ~CpuInfo() = default;
 
   //------------------------------------------------------------------------
   // These functions return all the top-level attributes of the CPU.
   //------------------------------------------------------------------------
-  unsigned getMaxResourceId() const { return MaxResourceId; }
   unsigned getMaxUsedResourceId() const { return MaxUsedResourceId; }
   unsigned getMaxFuncUnitId() const { return MaxFuncUnitId; }
   bool isFuncUnitId(int id) const { return (unsigned)id <= MaxFuncUnitId; }
@@ -1177,7 +1229,8 @@ public:
   unsigned getMaxResourcePhase() const { return MaxResourcePhase; }
   int8_t **getForwardTable() const { return ForwardTable; }
   unsigned getResourceFactor() const { return ResourceFactor; }
-  std::string &getResourceName(unsigned Id) { return ResourceNames[Id]; }
+  std::string getResourceName(unsigned Id) { return Resources[Id].Name; }
+  ResourceType getResourceType(unsigned Id) { return Resources[Id].Type; }
 
   //------------------------------------------------------------------------
   // Functions for managing the subunit and predicate tables.
@@ -1185,12 +1238,13 @@ public:
   // table will be empty.
   //------------------------------------------------------------------------
   bool hasSubunits() const { return Subunits; }
-  SubunitTable *getSubunits() const { return Subunits; }
-  SubunitVec *getSubunit(int opcode) const {
+  // const SubunitVec<> **getSubunits() const { return Subunits; }
+  const SubunitVec<> *getSubunit(int opcode) const {
     if (Subunits == nullptr) return nullptr;
-    return (*Subunits)[opcode];
+    return
+        reinterpret_cast<const SubunitVec<> *>(SubunitTable[Subunits[opcode]]);
   }
-  bool IsInstruction(int Opcode, int OperandId) const {
+  bool isInstruction(int Opcode, int OperandId) const {
     if (OperandId == -1)
       return false;
     return getSubunit(Opcode) != nullptr;
@@ -1198,13 +1252,13 @@ public:
 
   // A subunit table is only initialized once, when it is selected for use.
   // Call the MDL-generated function to initialize it.
-  void InitSubunits() {
+  void initSubunits() {
     if (Subunits == nullptr && InitSubunitTable)
       Subunits = InitSubunitTable();
   }
 
   // Register a set of Subtarget-specific predicates for this subtarget.
-  void SetInstrPredicates(std::vector<PredFunc> *Preds) {
+  void setInstrPredicates(InstrPredTable *Preds) {
     InstrPredicates = Preds;
   }
 
@@ -1224,12 +1278,12 @@ public:
   // Return true if an instruction must begin an issue group.
   bool mustBeginGroup(const MachineInstr *MI, const TargetSubtargetInfo *STI) {
     Instr Ins(MI, STI);
-    if (auto *Subunit = Ins.getSubunit()) {
-      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+    if (const auto *Subunit = Ins.getSubunit()) {
+      if (const auto *Refs = (*Subunit)[0].getUsedResourceReferences())
         for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
           if (Ref.isFus() && (Ref.isBeginGroup() || Ref.isSingleIssue()))
             return true;
-      if (auto *Refs = (*Subunit)[0].getPooledResourceReferences())
+      if (const auto *Refs = (*Subunit)[0].getPooledResourceReferences())
         for (const auto &Ref : ReferenceIter<PooledResourceRef>(Refs, &Ins))
           if (Ref.isFus() && (Ref.isBeginGroup() || Ref.isSingleIssue()))
             return true;
@@ -1240,12 +1294,12 @@ public:
   // Return true if an instruction must end an issue group.
   bool mustEndGroup(const MachineInstr *MI, const TargetSubtargetInfo *STI) {
     Instr Ins(MI, STI);
-    if (auto *Subunit = Ins.getSubunit()) {
-      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+    if (const auto *Subunit = Ins.getSubunit()) {
+      if (const auto *Refs = (*Subunit)[0].getUsedResourceReferences())
         for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
           if (Ref.isFus() && (Ref.isEndGroup() || Ref.isSingleIssue()))
             return true;
-      if (auto *Refs = (*Subunit)[0].getPooledResourceReferences())
+      if (const auto *Refs = (*Subunit)[0].getPooledResourceReferences())
         for (const auto &Ref : ReferenceIter<PooledResourceRef>(Refs, &Ins))
           if (Ref.isFus() && (Ref.isEndGroup() || Ref.isSingleIssue()))
             return true;
@@ -1256,12 +1310,12 @@ public:
   // Return true if an instruction must be single-issued.
   bool isSingleIssue(const MachineInstr *MI, const TargetSubtargetInfo *STI) {
     Instr Ins(MI, STI);
-    if (auto *Subunit = Ins.getSubunit()) {
-      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+    if (const auto *Subunit = Ins.getSubunit()) {
+      if (const auto *Refs = (*Subunit)[0].getUsedResourceReferences())
         for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
           if (Ref.isFus() && Ref.isSingleIssue())
             return true;
-      if (auto *Refs = (*Subunit)[0].getPooledResourceReferences())
+      if (const auto *Refs = (*Subunit)[0].getPooledResourceReferences())
         for (const auto &Ref : ReferenceIter<PooledResourceRef>(Refs, &Ins))
           if (Ref.isFus() && Ref.isSingleIssue())
             return true;
@@ -1272,12 +1326,12 @@ public:
   // Return true if an instruction has the RetireOOO attribute.
   bool isRetireOOO(const MachineInstr *MI, const TargetSubtargetInfo *STI) {
     Instr Ins(MI, STI);
-    if (auto *Subunit = Ins.getSubunit()) {
-      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+    if (const auto *Subunit = Ins.getSubunit()) {
+      if (const auto *Refs = (*Subunit)[0].getUsedResourceReferences())
         for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
           if (Ref.isFus() && Ref.isRetireOOO())
             return true;
-      if (auto *Refs = (*Subunit)[0].getPooledResourceReferences())
+      if (const auto *Refs = (*Subunit)[0].getPooledResourceReferences())
         for (const auto &Ref : ReferenceIter<PooledResourceRef>(Refs, &Ins))
           if (Ref.isFus() && Ref.isRetireOOO())
             return true;
@@ -1294,14 +1348,14 @@ public:
       return isTransient(Ins.getMI()) ? 0 : 1;
 
     int MicroOps = 0;
-    if (auto *Refs = (*Subunit)[0].getUsedResourceReferences()) {
+    if (const auto *Refs = (*Subunit)[0].getUsedResourceReferences()) {
       for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
         if (Ref.isFus())
           MicroOps += Ref.getMicroOps();
     }
-    if (auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
+    if (const auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
       for (const auto &Ref : ReferenceIter<PooledResourceRef>(Prefs, &Ins))
-        if (Ref.isFus()) 
+        if (Ref.isFus())
           MicroOps += Ref.getMicroOps();
 
     // If the instruction had subunits, its at least one microop.
@@ -1321,14 +1375,14 @@ public:
   //------------------------------------------------------------------------
   double getReciprocalThroughput(Instr Ins) const {
     double Throughput = 0.0;
-    if (auto *Subunit = Ins.getSubunit()) {
-      if (auto *Refs = (*Subunit)[0].getUsedResourceReferences())
+    if (const auto *Subunit = Ins.getSubunit()) {
+      if (const auto *Refs = (*Subunit)[0].getUsedResourceReferences())
         for (const auto &Ref : ReferenceIter<ResourceRef>(Refs, &Ins))
           if (Ref.isFus() && Ref.getCycles()) {
             double Temp = 1.0 / Ref.getCycles();
             Throughput = Throughput ? std::min(Throughput, Temp) : Temp;
           }
-      if (auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
+      if (const auto *Prefs = (*Subunit)[0].getPooledResourceReferences())
         for (const auto &Ref : ReferenceIter<PooledResourceRef>(Prefs, &Ins))
           if (Ref.isFus()) { // Pools always have non-zero cycles
             double Temp = (Ref.getSize() * 1.0) / Ref.getCycles();
@@ -1377,15 +1431,19 @@ public:
 ///----------------------------------------------------------------------------
 template <typename CpuParams> class CpuConfig : public CpuInfo {
 public:
-  CpuConfig(SubunitTable *(*InitSubunitTable)(), int8_t **ForwardTable,
-            unsigned ResourceFactor, std::string *ResourceNames)
-      : CpuInfo(CpuParams::MaxResourceId, CpuParams::MaxUsedResourceId,
-                CpuParams::MaxFuncUnitId, CpuParams::PoolCount,
+  CpuConfig(const SubunitId *(*InitSubunitTable)(),
+            const InitializationVectorBase **SubunitTable,
+            const ResourceInfo *Resources,
+            int MaxFuncUnitId, int ReorderBufferSize, int EarlyUsePhase,
+            int LoadPhase, int HighLatencyDefPhase,
+            unsigned ResourceFactor, int8_t **ForwardTable)
+      : CpuInfo(CpuParams::MaxUsedResourceId,
+                MaxFuncUnitId, CpuParams::PoolCount,
                 CpuParams::MaxPoolAllocation, CpuParams::MaxIssue,
-                CpuParams::ReorderBufferSize, CpuParams::EarlyUsePhase,
-                CpuParams::LoadPhase, CpuParams::HighLatencyDefPhase,
-                CpuParams::MaxResourcePhase, InitSubunitTable, ForwardTable,
-                ResourceFactor, ResourceNames) {}
+                ReorderBufferSize, EarlyUsePhase,
+                LoadPhase, HighLatencyDefPhase,
+                CpuParams::MaxResourcePhase, InitSubunitTable, SubunitTable,
+                ForwardTable, ResourceFactor, Resources) {}
 
   // CPU-specialized bundle packing functions.
   bool addToBundle(SlotSet &Bundle, const SlotDesc &Candidate,
@@ -1405,7 +1463,7 @@ public:
   BundleStatus attemptToBundle(SlotSet &Bundle,
                                ReservationsConfig<CpuParams> &Res,
                                int WhichSlot, bool Reset);
-  bool addResources(SlotDesc &Slot, Subunit &WhichSubunit,
+  bool addResources(SlotDesc &Slot, const Subunit &WhichSubunit,
                     ReservationsConfig<CpuParams> &res);
   void findStaticResources(SlotSet &Bundle, ResourceValues<CpuParams> &Values);
 
@@ -1426,36 +1484,86 @@ inline int getResourcePhase(PipeFunc Func, Instr *Ins) {
 }
 
 ///----------------------------------------------------------------------------
-/// A CPU dictionary is the top-level object in the database, and describes
+/// The CPU Table is the top-level object in the database, and describes
 /// each defined CPU in the family. Each CPU object in this table corresponds
 /// to a single SchedMachineModel.
 ///----------------------------------------------------------------------------
-using CpuTableDict = std::map<std::string, CpuInfo *>;
+struct CpuTableDict {
+  const char *Name;       // name of the CPU
+  CpuInfo *Info;          // Pointer to the description of the CPU.
+};
 
 class CpuTableDef {
   // A dictionary of all CPUs defined in the description, indexed by name.
-  CpuTableDict &Cpus;
+  CpuTableDict *Cpus;
 
 public:
-  explicit CpuTableDef(CpuTableDict &Cpus) : Cpus(Cpus) {}
+  explicit CpuTableDef(CpuTableDict *Cpus) : Cpus(Cpus) {}
 
-  CpuInfo *getCpu(std::string name) const {
-    if (!Cpus.count(name))
-      return nullptr;
-    auto *cpu = Cpus[name];
-    cpu->InitSubunits();
-    return cpu;
+  CpuInfo *getCpu(std::string Name) const {
+    const char *Cname = Name.c_str();
+    for (auto *Entry = Cpus; Entry->Name != nullptr; Entry++)
+      if (!strcmp(Cname, Entry->Name)) {
+        auto *Cpu = Entry->Info;
+        Cpu->initSubunits();
+        return Cpu;
+      }
+    return nullptr;      // If not found.
   }
 
-  bool hasCpus() const { return !Cpus.empty(); }
-  int getCpuCount() const { return Cpus.size(); }
+  bool hasCpus() const { return Cpus[0].Name != nullptr; }
 
   // Register a set of Subtarget-specific predicates with each subtarget.
-  void SetInstrPredicates(std::vector<PredFunc> *Preds) {
-    for (auto [Name, Cpu] : Cpus)
-      Cpu->SetInstrPredicates(Preds);
+  void setInstrPredicates(InstrPredTable *Preds) {
+    if (Preds && !Preds->empty())
+      for (auto *Entry = Cpus; Entry->Name != nullptr; Entry++)
+        if (Entry->Info)
+          Entry->Info->setInstrPredicates(Preds);
   }
 };
+
+//-----------------------------------------------------------------------------
+// SlotDesc instructions for finding specific types of resources.
+//-----------------------------------------------------------------------------
+// Find the first resource used to issue the instruction.
+inline int SlotDesc::getResource(ResourceType Type) {
+  auto *Cpu = Inst.getCpuInfo();
+  int SUid = getSubunitId();        // Subunit assigned to this slot
+
+  // Check statically allocated resources.
+  if (const auto *Subunit = Inst.getSubunit())
+    if (const auto *Refs = (*Subunit)[SUid].getUsedResourceReferences())
+      for (auto const &Ref : ReferenceIter<ResourceRef>(Refs, &Inst)) {
+        auto ResId = Ref.getResourceId();
+        if (Cpu->getResourceType(ResId) == Type)
+          return ResId;
+      }
+
+  // Check dynamically allocated (pooled) resources.
+  for (auto &Res : Resources)
+    if (Cpu->getResourceType(Res.ResId) == Type)
+      return Res.ResId;
+  return 0;   // No resource allocated.
+}
+
+// Find the first resource associated with a specific operand.
+inline int SlotDesc::getOperandResource(int OpIndex) {
+  int SUid = getSubunitId();        // Subunit assigned to this slot
+
+  // Check statically allocated resources.
+  if (const auto *Subunit = Inst.getSubunit())
+    if (const auto *Refs = (*Subunit)[SUid].getUsedResourceReferences())
+      for (auto const &Ref : ReferenceIter<ResourceRef>(Refs, &Inst))
+        if (Ref.getType() == ReferenceTypes::RefUse &&
+            Ref.getOperandIndex() == OpIndex)
+          return Ref.getResourceId();
+
+  // Check dynamically allocated (pooled) resources.
+  for (auto &Res : Resources)
+    if (Res.OpndId == OpIndex)
+      return Res.ResId;
+  return 0;   // No resource allocated.
+}
 
 } // namespace mdl
 } // namespace llvm

@@ -19,7 +19,6 @@
 #include "R600InstPrinter.h"
 #include "R600MCTargetDesc.h"
 #include "TargetInfo/AMDGPUTargetInfo.h"
-#include "llvm/Config/config.h"
 #include "llvm/MC/LaneBitmask.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -55,12 +54,7 @@ using namespace llvm;
 #include "R600GenRegisterInfo.inc"
 
 // Include the generated MDL database.
-#if ENABLE_MDL_USE
 #include "AMDGPUGenMdlInfo.inc"
-#define AMDGPUCpuTable &AMDGPU::CpuTable
-#else
-#define AMDGPUCpuTable nullptr
-#endif
 
 static MCInstrInfo *createAMDGPUMCInstrInfo() {
   MCInstrInfo *X = new MCInstrInfo();
@@ -87,11 +81,11 @@ static MCSubtargetInfo *
 createAMDGPUMCSubtargetInfo(const Triple &TT, StringRef CPU, StringRef FS) {
   if (TT.getArch() == Triple::r600)
     return createR600MCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS,
-                                         AMDGPUCpuTable);
+                                         AMDGPU::CpuTableAddr);
 
   MCSubtargetInfo *STI =
       createAMDGPUMCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, FS,
-                                         AMDGPUCpuTable);
+                                         AMDGPU::CpuTableAddr);
 
   // FIXME: We should error for the default target.
   if (!STI->hasFeature(AMDGPU::FeatureWavefrontSize64) &&

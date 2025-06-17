@@ -684,7 +684,7 @@ class ResourceRef : public MdlItem {
   Identifier *ValueName = nullptr;       // name of operand value attribute
   int First = -1, Last = -1;             // subrange of pool (a[2..4] or a[3])
   int MemberId = -1;                     // index of a member reference
-  ResourceDef *FuPool = nullptr;       // for pooled fu references
+  ResourceDef *FuPool = nullptr;         // for pooled fu references
 
   // Links to related objects.
   ResourceDef *Definition = nullptr;     // link to resource definition
@@ -718,12 +718,15 @@ public:
   void rename(Identifier *NewId) { Id = NewId; }
   std::string const &getName() const { return Id->getName(); }
   Identifier *getMember() const { return Member; }
+
   int getPoolCount() const { return PoolCount; }
   Identifier *getPoolCountName() const { return PoolCountName; }
 
   bool hasCount() const {
     return PoolCount != -1 || PoolCountName != nullptr;
   }
+  void addCount(int Count) { Definition->addAllocSize(Count); }
+
   Identifier *getValueName() const { return ValueName; }
 
   int getFirst() const { return First; }
@@ -1963,15 +1966,16 @@ class OperandDecl : public MdlItem {
   bool Ellipsis = false;             // was this operand an ellipsis?
   bool Input = false;                // was the operand tagged as an input?
   bool Output = false;               // was the operand tagged as an output?
+  bool HasName = false;              // was a name provided
 
-  OperandDef *Operand = nullptr;      // pointer to associated operand type
+  OperandDef *Operand = nullptr;     // pointer to associated operand type
   RegisterClass *RegClass = nullptr; // pointer to associated register class
 
 public:
   OperandDecl(const MdlItem &Item, Identifier *Type, Identifier *Name,
-              bool Ellipsis, bool Input, bool Output)
+              bool Ellipsis, bool Input, bool Output, bool HasName)
       : MdlItem(Item), Types(new IdList({Type})), Names(new IdList({Name})),
-        Ellipsis(Ellipsis), Input(Input), Output(Output) {}
+        Ellipsis(Ellipsis), Input(Input), Output(Output), HasName(HasName) {}
 
   OperandDecl(OperandDecl *Item, OperandDecl *Parent)
       : MdlItem(),
@@ -1979,8 +1983,8 @@ public:
         Names(new IdList((*Parent->Names).begin(), (*Parent->Names).end())),
         IsImpliedRegister(Item->IsImpliedRegister),
         Ellipsis(Parent->Ellipsis), Input(Parent->Input),
-        Output(Parent->Output), Operand(Item->Operand),
-        RegClass(Item->RegClass) {}
+        Output(Parent->Output), HasName(Parent->HasName),
+        Operand(Item->Operand), RegClass(Item->RegClass) {}
 
   // Set this to true if we want to see more detail (for debugging).
   const bool PrintFullyQualifiedDeclaration = true;
@@ -1993,12 +1997,14 @@ public:
   Identifier *getBaseType() const { return Types->back(); }
   Identifier *getOpName() const { return (*Names)[0]; }
   IdList *getOpNames() const { return Names; }
+
   void addType(Identifier *Type) { Types->push_back(Type); }
   void addName(Identifier *Name) { Names->push_back(Name); }
   bool isImpliedRegister() const { return IsImpliedRegister; }
   bool isEllipsis() const { return Ellipsis; }
   bool isInput() const { return Input; }
   bool isOutput() const { return Output; }
+  bool hasName() const { return HasName; }
 
   OperandDef *getOperand() const { return Operand; }
   RegisterClass *getRegClass() const { return RegClass; }
@@ -2602,6 +2608,38 @@ public:
               Items[J]->getName(), Items[I]->getLocation());
           break; // We only need to find the first duplicate for each item.
         }
+  }
+
+  // Function to check that operand definition names are unique.
+  // Operand names are a separate namespace, and can "shadow" register names,
+  // which can also be implied operands.  Implied operands' names and types are
+  // identical (ie R5:$R5). Using a register name for an operand is perhaps
+  // not the best idea, but its allowed. However, to access that implied
+  // operand in latency rules, the reference has to fully qualify the reference.
+  void findDuplicateOperands(const OperandDeclList &Items) {
+    auto IsImpliedOperand = [this](OperandDecl* Item) {
+      auto &Name = Item->getName();
+      return Name == Item->getTypeName() && FindItem(Registers, Name);
+    };
+
+    for (unsigned I = 0; I < Items.size(); I++) {
+      // Don't bother to check implied operand declarations.
+      if (IsImpliedOperand(Items[I]))
+        continue;
+
+      // Don't bother to check implied operand declarations.
+      auto &Name = Items[I]->getName();
+      if (Name.empty()) continue;
+
+      for (unsigned J = I + 1; J < Items.size(); J++)
+        if (!IsImpliedOperand(Items[J]) && Name == Items[J]->getName()) {
+          ErrorLog(
+              Items[J],
+              "Duplicate definition of {0}\n     Previously defined at {1}",
+              Name, Items[I]->getLocation());
+          break; // We only need to find the first duplicate for each item.
+        }
+    }
   }
 
   // Check the member list of a resource definition for duplicate members.

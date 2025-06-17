@@ -31,12 +31,7 @@
 #include <numeric>
 
 using namespace llvm;
-
-static cl::opt<bool> EnableSchedModel("schedmodel", cl::Hidden, cl::init(true),
-  cl::desc("Use TargetSchedModel for latency lookup"));
-
-static cl::opt<bool> EnableSchedItins("scheditins", cl::Hidden, cl::init(true),
-  cl::desc("Use InstrItineraryData for latency lookup"));
+using namespace mdl;
 
 static cl::opt<bool> ForceEnableIntervals(
     "sched-model-force-enable-intervals", cl::Hidden, cl::init(false),

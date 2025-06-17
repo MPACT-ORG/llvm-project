@@ -250,9 +250,11 @@ std::string LatencyTemplate::ToString() const {
       StringVec<Params *>(LatParams, "Template Parameters(", ", ", ")\n"),
       StringVec<Reference *>(References, "   ", "\n   "));
 
-  for (auto &[Predicate, Funits] : ReferencedFus->getFuncUnits())
-    Out += formatv("FUs: {0} -> {1}\n", (Predicate == "" ? "<all>" : Predicate),
-            StringSet<std::string>(&Funits, "", ", ", ""));
+  if (ReferencedFus)
+    for (auto &[Predicate, Funits] : ReferencedFus->getFuncUnits())
+      Out += formatv("FUs: {0} -> {1}\n",
+                     (Predicate == "" ? "<all>" : Predicate),
+                     StringSet<std::string>(&Funits, "", ", ", ""));
   return Out;
 }
 

@@ -165,7 +165,7 @@ CpuConfig<CpuParams>::attemptToBundle(SlotSet &Bundle,
   // If this is the first attempt to bundle this instruction, we iterate over
   // all of its subunits, otherwise we start with the previous subunit
   // assignment.
-  SubunitVec &subunits = *Item.getSubunits();
+  const SubunitVec<> &subunits = *Item.getSubunits();
   int OriginalId = Item.getSubunitId();
   if (Reset)
     Item.setSubunitId(0);
@@ -204,7 +204,8 @@ CpuConfig<CpuParams>::attemptToBundle(SlotSet &Bundle,
 /// if the resource is shareable. (Its quite expensive, even if done
 /// efficiently)
 template <typename CpuParams>
-bool CpuConfig<CpuParams>::addResources(SlotDesc &Slot, Subunit &WhichSubunit,
+bool CpuConfig<CpuParams>::addResources(SlotDesc &Slot,
+                                        const Subunit &WhichSubunit,
                                         ReservationsConfig<CpuParams> &Res) {
   if (auto *Refs = WhichSubunit.getUsedResourceReferences()) {
     for (auto const &Ref : ReferenceIter<ResourceRef>(Refs, Slot.getInst())) {
@@ -256,8 +257,9 @@ CpuConfig<CpuParams>::allocatePools(SlotSet &Bundle,
   }
 
   // If there were no pooled requests, we've succeeded!
-  if (RequestCount == 0) return BundleStatus::kSuccess;
-  
+  if (RequestCount == 0)
+    return BundleStatus::kSuccess;
+
   // Find the set of shared resources used by the bundle.
   ResourceValues<CpuParams> Values;
   findStaticResources(Bundle, Values);
@@ -275,6 +277,7 @@ CpuConfig<CpuParams>::allocatePools(SlotSet &Bundle,
     RequestCount -= Pools.getPool(PoolId).size();
     if (RequestCount <= 0) break;
   }
+
   return BundleStatus::kSuccess;
 }
 
@@ -311,9 +314,9 @@ bool CpuConfig<CpuParams>::allocateResource(PoolRequest &Item, int Id,
                                             ResourceValues<CpuParams> &Values) {
   // Check to see if we can share a resource with another operand.
   int OpndValues[CpuParams::MaxPoolAllocation + 1] = {0};
-
   int Phase = Item.getPhase();
   int Cycles = Item.getCycles();
+  int Opnd = Item.getRef()->getOperandIndex();
 
   // If this item has shared bits (width), fetch the operands' normalized
   // values from the operand, and check them against currently shared values.
@@ -322,9 +325,8 @@ bool CpuConfig<CpuParams>::allocateResource(PoolRequest &Item, int Id,
   if (Shared) {
     if (Values.check(Id, OpndValues, Count)) {
       for (int Off = 0; Off < Count; Off++) {
-        int Opnd = Item.getRef()->getOperandIndex();
         Item.getSlot()->getResources()
-            .emplace_back(Id + Off, Phase, Cycles, Opnd, OpndValues[Off], Count);
+           .emplace_back(Id + Off, Phase, Cycles, Opnd, OpndValues[Off], Count);
       }
       return true;
     }
@@ -339,7 +341,11 @@ bool CpuConfig<CpuParams>::allocateResource(PoolRequest &Item, int Id,
   // Add the resources used to the slot they're allocated for.
   for (int Off = 0; Off < Count; Off++) {
     Res.set(Id + Off, Phase, Cycles);
-    Item.getSlot()->getResources().emplace_back(Id + Off, Phase, Cycles);
+    auto &Res = Item.getSlot()->getResources();
+    if (Shared)
+      Res.emplace_back(Id + Off, Phase, Cycles, Opnd, OpndValues[Off], Count);
+    else
+      Res.emplace_back(Id + Off, Phase, Cycles);
   }
 
   // If the item is shared, store off the operand values.
@@ -401,6 +407,10 @@ bool CpuConfig<CpuParams>::allocatePool(PoolRequestSet &Pool,
   return true;
 }
 
+// Non-templatized functions for dumping slots or bundles.
+extern void dumpSlot(SlotDesc &Slot);
+extern void dumpBundle(SlotSet &Bundle);
+
 // Write out all the instructions in a bundle.
 inline void CpuInfo::dumpBundle(std::string Cpu, std::string Msg,
                                 SlotSet &Bundle) {
@@ -416,11 +426,12 @@ inline std::string CpuInfo::dumpSlot(std::string Msg, SlotDesc &Slot) {
   std::string Out = Msg;
   int Id = Slot.getInst()->getOpcode();
   auto Name = Slot.getInst()->getName();
-  Out += formatv("su: {0}/{1} {2} : {3}", Slot.getSubunitId(),
-                 Slot.getSubunits()->size(), Id, Name);
 
   if (!Slot.getSubunits())
     return Out + "\n";
+
+  Out += formatv("su: {0}/{1} {2} : {3}", Slot.getSubunitId(),
+                 Slot.getSubunits()->size(), Id, Name);
 
   if (auto *Refs = Slot.getSubunit()->getUsedResourceReferences()) {
     Out += "\t <";

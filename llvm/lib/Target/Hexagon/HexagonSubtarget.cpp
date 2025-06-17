@@ -23,7 +23,6 @@
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/CodeGen/ScheduleDAGInstrs.h"
-#include "llvm/Config/config.h"
 #include "llvm/IR/IntrinsicsHexagon.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -42,14 +41,9 @@ using namespace llvm;
 #include "HexagonGenSubtargetInfo.inc"
 
 // Include definitions associated with the MDL description.
-#if ENABLE_MDL_USE
 #include "HexagonGenMdlInfo.h"
 // Include virtual predicate function definitions from the MDL description.
 #include "HexagonGenMdlTarget.inc"
-#define HexagonCpuTable &Hexagon::CpuTable
-#else
-#define HexagonCpuTable nullptr
-#endif
 
 static cl::opt<bool> EnableBSBSched("enable-bsb-sched", cl::Hidden,
                                     cl::init(true));
@@ -85,7 +79,8 @@ static cl::opt<bool> EnableCheckBankConflict(
 
 HexagonSubtarget::HexagonSubtarget(const Triple &TT, StringRef CPU,
                                    StringRef FS, const TargetMachine &TM)
-    : HexagonGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS, HexagonCpuTable),
+    : HexagonGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS,
+                              Hexagon::CpuTableAddr, Hexagon::InstrPreds),
       OptLevel(TM.getOptLevel()),
       CPUString(std::string(Hexagon_MC::selectHexagonCPU(CPU))),
       TargetTriple(TT), InstrInfo(initializeSubtargetDependencies(CPU, FS)),
@@ -96,11 +91,6 @@ HexagonSubtarget::HexagonSubtarget(const Triple &TT, StringRef CPU,
   // Beware of the default constructor of InstrItineraryData: it will
   // reset all members to 0.
   assert(InstrItins.Itineraries != nullptr && "InstrItins not initialized");
-
-  // Register the Target-library-specific predicate table in the cpu table.
-#if ENABLE_MDL_USE
-  Hexagon::CpuTable.SetInstrPredicates(&Hexagon::InstrPredicates);
-#endif
 }
 
 HexagonSubtarget &

@@ -138,6 +138,17 @@ static std::string ForwardSetName(int Index) {
   return TableName(Index, "FWD_");
 }
 
+// Helper to figure out how many constructors are included on a a vector
+// initialization line. We're just counting leading '{'.  Note that some
+// vectors don't have any braces.
+static int countVectorInitItems(std::string Input) {
+  int Count = 0;
+  for (auto C : Input)
+    if (C == '{')
+      Count++;
+  return std::max(Count, 1); // In case there's just one initializer
+}
+
 // For non-trivial phase expressions, create a C++ expression to evaluate
 // the arithmetic and fetch operands from the instruction if needed.
 std::string OutputState::formatPhaseExpr(const PhaseExpr *Expr) const {
@@ -163,7 +174,7 @@ std::string OutputState::formatPhaseExpr(const PhaseExpr *Expr) const {
   case kPhase:
     return std::to_string(Expr->getPhaseId());
   case kOpnd:
-    return formatv("static_cast<int32_t>(ins->GetOperand({0}))",
+    return formatv("static_cast<int32_t>(ins->getOperand({0}))",
                    Expr->getOperand()->getOperandIndex());
   case kPositive:
     return formatv("std::max(0, {0})", Left);
@@ -342,9 +353,7 @@ std::string OutputState::formatIfElseOperandRef(ConditionalRef *Cond) {
     return kNull;
 
   // Add the operand list id to the list of OperandRef forward references.
-  auto Opnds = formatOperandReferenceList(&Cond->getRefs());
-  if (Opnds != kNull)
-    ForwardOpndRefs.insert(Opnds.substr(1, Opnds.size() - 1));
+  auto Opnds = formatOperandReferenceList(&Cond->getRefs(), true);
 
   // If the predicate is null and the operand list is empty, just return null.
   if (Opnds == kNull && Cond->getInstrPredicate() == nullptr)
@@ -383,7 +392,8 @@ std::string OutputState::formatOperandReference(const Reference *Ref) {
 
 // Format an operand reference list. Create a vector of operand references,
 // and enter into a table so it can be shared between subunits.
-std::string OutputState::formatOperandReferenceList(const ReferenceList *Refs) {
+std::string OutputState::formatOperandReferenceList(const ReferenceList *Refs,
+                                                    bool fwd) {
   std::string Out;
   std::string Previous;
   for (const auto *Ref : *Refs) {
@@ -403,8 +413,15 @@ std::string OutputState::formatOperandReferenceList(const ReferenceList *Refs) {
     return kNull;
   Out.pop_back(); // throw away trailing comma.
 
+  // Add the entry to the list of operand refs.  If its part of a conditional
+  // reference list, add the size of the list to the forward sizes table.
   auto Index = AddEntry(OperandRefs, Out);
-  return formatv("&{0}", OperandListName(Index));
+  auto OpName = OperandListName(Index);
+  if (fwd) {
+    ForwardOpndRefs.insert(OpName);
+    ForwardListSizes[OpName] = countVectorInitItems(Out);
+  }
+  return formatv("&{0}", OpName);
 }
 
 // Format a single resource reference. We generate an autoinitialization of
@@ -436,10 +453,15 @@ std::string OutputState::formatResourceReference(const ResourceEvent &Ref) {
       !Res->hasOperandIndex())
     return "";
 
+  // If the resource hasn't been allocated an id, there's no reason to write
+  // the reference out.
+  int ResId = Res->getFinalResourceId();
+  if (ResId == 0) return "";
+
   // If this was a functional unit reference, write Out a FU constructor.
   if (Ref.isFuncUnitRef())
     return formatv("{{{0},{1},{2},{3},{4}}", Type, Flags, Cycles,
-                   Res->getFinalResourceId(), Ref.getMicroOps());
+                   ResId, Ref.getMicroOps());
 
   // If this was a reference to an entire group, write Out a reference for
   // each group member.
@@ -455,7 +477,7 @@ std::string OutputState::formatResourceReference(const ResourceEvent &Ref) {
   // If this is a reference to a single resource, write Out a single reference.
   if (!Res->isGroupRef() || Res->getFirst() == Res->getLast())
     return formatv("{{{0},{1},{2},{3},{4},{5},{6}}", Type, Flags, Phase, Cycles,
-                   Res->getFinalResourceId(), Opnd, Size);
+                   ResId, Opnd, Size);
 
   // If the reference was for a range of pool entries, write Out a reference
   // for each resource in the range. (This is rare.)
@@ -518,8 +540,21 @@ std::string OutputState::formatResourceReferenceList(
     return kNull;
   Out.pop_back(); // throw away trailing comma.
 
-  // Enter it into a table, and return the name of the table entry.
-  return Name(AddEntry(OutputList, Out));
+  // Add the entry to the appropriate resource lists.
+  auto Index = AddEntry(OutputList, Out);
+  auto ResName = Name(Index);
+
+  // These are always referenced by conditional references, so they all need
+  // to be in the forward resources tables.
+  ForwardListSizes[ResName] = countVectorInitItems(Out);
+
+  if (FormatPooledRef)
+    ForwardPooledRefs.insert(ResName);
+  else
+    ForwardResourceRefs.insert(ResName);
+
+  // Return the name of the table entry.
+  return ResName;
 }
 
 // Format an explicit functional unit reference. The resources in Fus
@@ -630,9 +665,8 @@ std::string OutputState::formatIfElseResourceRef(
 
 // Format a resource reference list. Create a vector of resource references,
 // and enter into a table so it can be shared between subunits.
-std::string OutputState::formatResourceReferences(InstrInfo *Info, RefType Type,
-                                                  OutputSet &OutputList,
-                                                  FormatName Name) {
+std::string OutputState::formatResourceReferences(
+       InstrInfo *Info, RefType Type, OutputSet &OutputList, FormatName Name) {
   // First write Out entries for all the unconditional resource references.
   std::string Out, Previous;
   auto *Subunit = Info->getSubunit();
@@ -719,7 +753,7 @@ std::string formatAttributePredicate(const OperandAttribute *Attr) {
 
 // Generate a function that returns the appropriate attribute value for the
 // given operand derivation.
-std::string formatPooledCountFunction(std::string const &Attr,
+std::string formatPooledCountFunction(ResourceRef *Res, std::string const &Attr,
                                       OperandDefList const &Opnds,
                                       const SubUnitInstantiation *Subunit) {
   // The generated function has the following declaration:
@@ -735,6 +769,7 @@ std::string formatPooledCountFunction(std::string const &Attr,
       if (OpAttr->getName() == Attr &&
           Subunit->isValidPredicate(OpAttr->getPredicate())) {
         int64_t Value = OpAttr->getValues(0);
+        Res->addCount(Value);
         std::string Result = formatv("  return {0};", Value);
 
         std::string Attr = OpAttr->getType();
@@ -763,7 +798,7 @@ std::string formatPooledCountFunction(std::string const &Attr,
 
   if (!Lits.empty()) {
     Out += "  if (ins->isOpndLiteral(operand_index)) {\n"
-           "    int64_t value = ins->GetOperand(operand_index);\n";
+           "    int64_t value = ins->getOperand(operand_index);\n";
     for (const auto &Lit : Lits)
       Out += Lit;
     Out += "  }\n";
@@ -791,8 +826,10 @@ std::string OutputState::formatPooledCount(const ResourceEvent &Ref) {
 
   // If there's no symbolic pooled count specified, just return the
   // specified pool count.
-  if (Res->getPoolCountName() == nullptr)
+  if (Res->getPoolCountName() == nullptr) {
+    Res->addCount(PoolCount);
     return formatv("{0},{1}", PoolCount, kNull);
+  }
 
   auto CountName = Res->getPoolCountName()->getName();
   auto Out = formatv("{0},&PoolCount_{1}", PoolCount, CountName);
@@ -818,7 +855,8 @@ std::string OutputState::formatPooledCount(const ResourceEvent &Ref) {
   }
 
   // If we don't find the attribute name, generate the reference to the
-  // user-defined function.
+  // user-defined function.  This is a bit of a problem, since we can't know
+  // how many allocation sizes there could be.  TODO: figure this out...
   OperandAttribute *Attr = nullptr;
   for (auto *Opnd : Opnds)
     if ((Attr = findAttribute(CountName, Opnd, Ref.getSubunit())) != nullptr)
@@ -828,12 +866,14 @@ std::string OutputState::formatPooledCount(const ResourceEvent &Ref) {
 
   // If the attribute doesn't have predicate values associated with it, just
   // return the attribute value.
-  if (Attr->getPredicateValues()->empty())
+  if (Attr->getPredicateValues()->empty()) {
+    Res->addCount(PoolCount);
     return formatv("{0},{1}", Attr->getValues(0), kNull);
+  }
 
   // Finally, we can generate code for the attribute lookup, and return
   // the name of the function.
-  auto Func = formatPooledCountFunction(CountName, Opnds, Ref.getSubunit());
+  auto Func = formatPooledCountFunction(Res, CountName, Opnds, Ref.getSubunit());
   auto Index = AddEntry(PooledCountFunctions, Func);
   return formatv("{0},&{1}", PoolCount, PooledCountFuncName(Index));
 }
@@ -905,7 +945,7 @@ std::string formatPoolValuesFunction(std::string const &Attr,
                         "Panic: Incompatible pool size specifier: {0}:{1}",
                         Res->getId()->ToString(), Res->getPoolCount());
 
-  std::string Out = "  uint64_t value = ins->GetOperand(operand_index);\n";
+  std::string Out = "  uint64_t value = ins->getOperand(operand_index);\n";
 
   for (int Size = 1; Size < kMaxPoolCount; Size++) {
     if (!Sizes[Size].empty()) {
@@ -1212,7 +1252,7 @@ void MarkDuplicateReferences(ResourceList &Refs) {
 // Format a single subunit.
 std::string OutputState::formatSubunit(InstrInfo *Info) {
   // First format all the operand references.
-  auto Operands = formatOperandReferenceList(Info->getReferences());
+  auto Operands = formatOperandReferenceList(Info->getReferences(), false);
 
   // Sort the references so that they are ordered by phase, then resource id.
   // This will speed up bundle packing, since functional units and issue slots
@@ -1222,14 +1262,13 @@ std::string OutputState::formatSubunit(InstrInfo *Info) {
   MarkDuplicateReferences(Info->getResources());
 
   auto Used = formatResourceReferences(
-      Info, RefTypes::kUse, UsedResourceRefs, &UsedResourceListName);
+     Info, RefTypes::kUse, UsedResourceRefs, &UsedResourceListName);
   auto Held = formatResourceReferences(
-      Info, RefTypes::kHold, HeldResourceRefs, &HeldResourceListName);
-  auto Rsvd = formatResourceReferences(Info, RefTypes::kReserve,
-                                       ReservedResourceRefs,
-                                       &ReservedResourceListName);
-  auto Pooled = formatPooledResourceReferences(Info, PooledResourceRefs,
-                                               &PooledResourceListName);
+     Info, RefTypes::kHold, HeldResourceRefs, &HeldResourceListName);
+  auto Rsvd = formatResourceReferences(
+     Info, RefTypes::kReserve, ReservedResourceRefs, &ReservedResourceListName);
+  auto Pooled = formatPooledResourceReferences(
+     Info, PooledResourceRefs, &PooledResourceListName);
   auto Constraint = formatPortReferences(Info);
 
   // If everything is null (common case with CPU predicates), return null.
@@ -1285,17 +1324,6 @@ void OutputState::writeTable(const OutputSet &Objects, const std::string &Type,
                           Out);
 }
 
-// Helper to figure Out how many constructors are included on a a vector
-// initialization line. We're just counting leading '{'.  Note that some
-// vectors don't have any braces.
-static int countVectorInitItems(std::string Input) {
-  int Count = 0;
-  for (auto C : Input)
-    if (C == '{')
-      Count++;
-  return std::max(Count, 1); // In case there's just one initializer
-}
-
 void OutputState::writeVectorTable(const OutputSet &Objects,
                                    const std::string &Type, FormatName Name,
                                    const std::string &Title,
@@ -1304,9 +1332,9 @@ void OutputState::writeVectorTable(const OutputSet &Objects,
     outputC() << formatv("{0}// {1} ({2} entries){3}{0}", Divider, Title,
                           Objects.size(), Info);
   for (auto &[Out, Index] : Objects) {
-    outputC() << formatv("{0} {1}_data[] = {{{2}};\n", Type, Name(Index), Out);
-    outputC() << formatv("{0}Vec {1} = {{ {2}, {1}_data };\n", Type,
-                          Name(Index), countVectorInitItems(Out));
+    if (!Out.empty())
+      outputC() << formatv("const {0}Vec<{2}> {1} = {{ {{{2}}, {{ {3} }};\n",
+                           Type, Name(Index), countVectorInitItems(Out), Out);
   }
 }
 
@@ -1368,13 +1396,14 @@ void OutputState::writePredicateFunctions(const OutputSet &Funcs,
 
 void OutputState::writeVirtualPredicateTable(const OutputSet &Funcs) const {
   outputT() << formatv("{0}// Virtual predicate function table{0}", Divider);
-  outputT() << "std::vector<PredFunc> InstrPredicates { ";
-  for (unsigned I = 0; I < Funcs.size(); I++) {
-    if (I > 0)
-      outputT() << ", ";
-    outputT() << "&" << VirtualPredicateName(I);
-  }
+  outputT() << "InstrPredTable InstrPredicates { ";
+  for (unsigned I = 0; I < Funcs.size(); I++)
+    outputT() << "&" << VirtualPredicateName(I) << ", ";
   outputT() << "};\n\n";
+
+  // Generate a variable that contains a pointer to the predicate table.
+  // This is used by name to initialize the subtarget.
+  outputT() << "InstrPredTable *InstrPreds = &InstrPredicates;\n\n";
 }
 
 // TODO(tbd): Write Out a representation of register classes.
@@ -1407,12 +1436,28 @@ void OutputState::writeInstructionInfo() const {
 }
 
 // Write Out instruction tables for each defined CPU.
+// This is a bit tricky: we only know the NAMES of instructions, not their
+// indexes, which are assigned by tablegen, and enumerated in GenInstrInfo.inc
+// files. Since we don't have full support for designated initializers for
+// arrays, the only way to initialize the array is to enter each instruction
+// into the table symbolically, ie array[NAME] = ...
+// We only need to do this once, so we use a singleton pattern to implement the
+// initialization. We surround this with a Mutex so that multiple threads only
+// initialize this once.
+//
+// An alternate method is to use C99 designated initializers to create the
+// array. We can do it either way, the designated initializers is much better,
+// but we need to suppress the warnings generated. This is only available in
+// clang today.
+
+#if 0
+// We used to implement the instruction tables with vectors.
 void OutputState::writeInstructionTables() const {
   std::string Family = getSpec().getFamilyName();
   for (auto *Cpu : getSpec().getCpus()) {
     std::string Out;
     int InstrCount = 0; //  Number of instructions for this CPU.
-    Out = formatv("  static SubunitTable table;\n"
+    Out = formatv("  static std::vector<SubunitVec *> table;\n"
                   "  static sys::SmartMutex<true> Mutex;\n"
                   "  sys::SmartScopedLock<true> Lock(Mutex);\n"
                   "  if (table.size() != 0) return &table;\n"
@@ -1442,10 +1487,96 @@ void OutputState::writeInstructionTables() const {
         Divider, Cpu->getName(), InstrCount);
     outputC() << formatv(
         "__attribute__((optnone))\n"
-        "SubunitTable *SUNITS_{0}() {{\n{1}  return &table;\n}\n",
+        "SubunitTable SUNITS_{0}() {{\n{1}  return &table;\n}\n",
         Cpu->getName(), Out);
   }
 }
+#endif
+
+#define USE_DESIGNATED_INITIALIZERS 1
+
+#if !defined(__clang__) || !USE_DESIGNATED_INITIALIZERS
+void OutputState::writeInstructionTables() const {
+  std::string Family = getSpec().getFamilyName();
+  for (auto *Cpu : getSpec().getCpus()) {
+    std::string Out;
+    int InstrCount = 0; //  Number of instructions for this CPU.
+    Out = formatv("   static bool initialized = false;\n"
+                  "   static const SubunitId *table["
+                                       "::llvm::{0}::INSTRUCTION_LIST_END];\n"
+                  "   static sys::SmartMutex<true> Mutex;\n"
+                  "   sys::SmartScopedLock<true> Lock(Mutex);\n"
+                  "   if (initialized) return table;\n"
+                  "   initialized = true;\n" , Family);
+
+    for (auto &[Iname, Info] : Database->getInstructionInfo()) {
+      std::string SuName = SubunitsName(Cpu->getName(), Iname);
+      if (CpuInstrSubunits.count(SuName)) {
+        int Id = CpuInstrSubunits.at(SuName);
+        Out += formatv("    table[::llvm::{0}::{1}] = {2}; // {3}\n",
+                       Family, Iname, Id, SubunitListName(Id));
+        if (Info[0]->getInstruct()->getDerived())
+          for (auto *Derived : *Info[0]->getInstruct()->getDerived())
+            Out += formatv("    table[::llvm::{0}::{1}] = {2}; // {3}\n",
+                           Family, Derived->getName(), Id, SubunitListName(Id));
+
+        InstrCount++;
+      }
+    }
+    // If there's no instruction info for a CPU, don't write Out object.
+    Cpu->setInstrCount(InstrCount);
+    if (InstrCount == 0) continue;
+
+    outputC() << formatv(
+        "{0}// Instruction table initialization for {1} ({2} valid entries){0}",
+        Divider, Cpu->getName(), InstrCount);
+    outputC() << formatv(
+        "__attribute__((optnone))\n"
+        "SubunitTable SUNITS_{0}() {{\n{1}  return table;\n}\n",
+        Cpu->getName(), Out);
+  }
+}
+#else  // USE_DESIGNATED_INITIALIZERS
+void OutputState::writeInstructionTables() const {
+  std::string Family = getSpec().getFamilyName();
+  for (auto *Cpu : getSpec().getCpus()) {
+    std::string Out;
+    int InstrCount = 0; //  Number of instructions for this CPU.
+    Out = formatv("   static const SubunitId table["
+                  "::llvm::{0}::INSTRUCTION_LIST_END] =  {{\n", Family);
+
+    for (auto &[Iname, Info] : Database->getInstructionInfo()) {
+      std::string SuName = SubunitsName(Cpu->getName(), Iname);
+      if (CpuInstrSubunits.count(SuName)) {
+        int Id = CpuInstrSubunits.at(SuName);
+        Out += formatv("      [::llvm::{0}::{1}] = {2}, // {3}\n",
+                       Family, Iname, Id, SubunitListName(Id));
+        if (Info[0]->getInstruct()->getDerived())
+          for (auto *Derived : *Info[0]->getInstruct()->getDerived())
+            Out += formatv("         [::llvm::{0}::{1}] = {2}, // {3}\n",
+                           Family, Derived->getName(), Id, SubunitListName(Id));
+
+        InstrCount++;
+      }
+    }
+    // If there's no instruction info for a CPU, don't write Out object.
+    Cpu->setInstrCount(InstrCount);
+    if (InstrCount == 0) continue;
+
+    outputC() << formatv(
+        "{0}// Instruction table initialization for {1} ({2} valid entries){0}",
+        Divider, Cpu->getName(), InstrCount);
+    outputC() << formatv(
+        "#pragma clang diagnostic push\n"
+        "#pragma clang diagnostic ignored \"-Wc99-designator\"\n"
+        "static const SubunitId *SUNITS_{0}() {{\n{1}   };\n"
+        "   return table;\n}\n"
+        "#pragma clang diagnostic pop\n",
+        Cpu->getName(), Out);
+  }
+}
+#endif
+
 
 // Generate the forwarding table for a single CPU.
 std::string OutputState::formatForwardingInfo(const CpuInstance *Cpu,
@@ -1563,6 +1694,23 @@ int CalcResourceFactor(CpuInstance *Cpu) {
   return Factor;
 }
 
+// Write Out a single table containing pointers to all defined subunit lists.
+void OutputState::writeSubunitListTable() {
+  auto Out = formatv("{0}// Subunit table ({1} entries){0}",
+                     Divider, Subunits.size());
+  Out += "static const InitializationVectorBase *SubunitTable[] = { nullptr,";
+  int count_per_line = 7;
+  for (size_t Id = 1; Id < Subunits.size(); Id++) {
+    if (count_per_line++ == 7) {
+      Out += formatv("\n     ");
+      count_per_line = 0;
+    }
+    Out += formatv("&{0},", SubunitListName(Id));
+  }
+  Out.pop_back();      // Delete last comma
+  outputC() << Out << "\n};\n";
+}
+
 // Write Out the top-level CPU table, which contains pointers to instruction
 // tables for each CPU.
 void OutputState::writeCpuList() const {
@@ -1576,24 +1724,34 @@ void OutputState::writeCpuList() const {
     auto SUnitsName = Cpu->getInstrCount() ?
                        formatv("&SUNITS_{0}", Cpu->getName()) : kNull;
     CpuDefs +=
-        formatv("CpuConfig<CpuParams<{0},{1},{2}, {3},{4}, {5},{6}, "
-                "{7},{8},{9},{10}>> CPU_{11}({12},{13},{14},NAMES_{15});\n",
-                Cpu->getAllResources().back()->getResourceId(),
-                Cpu->getMaxUsedResourceId(), Cpu->getMaxFuId(),
-                Cpu->getPoolCount(), Cpu->getMaxPoolAllocation(),
-                std::max(1, Cpu->getMaxIssue()), Cpu->getReorderBufferSize(),
-                ExeStage, Cpu->getLoadPhase(), Cpu->getHighLatencyDefPhase(),
-                Cpu->getMaxResourcePhase(), Cpu->getName(), SUnitsName, Fwd,
-                ResourceFactor, Cpu->getName());
+        formatv("CpuConfig<CpuParams<{0},{1},{2},{3},{4}>> "
+                "CPU_{5}({6},SubunitTable,RES_INFO_{7},{8},{9},"
+                "{10},{11},{12},{13},{14});\n",
+                Cpu->getMaxUsedResourceId(),     // Template param 1
+                Cpu->getPoolCount(),             // Template param 2
+                Cpu->getMaxPoolAllocation(),     // Template param 3
+                std::max(1, Cpu->getMaxIssue()), // Template param 4
+                Cpu->getMaxResourcePhase(),      // Template param 5
+                Cpu->getName(),
+                SUnitsName,                      // Constructor arg 1 (and 2)
+                Cpu->getName(),                  // Constructor arg 3
+                Cpu->getMaxFuId(),               // Constructor arg 4
+                Cpu->getReorderBufferSize(),     // Constructor arg 5
+                ExeStage,                        // Constructor arg 6
+                Cpu->getLoadPhase(),             // Constructor arg 7
+                Cpu->getHighLatencyDefPhase(),   // Constructor arg 8
+                ResourceFactor,                  // Constructor arg 9
+                Fwd                              // Constructor arg 10
+               );
 
     for (const auto &LLVMName : Cpu->getLlvmNames())
       Out += formatv("  {{\"{0}\", &CPU_{1} },\n", LLVMName, Cpu->getName());
   }
+  Out += formatv("  {{nullptr, nullptr},\n");    // Terminate the table.
 
   // Write Out CPU configurations for each subtarget in the family.
   outputC() << formatv("{0}// Family CPU Descriptions.\n"
-                        "//  CpuParams:\n"
-                        "//    - Total number of defined resources\n"
+                        "//  CpuParams template parameters:\n"
                         "//    - Maximum \"used\" resource id\n"
                         "//    - Maximum functional unit id\n"
                         "//\n"
@@ -1601,20 +1759,28 @@ void OutputState::writeCpuList() const {
                         "//    - Largest resource pool allocation size\n"
                         "//\n"
                         "//    - Instruction issue width\n"
+                        "//    - Latest resource use pipeline phase\n"
+                        "//  CpuParams Constructor arguments\n"
+                        "//    - Cpu-specific subunits table\n"
+                        "//    - Global subunit table\n"
+                        "//    - Forwarding information table\n"
+                        "//    - Resource factor\n"
+                        "//    - Resource names table\n"
+                        "//    - Maximum functional unit id\n"
                         "//    - Instruction reorder buffer size\n"
                         "//\n"
                         "//    - First execution pipeline phase\n"
                         "//    - Default load phase\n"
-                        "//    - \"High-latency instruction\" write phase\n"
-                        "//    - Latest resource use pipeline phase"
+                        "//    - \"High-latency instruction\" write phase"
                         "{0}{1}",
                         Divider, CpuDefs);
 
   // Write Out the top-level cpu table for this family.
   outputC() << formatv("{0}// Top-level {1} Subtarget Description Table.{0}",
                         Divider, getSpec().getFamilyName());
-  outputC() << formatv("CpuTableDict CpuDict = {{\n{0}};\n\n", Out);
+  outputC() << formatv("CpuTableDict CpuDict[] = {{\n{0}};\n\n", Out);
   outputC() << formatv("CpuTableDef CpuTable = CpuTableDef(CpuDict);\n");
+  outputC() << formatv("CpuTableDef *CpuTableAddr = &CpuTable;\n");
 }
 
 // Open the output files, abort if unable to do that.
@@ -1862,6 +2028,13 @@ void OutputState::writeLLVMDefinitions() {
   outputH() << formatv("\n  }; // enum\n");
 }
 
+// Types of resources that can be defined.
+enum ResourceType {
+  kFuncUnit,         // Is a functional unit instance resource.
+  kResource,         // Is a general resource.
+  kIssueSlot,        // Is an issue slot resource.
+};
+
 // Format the fully-qualified C++ name of a resource.
 std::string ResourceCppName(MdlSpec &Spec, CpuInstance *Cpu,
                          ClusterInstance *Cluster, ResourceDef *Res) {
@@ -1874,8 +2047,7 @@ std::string ResourceCppName(MdlSpec &Spec, CpuInstance *Cpu,
 }
 
 // Format a debug name for a used resource.
-std::string ResourceName(MdlSpec &Spec, ClusterInstance *Cluster,
-                         ResourceDef *Res) {
+std::string ResourceName(ClusterInstance *Cluster, ResourceDef *Res) {
   std::string Name;
   if (Cluster && !Cluster->isNull())
     Name += formatv("{0}:", Cluster->getName());
@@ -1886,31 +2058,55 @@ std::string ResourceName(MdlSpec &Spec, ClusterInstance *Cluster,
   return Name + Res->getName();
 }
 
+// Information about a singled defined resource.
+struct ResourceInfo {
+  ResourceInfo() : Name(""), Type(kResource) {}
+  ResourceInfo(std::string Name, ResourceType Type) : Name(Name), Type(Type) {}
+  std::string Name;        // Name of a resource (for debugging purposes).
+  ResourceType Type;       // Type of resource defined.
+
+  std::string getTypeFormat() {
+    return (Type == kFuncUnit) ? "kFuncUnit" :
+           (Type == kResource) ? "kResource" :
+           (Type == kIssueSlot) ? "kIssueSlot" : "";
+  }
+};
+
 void SaveResourceName(ResourceDef *Res, std::string Name,
-                      std::vector<std::string> &ResNames) {
+                      ResourceType Type, std::vector<ResourceInfo> &ResInfo) {
   int Id = Res->getResourceId();
   if (Res->getPoolSize() <= 1)
-    ResNames[Id] = Name;
+    ResInfo[Id] = ResourceInfo(Name, Type);
   else
     for (int I = 0; I < Res->getPoolSize(); I++)
-      ResNames[Id + I] = formatv("{0}[{1}]", Name, I);
+      ResInfo[Id + I] = ResourceInfo(formatv("{0}[{1}]", Name, I), Type);
 }
 
 // Write out a single resource definition.
 void AddResourceDef(std::string *Out, MdlSpec &Spec, CpuInstance *Cpu,
                     ClusterInstance *Cluster, ResourceDef *Res,
-                    std::string note, std::vector<std::string> &ResNames) {
+                    ResourceType Type, std::vector<ResourceInfo> &ResInfo) {
+  // Note: we don't need to print out group names.
+  if (Res->isGroupDef()) return;
+
+  std::string Note = (Type == kFuncUnit) ? "func unit" :
+                     (Type == kResource) ? "resource" : "issue";
   std::string prefix = "  ";
   if (Cluster && !Cluster->isNull())
     prefix += "  ";
+  auto Name = ResourceCppName(Spec, Cpu, Cluster, Res);
+  *Out += formatv("{0}  static constexpr int {1}", prefix, Res->getName());
 
-  // Note: we don't need to print out groups.
-  if (!Res->isGroupDef()) {
-    auto Name = ResourceCppName(Spec, Cpu, Cluster, Res);
-    *Out += formatv("{0}  const int {1} = {2};      // {3} ({4})\n", prefix,
-                    Res->getName(), Res->getResourceId(), Name, note);
-    SaveResourceName(Res, ResourceName(Spec, Cluster, Res), ResNames);
+  if (Res->isPoolDef()) {
+    *Out += "[] = {";
+    for (int I = 0; I < Res->getPoolSize(); I++)
+      *Out += formatv("{0},", Res->getResourceId() + I);
+    Out->pop_back(); *Out += "};";
+  } else {
+    *Out += formatv(" = {0};", Res->getResourceId());
   }
+  *Out += formatv("      // {0} ({1})\n", Name, Note);
+  SaveResourceName(Res, ResourceName(Cluster, Res), Type, ResInfo);
 }
 
 // Write out definitions for functional unit and issue slot resources.
@@ -1922,53 +2118,58 @@ void OutputState::writeResourceDefinitions() {
   outputC() << formatv("{0}// Resource name tables{0}", Divider);
 
   for (auto *Cpu : Spec.getCpus()) {
-    std::vector<std::string> ResNames;
-    ResNames.resize(Cpu->getMaxResourceId() + 1);
+    std::vector<ResourceInfo> ResInfo;
+    ResInfo.resize(Cpu->getMaxResourceId() + 1);
 
     Out += formatv("{0}// Resource Definitions for {1}{0}", Divider,
                    Cpu->getName());
-    Out += formatv("  namespace {0} {{\n", Cpu->getName());
+    Out += formatv("  struct {0} {{\n", Cpu->getName());
     for (auto *Res : *Cpu->getResources())
-      AddResourceDef(&Out, Spec, Cpu, nullptr, Res, "resource", ResNames);
+      AddResourceDef(&Out, Spec, Cpu, nullptr, Res, kResource, ResInfo);
 
-    // Write out C++ definitions for resources associated with a cluster.
-    // Note that we DON'T write definitions for resources associated with
+    // For each cluster, we write out C++ name definitions for functional unit
+    // instances, issue slots, and cluster-defined resources.
+    // Note that we DON'T write definitions for resources defined in
     // functional unit instances. (Its messy dealing with resource scoping).
     for (auto *Cluster : *Cpu->getClusters()) {
       if (!Cluster->isNull())
-        Out += formatv("\n    namespace {0} {{\n", Cluster->getName());
+        Out += formatv("\n    struct {0} {{\n", Cluster->getName());
 
       // Write out functional unit resource definitions. We only write names
       // for top-level functional unit resources, and don't write out
-      // catchall units. We also add functional unit instance resources to the
-      // name table (even though we don't write out definitions).
+      // catchall units.
       for (auto *Fu : Cluster->getFuInstantiations()) {
         if (Fu->getParent() == nullptr && Fu->getFuResource()->isUsed() &&
             !Fu->getInstance()->isCatchallUnit()) {
           auto *Res = Fu->getFuResource();
-          AddResourceDef(&Out, Spec, Cpu, Cluster, Res, "func unit", ResNames);
+          AddResourceDef(&Out, Spec, Cpu, Cluster, Res, kFuncUnit, ResInfo);
         }
+        // Add resources defined in the instance to the resource info table.
         for (auto *Res : Fu->getResources())
           if (!Res->isGroupDef())
-            SaveResourceName(Res, ResourceName(Spec, Cluster, Res), ResNames);
+            SaveResourceName(Res, ResourceName(Cluster, Res), kResource,
+                             ResInfo);
       }
 
       for (auto *Issue : *Cluster->getIssues())
-        AddResourceDef(&Out, Spec, Cpu, Cluster, Issue, "issue", ResNames);
+        AddResourceDef(&Out, Spec, Cpu, Cluster, Issue, kIssueSlot, ResInfo);
       for (auto *Res : *Cluster->getResources())
-        AddResourceDef(&Out, Spec, Cpu, Cluster, Res, "resource", ResNames);
+        AddResourceDef(&Out, Spec, Cpu, Cluster, Res, kResource, ResInfo);
       if (!Cluster->isNull())
-        Out += formatv("    }  // namespace {0}\n", Cluster->getName());
+        Out += formatv("    };  // struct {0}\n", Cluster->getName());
     }
-    Out += formatv("  }  // namespace {0}\n", Cpu->getName());
+    Out += formatv("  };  // struct {0}\n", Cpu->getName());
 
-    // Write out resource names for this CPU.
-    std::string Names;
-    for (unsigned idx = 1; idx < ResNames.size(); idx++)
-      Names += "\"" + ResNames[idx] + "\",";
-    if (!Names.empty()) Names.pop_back();
-    outputC() << formatv("std::string NAMES_{0}[] = {{\"\",{1}};\n",
-                          Cpu->getName(), Names);
+    // Write out resource information table for this CPU.
+    std::string Info;
+    for (unsigned idx = 1; idx < ResInfo.size(); idx++) {
+      Info += "\n        { \"" + ResInfo[idx].Name + "\", " +
+                         ResInfo[idx].getTypeFormat() + " },   // ID:" +
+                         std::to_string(idx);
+    }
+    outputC() << formatv(
+        "const ResourceInfo RES_INFO_{0}[] = {{ {{\"\", kInvalid },{1}\n};\n",
+                          Cpu->getName(), Info);
   }
 
   outputH() << "\nnamespace Mdl {\n";
@@ -1985,12 +2186,19 @@ void OutputState::writeExterns() {
     outputH() << formatv("extern InstructionNameMap InstructionNames;\n",
                           Family);
   }
-  outputH() << formatv("extern llvm::mdl::CpuTableDef CpuTable;\n\n", Family);
+  outputH() << formatv("extern llvm::mdl::CpuTableDef CpuTable;\n");
+  outputH() << formatv("extern llvm::mdl::CpuTableDef *CpuTableAddr;\n\n");
   outputH() << formatv("}  // namespace {0}\n}  // namespace llvm\n", Family);
 }
 
 // Top level function for writing out the machine description.
 void OutputState::writeCpuTable() {
+  // Initialize the Subunit table to have one "zeroeth" entry.  This is so that
+  // the first subunit id is 1, leaving id 0 as an invalid id.
+  std::string Out = "";
+  AddEntry(Subunits, Out);
+
+  // For each instruction, for each CPU, create a set of legal subunits.
   for (auto [InstrName, Info] : Database->getInstructionInfo())
     for (auto *Cpu : getSpec().getCpus())
       formatSubunits(InstrName, Info, Cpu->getName());
@@ -2031,7 +2239,8 @@ void OutputState::writeCpuTable() {
   outputC() << formatv(
       "{0}// Forward references for conditional references{0}", Divider);
   for (auto Name : ForwardOpndRefs)
-    outputC() << formatv("extern OperandRefVec {0};\n", Name);
+    outputC() << formatv("extern const OperandRefVec<{1}> {0};\n", Name,
+                         ForwardListSizes[Name]);
   if (!ForwardOpndRefs.empty())
     outputC() << "\n";
   for (auto Name : ForwardCondOpndRefs)
@@ -2040,7 +2249,8 @@ void OutputState::writeCpuTable() {
     outputC() << "\n";
 
   for (auto Name : ForwardResourceRefs)
-    outputC() << formatv("extern ResourceRefVec {0};\n", Name);
+    outputC() << formatv("extern const ResourceRefVec<{1}> {0};\n", Name,
+                         ForwardListSizes[Name]);
   if (!ForwardResourceRefs.empty())
     outputC() << "\n";
   for (auto Name : ForwardCondResRefs)
@@ -2049,7 +2259,8 @@ void OutputState::writeCpuTable() {
     outputC() << "\n";
 
   for (auto Name : ForwardPooledRefs)
-    outputC() << formatv("extern PooledResourceRefVec {0};\n", Name);
+    outputC() << formatv("extern const PooledResourceRefVec<{1}> {0};\n", Name,
+                         ForwardListSizes[Name]);
   if (!ForwardPooledRefs.empty())
     outputC() << "\n";
   for (auto Name : ForwardCondPoolRefs)
@@ -2059,7 +2270,8 @@ void OutputState::writeCpuTable() {
     outputC() << "\n";
 
   for (auto Name : ForwardConstraintRefs)
-    outputC() << formatv("extern OperandConstraintVec {0};\n", Name);
+    outputC() << formatv("extern const OperandConstraintVec<{1}> {0};\n", Name,
+                         ForwardListSizes[Name]);
   if (!ForwardConstraintRefs.empty())
     outputC() << "\n";
   for (auto Name : ForwardCondConstraintRefs)
@@ -2184,6 +2396,7 @@ void OutputState::writeCpuTable() {
   generateForwardingInfo();
 
   writeResourceDefinitions();      // Write out resource names
+  writeSubunitListTable();
   writeCpuList();
 
   outputC() << formatv("}  // namespace {0}\n}  // namespace llvm\n\n",

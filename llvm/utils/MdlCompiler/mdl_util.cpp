@@ -398,8 +398,10 @@ void MdlSpec::checkForDuplicateDefs() {
   }
 
   // For each instruction definition, check for duplicate operand names.
+  // Note that untyped operands can be register names, and may appear more than
+  // once in the operand list.
   for (auto *Instr : Instructions)
-    findDuplicates(*Instr->getOperands());
+    findDuplicateOperands(*Instr->getOperands());
 
   // For each operand definition, check for duplicate (sub)operand names and
   // duplicate attribute definitions.
@@ -921,6 +923,7 @@ int MdlSpec::findOperandName(const InstructionDef *Instruct,
         if (OpDecl->isOutput() && (Itype & RefTypes::kAnyDef))
           return Index;
       }
+      Index++;
       continue;
     }
     // Handle "normal" operands.
@@ -1090,7 +1093,7 @@ void MdlSpec::checkOperand(OperandDecl *OpndDecl) {
   }
 
   if (!OpndDecl->isImpliedRegister() && !OpndDecl->isEllipsis())
-    if (OpndDecl->getName().empty())
+    if (!OpndDecl->hasName())
       ErrorLog(OpndDecl, "Instruction operands must have names");
 }
 
