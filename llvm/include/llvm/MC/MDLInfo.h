@@ -1159,25 +1159,6 @@ inline bool isTransient(const MachineInstr *MI) {
   }
 }
 
-// Types of resources that can be defined.
-enum ResourceType {
-  kFuncUnit,         // Is a functional unit instance resource.
-  kResource,         // Is a general resource.
-  kIssueSlot,        // Is an issue slot resource.
-};
-
-// Information about a singled defined resource.
-struct ResourceInfo {
-  const char *Name;        // Name of a resource (for debugging purposes).
-  ResourceType Type;       // Type of resource defined.
-
-  std::string getTypeFormat() {
-    return (Type == kFuncUnit) ? "kFuncUnit" :
-           (Type == kResource) ? "kResource" :
-           (Type == kIssueSlot) ? "kIssueSlot" : "";
-  }
-};
-
 ///----------------------------------------------------------------------------
 /// Information for each defined CPU. Each MDL CPU corresponds to a single
 /// LLVM target or, roughly, a single SchedMachineModel. CpuInfo contains
@@ -1463,8 +1444,13 @@ public:
                 LoadPhase, HighLatencyDefPhase,
                 CpuParams::MaxResourcePhase, InitSubunitTable, SubunitTable,
                 ForwardTable, ResourceFactor, Resources) {}
+
   // CPU-specialized bundle packing functions.
   bool addToBundle(SlotSet &Bundle, const SlotDesc &Candidate,
+                   const Reservations &Res) override;
+  bool canAddToBundle(SlotSet &Bundle, const SlotDesc &Candidate,
+                      const Reservations &Res) override;
+  SlotSet bundleCandidates(const SlotSet *Candidates) override;
   Reservations *allocReservations() const override {
     return new ReservationsConfig<CpuParams>;
   }

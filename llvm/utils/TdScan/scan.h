@@ -1612,7 +1612,6 @@ public:
   std::string ScanType(char *input);
   std::vector<std::string> ScanInstructOpnds(char *input);
   std::vector<std::string> ScanImplicitDefsUses(char *input);
-  void ScanProcessorAlias(std::ifstream &in);
   void ScanProcessorModel(std::ifstream &in);
   void ScanProcessorAlias(std::ifstream &in);
   void ScanProcResource(std::ifstream &in, const std::string &name,
