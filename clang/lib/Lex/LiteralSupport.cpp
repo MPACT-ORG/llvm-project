@@ -2069,7 +2069,7 @@ void StringLiteralParser::init(ArrayRef<Token> StringToks){
   // Get the width in bytes of char/wchar_t/char16_t/char32_t
   CharByteWidth = getCharWidth(Kind, Target);
   assert((CharByteWidth & 7) == 0 && "Assumes character size is byte multiple");
-  CharByteWidth /= 8;
+  CharByteWidth /= Target.getByteWidth();
 
   // The output buffer size needs to be large enough to hold wide characters.
   // This is a worst-case assumption which basically corresponds to L"" "long".
