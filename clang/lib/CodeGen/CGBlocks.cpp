@@ -792,7 +792,7 @@ llvm::Value *CodeGenFunction::EmitBlockLiteral(const CGBlockInfo &blockInfo) {
   LangAS GenVoidPtrAddr = IsOpenCL ? LangAS::opencl_generic : LangAS::Default;
   auto ByteWidth = CGM.getDataLayout().getByteWidth();
   auto GenVoidPtrSize = CharUnits::fromQuantity(
-      llvm::divideCeil(CGM.getTarget().getPointerWidth(GenVoidPtrAddr), 
+      llvm::divideCeil(CGM.getTarget().getPointerWidth(GenVoidPtrAddr),
                        ByteWidth));
   // Using the computed layout, generate the actual block function.
   bool isLambdaConv = blockInfo.getBlockDecl()->isConversionFromLambda();

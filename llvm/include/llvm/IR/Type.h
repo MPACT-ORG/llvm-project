@@ -341,7 +341,7 @@ public:
 
   /// If this is a vector type, return the getPrimitiveSizeInBits value for the
   /// element type. Otherwise return the getPrimitiveSizeInBits value for this
-  /// type. 
+  /// type.
   LLVM_ABI unsigned getScalarSizeInBits() const LLVM_READONLY;
 
   // Return the size in "bytes", where a byte may have more than 8 bits. The

@@ -8427,8 +8427,8 @@ static bool splitMergedValStore(StoreInst &SI, const DataLayout &DL,
       // When splitting the store in half, naturally one half will retain the
       // alignment of the original wider store, regardless of whether it was
       // over-aligned or not, while the other will require adjustment.
-      Alignment = 
-          commonAlignment(Alignment, 
+      Alignment =
+          commonAlignment(Alignment,
                           HalfValBitSize / SI.getDataLayout().getByteWidth());
     }
     Builder.CreateAlignedStore(V, Addr, Alignment);
